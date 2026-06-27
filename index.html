@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estúdio · CRM</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="favicon-32.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" id="theme-color-meta" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CRM Estúdio">
+<script>
+  // aplica o tema salvo antes da pintura, pra evitar flash
+  document.documentElement.setAttribute("data-theme", localStorage.getItem("crm-theme") || "dark");
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root, [data-theme="dark"]{
+    --bg:#000000;
+    --surface:#0c0c0c;
+    --surface-2:#1a1a1a;
+    --border:#ffffff22;
+    --border-solid:#2b2b2b;
+    --text:#ffffff;
+    --muted:#a3a3a3;
+    --muted-2:#6b6b6b;
+    --amber:#ffffff;
+    --amber-dim:#ffffff1f;
+    --terracotta:#ffffff;
+    --green:#ffffff;
+    --danger:#ffffff;
+    --radius:10px;
+    font-size:16px;
+  }
+  [data-theme="light"]{
+    --bg:#ffffff;
+    --surface:#ffffff;
+    --surface-2:#f0f0f0;
+    --border:#00000022;
+    --border-solid:#d9d9d9;
+    --text:#000000;
+    --muted:#5a5a5a;
+    --muted-2:#8f8f8f;
+    --amber:#000000;
+    --amber-dim:#0000000f;
+    --terracotta:#000000;
+    --green:#000000;
+    --danger:#000000;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.serif{ font-family:'Fraunces',serif; }
+  a{color:inherit;}
+  button{font-family:inherit;}
+  ::selection{background:var(--amber-dim);}
+
+  /* ---------- LOGIN ---------- */
+  #login-screen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 0%, #241f16 0%, #16140f 60%);
+  }
+  .login-card{
+    width:min(360px,90vw); padding:40px 32px; background:var(--surface);
+    border:1px solid var(--border-solid); border-radius:var(--radius);
+    box-shadow:0 30px 60px -30px #000;
+  }
+  .login-card .eyebrow{ letter-spacing:.14em; text-transform:uppercase; font-size:11px; color:var(--amber); margin-bottom:6px; }
+  .login-card h1{ font-size:28px; margin:0 0 24px; font-weight:500; }
+  .login-card input{ width:100%; margin-bottom:12px; }
+  .login-card button{ width:100%; margin-top:8px; }
+  #login-error{ color:var(--danger); font-size:13px; margin-top:10px; min-height:16px; }
+
+  input, select, textarea{
+    background:var(--surface-2); border:1px solid var(--border-solid); color:var(--text);
+    padding:10px 12px; border-radius:7px; font-size:14px; font-family:'Inter',sans-serif;
+  }
+  input:focus, select:focus, textarea:focus{ outline:none; border-color:var(--amber); }
+  textarea{ resize:vertical; min-height:64px; width:100%; }
+  label{ font-size:12px; color:var(--muted); display:block; margin-bottom:5px; }
+  .field{ margin-bottom:14px; }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  button{
+    cursor:pointer; border:1px solid var(--border-solid); background:var(--surface-2);
+    color:var(--text); padding:9px 16px; border-radius:7px; font-size:14px; font-weight:500;
+    transition:.15s;
+  }
+  button:hover{ border-color:var(--amber); }
+  button.primary{ background:var(--amber); color:var(--bg); border-color:var(--amber); font-weight:600; }
+  button.primary:hover{ filter:brightness(0.92); }
+  button.danger{ background:transparent; color:var(--text); border-color:var(--text); }
+  button.danger:hover{ background:var(--text); color:var(--bg); }
+  button.ghost{ background:transparent; border-color:transparent; color:var(--muted); }
+  button.ghost:hover{ color:var(--text); border-color:var(--border-solid); }
+  button.sm{ padding:5px 10px; font-size:12px; }
+
+  /* ---------- LAYOUT ---------- */
+  #app{ display:none; min-height:100vh; }
+  #app.active{ display:flex; }
+
+  #sidebar{
+    width:230px; flex:0 0 230px; background:var(--surface);
+    border-right:1px solid var(--border-solid);
+    display:flex; flex-direction:column; padding:22px 14px;
+    position:relative;
+  }
+  /* film perforation signature */
+  #sidebar::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:6px;
+    background-image:repeating-linear-gradient(to bottom, var(--amber) 0px, var(--amber) 6px, transparent 6px, transparent 18px);
+    opacity:.55;
+  }
+  .brand{ padding:4px 10px 22px; }
+  .brand .eyebrow{ font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--amber); }
+  .brand h1{ font-size:21px; margin:2px 0 0; font-weight:500; }
+  nav{ display:flex; flex-direction:column; gap:2px; flex:1; }
+  nav button{
+    text-align:left; background:transparent; border:none; color:var(--muted);
+    padding:10px 12px; border-radius:7px; font-size:14px; display:flex; align-items:center; gap:10px;
+  }
+  nav button .dot{ width:6px; height:6px; border-radius:50%; background:var(--muted-2); flex:0 0 auto; }
+  nav button:hover{ background:var(--surface-2); color:var(--text); }
+  nav button.active{ background:var(--amber-dim); color:var(--amber); }
+  nav button.active .dot{ background:var(--amber); }
+  .sidebar-footer{ font-size:12px; color:var(--muted-2); padding:10px 12px; }
+  .sidebar-footer .footer-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .theme-toggle{
+    display:flex; align-items:center; justify-content:center; width:32px; height:32px; padding:0;
+    border-radius:50%; flex:0 0 auto; font-size:15px;
+  }
+  .sidebar-footer button.ghost{ width:auto; margin-top:0; }
+  .sidebar-backdrop{ display:none; }
+
+  /* mobile topbar (hidden on desktop) */
+  #mobile-topbar{ display:none; }
+
+  #main{ flex:1; padding:32px 40px; overflow-y:auto; height:100vh; }
+  .page-header{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+  .page-header .eyebrow{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--amber); margin-bottom:4px; }
+  .page-header h2{ font-size:26px; margin:0; font-weight:500; }
+  .page-actions{ display:flex; gap:10px; }
+
+  .grid{ display:grid; gap:16px; }
+  .grid-3{ grid-template-columns:repeat(3,1fr); }
+  .grid-4{ grid-template-columns:repeat(4,1fr); }
+  @media (max-width:1100px){ .grid-3,.grid-4{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:560px){ .grid-3,.grid-4{ grid-template-columns:1fr; } }
+
+  /* ============ MOBILE LAYOUT (<900px) ============ */
+  @media (max-width:900px){
+    #app.active{ display:block; }
+    #mobile-topbar{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      position:sticky; top:0; z-index:30; background:var(--surface);
+      border-bottom:1px solid var(--border-solid); padding:14px 16px;
+    }
+    #mobile-topbar .brand-mini{ font-family:'Fraunces',serif; font-size:17px; }
+    #mobile-topbar button{ padding:7px 10px; }
+
+    #sidebar{
+      position:fixed; top:0; left:0; bottom:0; z-index:50; width:78vw; max-width:280px;
+      transform:translateX(-100%); transition:transform .25s ease; box-shadow:20px 0 40px -10px #0008;
+    }
+    #sidebar.open{ transform:translateX(0); }
+    .sidebar-backdrop{
+      display:none; position:fixed; inset:0; background:#0c0a07b3; z-index:40;
+    }
+    .sidebar-backdrop.open{ display:block; }
+
+    #main{ padding:18px 16px 60px; height:auto; }
+    .page-header h2{ font-size:22px; }
+    table{ font-size:13px; }
+    thead th, tbody td{ padding:8px 6px; }
+    .modal{ padding:20px; }
+    .field-row{ grid-template-columns:1fr; }
+  }
+
+  .card{
+    background:var(--surface); border:1px solid var(--border-solid); border-radius:var(--radius);
+    padding:18px 20px;
+  }
+  .stat-card .label{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:8px; }
+  .stat-card .value{ font-family:'Fraunces',serif; font-size:28px; }
+  .stat-card .sub{ font-size:12px; color:var(--muted-2); margin-top:4px; }
+
+  .section-title{ font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:28px 0 12px; }
+
+  table{ width:100%; border-collapse:collapse; font-size:14px; }
+  thead th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted-2);
+    padding:8px 10px; border-bottom:1px solid var(--border-solid);
+  }
+  tbody td{ padding:11px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tbody tr:hover{ background:var(--surface-2); }
+  .row-actions{ display:flex; gap:6px; justify-content:flex-end; }
+
+  .badge{ display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; border:1px solid var(--border-solid); }
+  .badge.orcamento{ background:transparent; color:var(--muted); }
+  .badge.fechado{ background:color-mix(in srgb, var(--text) 14%, transparent); color:var(--text); }
+  .badge.realizado{ background:color-mix(in srgb, var(--text) 45%, transparent); color:var(--text); }
+  .badge.entregue{ background:var(--text); color:var(--bg); border-color:var(--text); }
+  .tag-chip{ display:inline-block; background:var(--surface-2); border:1px solid var(--border-solid); color:var(--muted); font-size:11px; padding:2px 8px; border-radius:20px; margin:2px 3px 0 0; }
+
+  .empty-state{ text-align:center; padding:50px 20px; color:var(--muted-2); }
+  .empty-state .serif{ font-size:18px; color:var(--muted); margin-bottom:6px; }
+
+  /* Modal */
+  .modal-backdrop{
+    position:fixed; inset:0; background:#0c0a07cc; display:none; align-items:center; justify-content:center;
+    z-index:50; padding:24px;
+  }
+  .modal-backdrop.active{ display:flex; }
+  .modal{
+    width:min(560px,100%); max-height:88vh; overflow-y:auto; background:var(--surface);
+    border:1px solid var(--border-solid); border-radius:var(--radius); padding:26px 28px;
+  }
+  .modal h3{ font-size:20px; margin:0 0 18px; font-weight:500; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:18px; border-top:1px solid var(--border); padding-top:16px; }
+
+  .view-row{ display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid var(--border); font-size:14px; }
+  .view-row:last-child{ border-bottom:none; }
+  .view-label{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; flex:0 0 auto; padding-top:2px; }
+  .view-value{ text-align:right; max-width:64%; }
+  .view-value a{ color:var(--text); text-decoration:underline; }
+  .view-link-card{
+    display:block; text-align:left; width:100%; background:var(--surface-2); border:1px solid var(--border-solid);
+    border-radius:8px; padding:10px 12px; margin-top:6px; cursor:pointer; font-size:13px;
+  }
+  .view-link-card:hover{ border-color:var(--text); }
+  .view-section-title{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:18px 0 8px; }
+
+  #toast{
+    position:fixed; bottom:24px; right:24px; background:var(--surface-2); border:1px solid var(--amber);
+    color:var(--text); padding:12px 18px; border-radius:8px; font-size:13px; z-index:99; display:none;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="eyebrow">Estúdio</div>
+    <h1>Acessar o CRM</h1>
+    <div class="field"><label>E-mail</label><input id="login-email" type="email" placeholder="seu@email.com"></div>
+    <div class="field"><label>Senha</label><input id="login-pass" type="password" placeholder="••••••••"></div>
+    <button class="primary" onclick="doLogin()">Entrar</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebarMobile()"></div>
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="eyebrow">Estúdio</div>
+      <h1>CRM</h1>
+    </div>
+    <nav id="nav"></nav>
+    <div class="sidebar-footer">
+      <div class="footer-row">
+        <span id="user-email"></span>
+        <button class="theme-toggle ghost" id="theme-toggle-btn" onclick="toggleTheme()" title="Alternar tema">🌙</button>
+      </div>
+      <button class="ghost" style="width:100%; margin-top:8px;" onclick="doLogout()">Sair</button>
+    </div>
+  </aside>
+  <div style="flex:1; min-width:0;">
+    <div id="mobile-topbar">
+      <button class="ghost" onclick="openSidebarMobile()">☰ Menu</button>
+      <span class="brand-mini">Estúdio · CRM</span>
+      <button class="theme-toggle ghost" onclick="toggleTheme()" title="Alternar tema">🌙</button>
+    </div>
+    <main id="main"></main>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Firebase compat SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+/* =========================================================
+   CONFIG — preencha com as credenciais do projeto yurifotos-fc313
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyAbwJ9Y4JDJUFF5lZZylJ_T1VK1pDbRY_c",
+  authDomain: "yurifotos-fc313.firebaseapp.com",
+  projectId: "yurifotos-fc313",
+  storageBucket: "yurifotos-fc313.firebasestorage.app",
+  messagingSenderId: "594269855745",
+  appId: "1:594269855745:web:e20d6736c21655da342000"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+
+/* =========================================================
+   STATE
+   ========================================================= */
+const state = {
+  clientes: [], criancas: [], casamentos: [], eventos: [], pagamentos: [],
+  config: {},
+  currentPage: "dashboard"
+};
+const listeners = [];
+
+function toggleTheme(){
+  const current = document.documentElement.getAttribute("data-theme") || "dark";
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("crm-theme", next);
+  updateThemeIcon();
+}
+function updateThemeIcon(){
+  const isDark = (document.documentElement.getAttribute("data-theme")||"dark") === "dark";
+  document.querySelectorAll(".theme-toggle").forEach(b=> b.textContent = isDark ? "🌙" : "☀️");
+  const meta = document.getElementById("theme-color-meta");
+  if(meta) meta.setAttribute("content", isDark ? "#000000" : "#ffffff");
+}
+function openSidebarMobile(){
+  document.getElementById("sidebar").classList.add("open");
+  document.getElementById("sidebar-backdrop").classList.add("open");
+}
+function closeSidebarMobile(){
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("sidebar-backdrop").classList.remove("open");
+}
+updateThemeIcon();
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").catch(err=> console.error("[sw] erro ao registrar:", err));
+  });
+}
+
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.style.display = "block";
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(()=> t.style.display = "none", 2600);
+}
+
+/* =========================================================
+   AUTH
+   ========================================================= */
+function doLogin(){
+  const email = document.getElementById("login-email").value.trim();
+  const pass = document.getElementById("login-pass").value;
+  const errorEl = document.getElementById("login-error");
+  const btn = document.querySelector("#login-screen button.primary");
+  errorEl.textContent = "";
+  btn.disabled = true; btn.textContent = "Entrando...";
+  console.log("[login] tentando autenticar:", email);
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(cred=>{
+      console.log("[login] sucesso:", cred.user.email);
+    })
+    .catch(err=>{
+      console.error("[login] erro:", err.code, err.message);
+      errorEl.textContent = `Erro: ${err.code || err.message}`;
+    })
+    .finally(()=>{
+      btn.disabled = false; btn.textContent = "Entrar";
+    });
+}
+function doLogout(){ auth.signOut(); }
+
+auth.onAuthStateChanged(user=>{
+  if(user){
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("app").classList.add("active");
+    document.getElementById("user-email").textContent = user.email;
+    startListeners();
+    buildNav();
+    renderPage("dashboard");
+  } else {
+    document.getElementById("login-screen").style.display = "flex";
+    document.getElementById("app").classList.remove("active");
+    listeners.forEach(unsub=>unsub());
+  }
+});
+
+/* =========================================================
+   FIRESTORE LIVE LISTENERS
+   ========================================================= */
+function startListeners(){
+  ["clientes","criancas","casamentos","eventos","pagamentos"].forEach(col=>{
+    const unsub = db.collection(col).onSnapshot(
+      snap=>{
+        state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+        renderPage(state.currentPage);
+      },
+      err=>{
+        console.error(`[firestore] erro na coleção "${col}":`, err.code, err.message);
+        toast(`Erro ao acessar "${col}": ${err.code}`);
+      }
+    );
+    listeners.push(unsub);
+  });
+
+  const unsubConfig = db.collection("config").doc("settings").onSnapshot(
+    doc=>{
+      state.config = doc.exists ? doc.data() : {};
+      if(state.currentPage==="configuracoes") renderPage("configuracoes");
+    },
+    err=>{
+      console.error("[firestore] erro em \"config\":", err.code, err.message);
+      toast(`Erro ao acessar configurações: ${err.code}`);
+    }
+  );
+  listeners.push(unsubConfig);
+}
+
+const QUICK_FIELDS = {
+  clientes: [
+    {key:"nome", label:"Nome", type:"text", required:true},
+    {key:"telefone", label:"Telefone", type:"tel"},
+    {key:"cidade", label:"Cidade", type:"text"}
+  ],
+  criancas: [
+    {key:"nome", label:"Nome da criança", type:"text", required:true},
+    {key:"dataNascimento", label:"Data de nascimento", type:"date", required:true}
+  ],
+  casamentos: [
+    {key:"nomeCasal", label:"Nome do casal", type:"text", required:true},
+    {key:"dataCasamento", label:"Data do casamento", type:"date", required:true}
+  ]
+};
+
+/* =========================================================
+   COLLECTION SCHEMAS (driven UI)
+   ========================================================= */
+const SCHEMAS = {
+  clientes: {
+    label: "Clientes", singular:"Cliente",
+    fields: [
+      {key:"nome", label:"Nome", type:"text", required:true},
+      {key:"nomeConjuge", label:"Cônjuge / parceiro(a) (se for casamento)", type:"text"},
+      {key:"telefone", label:"Telefone", type:"tel"},
+      {key:"cidade", label:"Cidade", type:"text"},
+      {key:"origem", label:"Como encontrou você", type:"select", options:["instagram","indicacao","google","igreja","outro"]},
+      {key:"indicadoPor", label:"Indicado por (nome)", type:"text"},
+      {key:"observacoes", label:"Observações", type:"textarea"}
+    ],
+    columns: [
+      {key:"nome", label:"Nome"},
+      {key:"telefone", label:"Telefone"},
+      {key:"cidade", label:"Cidade"},
+      {key:"origem", label:"Origem", format:v=>v?capitalize(v):"—"}
+    ]
+  },
+  criancas: {
+    label: "Aniversariantes", singular:"Criança",
+    fields: [
+      {key:"nome", label:"Nome", type:"text", required:true},
+      {key:"dataNascimento", label:"Data de nascimento", type:"date", required:true},
+      {key:"clientePaiId", label:"Responsável 1", type:"ref", ref:"clientes"},
+      {key:"clienteMaeId", label:"Responsável 2", type:"ref", ref:"clientes"},
+      {key:"observacoes", label:"Observações", type:"textarea"}
+    ],
+    columns: [
+      {key:"nome", label:"Nome"},
+      {key:"dataNascimento", label:"Nascimento", format:v=>formatDate(v)},
+      {key:"_idade", label:"Idade atual", format:(v,row)=>idadeAtual(row.dataNascimento)+" anos"},
+      {key:"_proximo", label:"Próximo aniversário em", format:(v,row)=>diasParaAniversario(row.dataNascimento)+" dias"}
+    ]
+  },
+  casamentos: {
+    label: "Casamentos", singular:"Casamento",
+    fields: [
+      {key:"nomeCasal", label:"Nome do casal", type:"text", required:true},
+      {key:"dataCasamento", label:"Data do casamento", type:"date", required:true},
+      {key:"clienteId", label:"Cliente vinculado", type:"ref", ref:"clientes"},
+      {key:"observacoes", label:"Observações", type:"textarea"}
+    ],
+    columns: [
+      {key:"nomeCasal", label:"Casal"},
+      {key:"dataCasamento", label:"Casamento", format:v=>formatDate(v)},
+      {key:"_anos", label:"Anos de casados", format:(v,row)=>idadeAtual(row.dataCasamento)+" anos"},
+      {key:"_proximo", label:"Próximo aniversário em", format:(v,row)=>diasParaAniversario(row.dataCasamento)+" dias"}
+    ]
+  },
+  casamentos: {
+    label: "Casamentos", singular:"Casamento",
+    fields: [
+      {key:"nomeCasal", label:"Nome do casal", type:"text", required:true},
+      {key:"dataCasamento", label:"Data do casamento", type:"date", required:true},
+      {key:"clienteId", label:"Cliente vinculado", type:"ref", ref:"clientes"},
+      {key:"observacoes", label:"Observações", type:"textarea"}
+    ],
+    columns: [
+      {key:"nomeCasal", label:"Casal"},
+      {key:"dataCasamento", label:"Data do casamento", format:v=>formatDate(v)},
+      {key:"_anos", label:"Anos de casados", format:(v,row)=>idadeAtual(row.dataCasamento)+" anos"},
+      {key:"_proximo", label:"Próximas bodas em", format:(v,row)=>diasParaAniversario(row.dataCasamento)+" dias"}
+    ]
+  },
+  eventos: {
+    label: "Eventos", singular:"Evento",
+    fields: [
+      {key:"tipo", label:"Tipo", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"], required:true},
+      {key:"data", label:"Data", type:"date", required:true},
+      {key:"horario", label:"Horário", type:"time"},
+      {key:"clienteId", label:"Cliente responsável", type:"ref", ref:"clientes", required:true},
+      {key:"criancaId", label:"Criança (opcional)", type:"ref", ref:"criancas"},
+      {key:"casamentoId", label:"Casamento vinculado (opcional)", type:"ref", ref:"casamentos"},
+      {key:"valorContratado", label:"Valor contratado (R$)", type:"number"},
+      {key:"status", label:"Status", type:"select", options:["orcamento","fechado","realizado","entregue"]},
+      {key:"tags", label:"Tags (separe por vírgula)", type:"tags"},
+      {key:"linkGaleriaCompleta", label:"Link da galeria completa", type:"text"},
+      {key:"dataEntregaPrevista", label:"Entrega prevista", type:"date"},
+      {key:"dataEntregaReal", label:"Entrega realizada", type:"date"}
+    ],
+    columns: [
+      {key:"data", label:"Data", format:v=>formatDate(v)},
+      {key:"tipo", label:"Tipo", format:v=>v?capitalize(v.replace("_"," ")):"—"},
+      {key:"clienteId", label:"Cliente", format:v=>nomeRef("clientes",v)},
+      {key:"valorContratado", label:"Valor", format:v=>v?money(v):"—"},
+      {key:"status", label:"Status", format:v=>{
+        const s = v||'orcamento';
+        const symbols = {orcamento:'○', fechado:'◐', realizado:'●', entregue:'✓'};
+        return `<span class="badge ${s}">${symbols[s]||''} ${capitalize(s)}</span>`;
+      }},
+      {key:"_saldo", label:"Saldo", format:(v,row)=>{
+        const saldo = (Number(row.valorContratado)||0) - totalPago(row.id);
+        if(saldo<=0) return `<span style="color:var(--muted);">Pago</span>`;
+        return `<button class="sm" onclick="abrirBaixaRapida('${row.id}')">${money(saldo)} → dar baixa</button>`;
+      }}
+    ]
+  },
+  pagamentos: {
+    label: "Financeiro", singular:"Pagamento",
+    fields: [
+      {key:"eventoId", label:"Evento", type:"ref", ref:"eventos", required:true},
+      {key:"valor", label:"Valor (R$)", type:"number", required:true},
+      {key:"data", label:"Data", type:"date", required:true},
+      {key:"forma", label:"Forma de pagamento", type:"select", options:["pix","cartao","dinheiro","transferencia"]},
+      {key:"tipo", label:"Tipo", type:"select", options:["entrada","parcela","saldo"]}
+    ],
+    columns: [
+      {key:"data", label:"Data", format:v=>formatDate(v)},
+      {key:"eventoId", label:"Evento", format:v=>labelEvento(v)},
+      {key:"valor", label:"Valor", format:v=>money(v)},
+      {key:"forma", label:"Forma", format:v=>v?capitalize(v):"—"},
+      {key:"tipo", label:"Tipo", format:v=>v?capitalize(v):"—"}
+    ]
+  }
+};
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+function capitalize(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
+function money(v){ return (Number(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function formatDate(v){
+  if(!v) return "—";
+  const [y,m,d] = v.split("-");
+  return d ? `${d}/${m}/${y}` : v;
+}
+function nomeRef(col, id){
+  const item = state[col]?.find(i=>i.id===id);
+  if(!item) return "—";
+  if(col==="clientes" && item.nomeConjuge) return `${item.nome} & ${item.nomeConjuge}`;
+  return item.nome;
+}
+function labelEvento(id){
+  const ev = state.eventos.find(e=>e.id===id);
+  if(!ev) return "—";
+  return `${capitalize((ev.tipo||"").replace("_"," "))} · ${formatDate(ev.data)} · ${nomeRef("clientes",ev.clienteId)}`;
+}
+function idadeAtual(dataNasc){
+  if(!dataNasc) return "—";
+  const hoje = new Date(); const nasc = new Date(dataNasc+"T00:00:00");
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  const aindaNaoFezAniversario = (hoje.getMonth()<nasc.getMonth()) || (hoje.getMonth()===nasc.getMonth() && hoje.getDate()<nasc.getDate());
+  if(aindaNaoFezAniversario) idade--;
+  return idade;
+}
+function diasParaAniversario(dataNasc){
+  if(!dataNasc) return "—";
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const nasc = new Date(dataNasc+"T00:00:00");
+  let prox = new Date(hoje.getFullYear(), nasc.getMonth(), nasc.getDate());
+  if(prox < hoje) prox = new Date(hoje.getFullYear()+1, nasc.getMonth(), nasc.getDate());
+  return Math.round((prox - hoje) / 86400000);
+}
+function isMesmoMes(dataStr){
+  if(!dataStr) return false;
+  const hoje = new Date(); const d = new Date(dataStr+"T00:00:00");
+  return hoje.getFullYear()===d.getFullYear() && hoje.getMonth()===d.getMonth();
+}
+function totalPago(eventoId){
+  return state.pagamentos.filter(p=>p.eventoId===eventoId).reduce((s,p)=>s+(Number(p.valor)||0),0);
+}
+
+/* =========================================================
+   NAV
+   ========================================================= */
+const NAV_ITEMS = [
+  {key:"dashboard", label:"Dashboard"},
+  {key:"eventos", label:"Eventos"},
+  {key:"clientes", label:"Clientes"},
+  {key:"criancas", label:"Aniversariantes"},
+  {key:"casamentos", label:"Casamentos"},
+  {key:"pagamentos", label:"Financeiro"},
+  {key:"relatorios", label:"Relatórios"},
+  {key:"configuracoes", label:"Configurações"}
+];
+function buildNav(){
+  const nav = document.getElementById("nav");
+  nav.innerHTML = NAV_ITEMS.map(item=>`
+    <button data-page="${item.key}" onclick="renderPage('${item.key}')">
+      <span class="dot"></span>${item.label}
+    </button>
+  `).join("");
+}
+function setActiveNav(page){
+  document.querySelectorAll("#nav button").forEach(b=>{
+    b.classList.toggle("active", b.dataset.page===page);
+  });
+}
+
+/* =========================================================
+   PAGE ROUTER
+   ========================================================= */
+/* ---------- EVENTOS: visão em pilha por ano + filtro por tipo/tag ---------- */
+let eventosFiltroTipo = "";
+let eventosFiltroTag = "";
+let expandedYears = null; // inicializado com o ano mais recente aberto
+
+function renderEventosPage(main){
+  const schema = SCHEMAS.eventos;
+  const todosOsTipos = ["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"];
+
+  main.innerHTML = `
+    <div class="page-header">
+      <div><div class="eyebrow">Cadastro</div><h2>${schema.label}</h2></div>
+      <div class="page-actions">
+        <input type="text" id="filtro-tag-evento" placeholder="Buscar por tag..." value="${eventosFiltroTag}"
+          oninput="eventosFiltroTag=this.value; renderEventosList();" style="width:150px;">
+        <select id="filtro-tipo-evento" onchange="eventosFiltroTipo=this.value; renderEventosList();" style="width:auto;">
+          <option value="">Todos os tipos</option>
+          ${todosOsTipos.map(t=>`<option value="${t}" ${eventosFiltroTipo===t?"selected":""}>${capitalize(t.replace("_"," "))}</option>`).join("")}
+        </select>
+        <button class="primary" onclick="openForm('eventos')">+ Novo Evento</button>
+      </div>
+    </div>
+    <div id="eventos-list-container"></div>
+  `;
+  renderEventosList();
+}
+
+function renderEventosList(){
+  const container = document.getElementById("eventos-list-container");
+  if(!container) return;
+  const schema = SCHEMAS.eventos;
+
+  let itens = [...state.eventos];
+  if(eventosFiltroTipo) itens = itens.filter(e=>e.tipo===eventosFiltroTipo);
+  if(eventosFiltroTag.trim()){
+    const termo = eventosFiltroTag.trim().toLowerCase();
+    itens = itens.filter(e=>(e.tags||[]).some(t=>t.toLowerCase().includes(termo)));
+  }
+
+  // agrupa por ano (a partir da data do evento; sem data vai pra "Sem data")
+  const porAno = {};
+  itens.forEach(ev=>{
+    const ano = ev.data ? ev.data.slice(0,4) : "Sem data";
+    if(!porAno[ano]) porAno[ano] = [];
+    porAno[ano].push(ev);
+  });
+  const anos = Object.keys(porAno).sort((a,b)=> b.localeCompare(a));
+
+  if(expandedYears === null){
+    expandedYears = new Set(anos.length ? [anos[0]] : []);
+  }
+
+  container.innerHTML = anos.length ? anos.map(ano=>renderAnoStack(ano, porAno[ano], schema)).join("") : `
+    <div class="card"><div class="empty-state"><div class="serif">Nada encontrado</div>Tente outro filtro ou cadastre um novo evento.</div></div>
+  `;
+}
+
+function renderAnoStack(ano, eventosDoAno, schema){
+  const isOpen = expandedYears.has(ano);
+  const ordenados = [...eventosDoAno].sort((a,b)=> (b.data||"").localeCompare(a.data||""));
+  const totalValor = eventosDoAno.reduce((s,e)=> s + (Number(e.valorContratado)||0), 0);
+
+  return `
+    <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;" onclick="toggleAno('${ano}')">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:'Fraunces',serif; font-size:18px;">${isOpen?'▾':'▸'} ${ano}</span>
+          <span style="font-size:12px; color:var(--muted);">${eventosDoAno.length} evento${eventosDoAno.length===1?'':'s'} · ${money(totalValor)}</span>
+        </div>
+        <span style="font-size:12px; color:var(--muted-2);">${isOpen?'recolher':'expandir'}</span>
+      </div>
+      ${isOpen ? `
+        <div style="overflow-x:auto; border-top:1px solid var(--border-solid);">
+          <table>
+            <thead><tr>${schema.columns.map(c=>`<th>${c.label}</th>`).join("")}<th></th></tr></thead>
+            <tbody>
+              ${ordenados.map(item=>`
+                <tr>
+                  ${schema.columns.map(c=>`<td>${c.format ? c.format(item[c.key],item) : (item[c.key] ?? "—")}</td>`).join("")}
+                  <td class="row-actions">
+                    <button class="sm" onclick="openView('eventos','${item.id}')">Ver</button>
+                    <button class="sm" onclick="openForm('eventos','${item.id}')">Editar</button>
+                    <button class="sm danger" onclick="deleteDoc('eventos','${item.id}')">Excluir</button>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function toggleAno(ano){
+  if(expandedYears.has(ano)) expandedYears.delete(ano);
+  else expandedYears.add(ano);
+  renderEventosList();
+}
+
+function renderPage(page){
+  state.currentPage = page;
+  setActiveNav(page);
+  closeSidebarMobile();
+  const main = document.getElementById("main");
+  if(page==="dashboard") return renderDashboard(main);
+  if(page==="eventos") return renderEventosPage(main);
+  if(page==="relatorios") return renderRelatorios(main);
+  if(page==="configuracoes") return renderConfiguracoes(main);
+  return renderCollectionPage(main, page);
+}
+
+/* ---------- CONFIGURAÇÕES ---------- */
+let configDraft = {};
+function renderConfiguracoes(main){
+  configDraft = { ...state.config };
+  main.innerHTML = `
+    <div class="page-header"><div><div class="eyebrow">Personalização</div><h2>Configurações</h2></div></div>
+    <div class="card">
+      <div class="section-title" style="margin-top:0;">Mensagem de aniversário</div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
+        Escreva a mensagem que você manda quando a criança está perto de fazer aniversário. Use estes campos —
+        eles são substituídos automaticamente pelos dados de cada criança:<br>
+        <code>{nome}</code> · <code>{idade}</code> · <code>{data}</code> · <code>{responsavel}</code>
+      </div>
+      <textarea id="msg-aniversario" rows="7" style="width:100%;"
+        placeholder="Ex: Oi {responsavel}! Vi que o(a) {nome} vai completar {idade} aninhos no dia {data} 🎉 Que tal já garantirmos a sessão de fotos pra comemorar?"
+        oninput="configDraft.mensagemAniversario=this.value">${state.config.mensagemAniversario||""}</textarea>
+      <div style="margin-top:14px; display:flex; justify-content:flex-end;">
+        <button class="primary" onclick="salvarConfiguracoes()">Salvar</button>
+      </div>
+    </div>
+  `;
+}
+function salvarConfiguracoes(){
+  db.collection("config").doc("settings").set(configDraft, {merge:true})
+    .then(()=> toast("Configurações salvas."))
+    .catch(err=>{ console.error(err); toast("Erro ao salvar. Veja o console."); });
+}
+function proximaDataAniversario(dataNasc){
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const nasc = new Date(dataNasc+"T00:00:00");
+  let prox = new Date(hoje.getFullYear(), nasc.getMonth(), nasc.getDate());
+  if(prox < hoje) prox = new Date(hoje.getFullYear()+1, nasc.getMonth(), nasc.getDate());
+  return prox;
+}
+function montarMensagemAniversario(criancaId){
+  const c = state.criancas.find(x=>x.id===criancaId);
+  if(!c) return null;
+  const template = state.config.mensagemAniversario || "";
+  if(!template) return { erro: "Cadastre a mensagem em Configurações primeiro." };
+  const responsavelId = c.clientePaiId || c.clienteMaeId;
+  const cliente = responsavelId ? state.clientes.find(x=>x.id===responsavelId) : null;
+  const idade = idadeAtual(c.dataNascimento) + 1;
+  const dataFormatada = proximaDataAniversario(c.dataNascimento).toLocaleDateString('pt-BR');
+  const texto = template
+    .replaceAll("{nome}", c.nome||"")
+    .replaceAll("{idade}", String(idade))
+    .replaceAll("{data}", dataFormatada)
+    .replaceAll("{responsavel}", cliente ? cliente.nome : "");
+  return { texto, cliente };
+}
+function enviarMensagemAniversario(criancaId){
+  const resultado = montarMensagemAniversario(criancaId);
+  if(!resultado) return;
+  if(resultado.erro){ toast(resultado.erro); return; }
+  const wa = resultado.cliente ? whatsappLink(resultado.cliente.telefone) : null;
+  if(wa){
+    window.open(`${wa}?text=${encodeURIComponent(resultado.texto)}`, "_blank");
+  } else {
+    navigator.clipboard.writeText(resultado.texto)
+      .then(()=> toast("Sem telefone cadastrado — mensagem copiada."))
+      .catch(()=> toast("Não foi possível copiar."));
+  }
+}
+
+/* ---------- RELATÓRIOS ---------- */
+function renderRelatorios(main){
+  const todosOsTipos = ["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"];
+  const porTipo = todosOsTipos.map(t=>{
+    const todosDoTipo = state.eventos.filter(e=>e.tipo===t);
+    const comValor = todosDoTipo.filter(e=>Number(e.valorContratado)>0);
+    const soma = comValor.reduce((s,e)=>s+Number(e.valorContratado),0);
+    return { tipo:t, total: todosDoTipo.length, comValor: comValor.length, media: comValor.length ? soma/comValor.length : 0, soma };
+  }).filter(x=>x.total>0);
+
+  const origens = ["instagram","indicacao","google","igreja","outro"];
+  const totalClientes = state.clientes.length;
+  const semOrigem = state.clientes.filter(c=>!c.origem).length;
+  const porOrigem = origens.map(o=>{
+    const n = state.clientes.filter(c=>c.origem===o).length;
+    return { origem:o, n, pct: totalClientes ? Math.round(n/totalClientes*100) : 0 };
+  }).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
+
+  const totalContratado = state.eventos.reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
+  const totalRecebido = state.pagamentos.reduce((s,p)=>s+(Number(p.valor)||0),0);
+
+  main.innerHTML = `
+    <div class="page-header"><div><div class="eyebrow">Visão de negócio</div><h2>Relatórios</h2></div></div>
+
+    <div class="grid grid-4">
+      <div class="card stat-card"><div class="label">Total de eventos</div><div class="value">${state.eventos.length}</div></div>
+      <div class="card stat-card"><div class="label">Valor contratado (total)</div><div class="value" style="font-size:19px">${money(totalContratado)}</div></div>
+      <div class="card stat-card"><div class="label">Total recebido</div><div class="value" style="font-size:19px">${money(totalRecebido)}</div></div>
+      <div class="card stat-card"><div class="label">Clientes cadastrados</div><div class="value">${totalClientes}</div></div>
+    </div>
+
+    <div class="section-title">Ticket médio por tipo de evento</div>
+    <div class="card" style="padding:0;">
+      ${porTipo.length ? `<table><thead><tr><th>Tipo</th><th>Eventos</th><th>Com valor informado</th><th>Ticket médio</th></tr></thead><tbody>
+        ${porTipo.map(x=>`<tr><td>${capitalize(x.tipo.replace("_"," "))}</td><td>${x.total}</td><td>${x.comValor}</td><td>${money(x.media)}</td></tr>`).join("")}
+      </tbody></table>` : `<div class="empty-state">Sem eventos suficientes ainda.</div>`}
+    </div>
+
+    <div class="section-title">Ranking de origem dos clientes</div>
+    <div class="card" style="padding:0;">
+      ${porOrigem.length || semOrigem ? `<table><thead><tr><th>#</th><th>Origem</th><th>Clientes</th><th>%</th></tr></thead><tbody>
+        ${porOrigem.map((x,i)=>`<tr><td>${i+1}</td><td>${capitalize(x.origem)}</td><td>${x.n}</td><td>${x.pct}%</td></tr>`).join("")}
+        ${semOrigem ? `<tr><td>—</td><td>Não informado</td><td>${semOrigem}</td><td>${totalClientes?Math.round(semOrigem/totalClientes*100):0}%</td></tr>` : ""}
+      </tbody></table>` : `<div class="empty-state">Cadastre a origem dos clientes para ver o ranking.</div>`}
+    </div>
+  `;
+}
+
+/* ---------- DASHBOARD ---------- */
+function renderDashboard(main){
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const futuros = state.eventos.filter(e=>e.data && new Date(e.data+"T00:00:00") >= hoje).sort((a,b)=>a.data.localeCompare(b.data));
+  const proximo = futuros[0];
+  const doMes = state.eventos.filter(e=>isMesmoMes(e.data));
+  const aReceber = state.eventos.reduce((sum,e)=> sum + Math.max((Number(e.valorContratado)||0) - totalPago(e.id), 0), 0);
+  const aniversariosCriancas = state.criancas.map(c=>({id:c.id, tipo:"crianca", nome:c.nome, data:c.dataNascimento, vinculo:nomeRef("clientes",c.clientePaiId), dias:diasParaAniversario(c.dataNascimento), idade:idadeAtual(c.dataNascimento)}));
+  const aniversariosCasamentos = state.casamentos.map(c=>({id:c.id, tipo:"casamento", nome:c.nomeCasal, data:c.dataCasamento, vinculo:nomeRef("clientes",c.clienteId), dias:diasParaAniversario(c.dataCasamento), idade:idadeAtual(c.dataCasamento)}));
+  const aniversarios = [...aniversariosCriancas, ...aniversariosCasamentos].filter(c=>c.dias<=60).sort((a,b)=>a.dias-b.dias);
+  const contagemPorCliente = {};
+  state.eventos.forEach(e=>{ if(e.clienteId) contagemPorCliente[e.clienteId] = (contagemPorCliente[e.clienteId]||0)+1; });
+  const recorrentes = Object.entries(contagemPorCliente).filter(([_,n])=>n>1).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const pendentesEntrega = state.eventos.filter(e=>e.status==="realizado");
+  const entregues = state.eventos.filter(e=>e.status==="entregue");
+
+  main.innerHTML = `
+    <div class="page-header">
+      <div><div class="eyebrow">Visão geral</div><h2>Dashboard</h2></div>
+    </div>
+
+    <div class="grid grid-4">
+      <div class="card stat-card">
+        <div class="label">Próximo evento</div>
+        <div class="value" style="font-size:18px">${proximo ? capitalize((proximo.tipo||"").replace("_"," ")) : "—"}</div>
+        <div class="sub">${proximo ? formatDate(proximo.data) + (proximo.horario? " · "+proximo.horario:"") + " · " + nomeRef("clientes",proximo.clienteId) : "Nenhum evento futuro"}</div>
+      </div>
+      <div class="card stat-card">
+        <div class="label">Eventos este mês</div>
+        <div class="value">${doMes.length}</div>
+        <div class="sub">${doMes.filter(e=>e.status==="fechado"||e.status==="orcamento").length} ainda em aberto</div>
+      </div>
+      <div class="card stat-card">
+        <div class="label">A receber</div>
+        <div class="value">${money(aReceber)}</div>
+        <div class="sub">saldo pendente em todos os eventos</div>
+      </div>
+      <div class="card stat-card">
+        <div class="label">Entregues / pendentes</div>
+        <div class="value">${entregues.length} / ${pendentesEntrega.length}</div>
+        <div class="sub">realizados aguardando entrega: ${pendentesEntrega.length}</div>
+      </div>
+    </div>
+
+    <div class="section-title">Aniversários próximos (60 dias)</div>
+    <div class="card">
+      ${aniversarios.length ? `<table><thead><tr><th>Quem</th><th>Vai completar</th><th>Em quantos dias</th><th>Vínculo</th><th></th></tr></thead><tbody>
+        ${aniversarios.map(c=>`<tr>
+          <td>${c.tipo==='casamento'?'💍 ':'🎂 '}${c.nome}</td>
+          <td>${c.idade+1} anos${c.tipo==='casamento'?' de casados':''}</td>
+          <td>${c.dias===0?'<b style="color:var(--amber)">Hoje!</b>':c.dias+' dias'}</td>
+          <td>${c.vinculo}</td>
+          <td>${c.tipo==='crianca' ? `<button class="sm" onclick="enviarMensagemAniversario('${c.id}')">Enviar mensagem</button>` : ""}</td>
+        </tr>`).join("")}
+      </tbody></table>` : `<div class="empty-state">Nenhum aniversário nos próximos 60 dias.</div>`}
+    </div>
+
+    <div class="section-title">Clientes recorrentes para contatar</div>
+    <div class="card">
+      ${recorrentes.length ? `<table><thead><tr><th>Cliente</th><th>Eventos contratados</th></tr></thead><tbody>
+        ${recorrentes.map(([id,n])=>`<tr><td>${nomeRef("clientes",id)}</td><td>${n}×</td></tr>`).join("")}
+      </tbody></table>` : `<div class="empty-state">Ainda não há clientes com mais de um evento.</div>`}
+    </div>
+  `;
+}
+
+/* ---------- GENERIC COLLECTION PAGE ---------- */
+const collectionSearch = {};
+function renderCollectionPage(main, col){
+  const schema = SCHEMAS[col];
+  main.innerHTML = `
+    <div class="page-header">
+      <div><div class="eyebrow">Cadastro</div><h2>${schema.label}</h2></div>
+      <div class="page-actions">
+        <input type="text" id="busca-${col}" placeholder="Buscar..." value="${collectionSearch[col]||""}"
+          oninput="collectionSearch['${col}']=this.value; renderCollectionList('${col}');" style="width:160px;">
+        <button class="primary" onclick="openForm('${col}')">+ Novo ${schema.singular}</button>
+      </div>
+    </div>
+    <div id="collection-list-${col}"></div>
+    ${col==="pagamentos" ? renderFinanceiroExtras() : ""}
+  `;
+  renderCollectionList(col);
+}
+
+function renderCollectionList(col){
+  const container = document.getElementById(`collection-list-${col}`);
+  if(!container) return;
+  const schema = SCHEMAS[col];
+  const termo = (collectionSearch[col]||"").trim().toLowerCase();
+
+  let items = [...state[col]];
+  if(termo){
+    items = items.filter(item => Object.values(item).some(v=>{
+      if(v==null) return false;
+      if(Array.isArray(v)) return v.join(" ").toLowerCase().includes(termo);
+      return String(v).toLowerCase().includes(termo);
+    }));
+  }
+  items.sort((a,b)=>{
+    if(a.data && b.data) return b.data.localeCompare(a.data);
+    return (a.nome||a.nomeCasal||"").localeCompare(b.nome||b.nomeCasal||"");
+  });
+
+  container.innerHTML = `
+    <div class="card" style="padding:0; overflow-x:auto;">
+      ${items.length ? `
+      <table>
+        <thead><tr>${schema.columns.map(c=>`<th>${c.label}</th>`).join("")}<th></th></tr></thead>
+        <tbody>
+          ${items.map(item=>`
+            <tr>
+              ${schema.columns.map(c=>`<td>${c.format ? c.format(item[c.key],item) : (item[c.key] ?? "—")}</td>`).join("")}
+              <td class="row-actions">
+                <button class="sm" onclick="openView('${col}','${item.id}')">Ver</button>
+                <button class="sm" onclick="openForm('${col}','${item.id}')">Editar</button>
+                <button class="sm danger" onclick="deleteDoc('${col}','${item.id}')">Excluir</button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>` : `<div class="empty-state"><div class="serif">Nada encontrado</div>${termo ? "Tente outro termo de busca." : `Cadastre o primeiro ${schema.singular.toLowerCase()} para começar.`}</div>`}
+    </div>
+  `;
+}
+
+function renderEventosExtras(){
+  // tag search shortcut
+  const allTags = [...new Set(state.eventos.flatMap(e=>e.tags||[]))];
+  if(!allTags.length) return "";
+  return `
+    <div class="section-title">Buscar por tag</div>
+    <div class="card">
+      ${allTags.map(t=>`<span class="tag-chip" style="cursor:pointer" onclick="filterByTag('${t}')">${t}</span>`).join("")}
+    </div>
+  `;
+}
+function filterByTag(tag){
+  const matches = state.eventos.filter(e=>(e.tags||[]).includes(tag));
+  alert(matches.map(e=>`${capitalize((e.tipo||"").replace("_"," "))} · ${formatDate(e.data)} · ${nomeRef("clientes",e.clienteId)}`).join("\n") || "Nenhum evento com essa tag.");
+}
+
+function renderFinanceiroExtras(){
+  const porMes = {};
+  state.pagamentos.forEach(p=>{
+    if(!p.data) return;
+    const chave = p.data.slice(0,7);
+    porMes[chave] = (porMes[chave]||0) + (Number(p.valor)||0);
+  });
+  const meses = Object.keys(porMes).sort().reverse().slice(0,12);
+  return `
+    <div class="section-title">Faturamento por mês</div>
+    <div class="card">
+      ${meses.length ? `<table><thead><tr><th>Mês</th><th>Total recebido</th></tr></thead><tbody>
+        ${meses.map(m=>`<tr><td>${m}</td><td>${money(porMes[m])}</td></tr>`).join("")}
+      </tbody></table>` : `<div class="empty-state">Sem pagamentos registrados ainda.</div>`}
+    </div>
+  `;
+}
+
+/* =========================================================
+   FORM MODAL (driven by schema)
+   ========================================================= */
+let formState = {};
+/* =========================================================
+   VISUALIZAÇÃO (somente leitura)
+   ========================================================= */
+function viewRow(label, valueHtml){
+  return `<div class="view-row"><span class="view-label">${label}</span><span class="view-value">${valueHtml}</span></div>`;
+}
+function whatsappLink(telefone){
+  if(!telefone) return null;
+  let digits = telefone.replace(/\D/g,"");
+  if(!digits) return null;
+  if(!digits.startsWith("55")) digits = "55"+digits;
+  return `https://wa.me/${digits}`;
+}
+function viewActions(col, id, extraHtml){
+  return `<div class="modal-actions">
+    ${extraHtml||""}
+    <button class="ghost" onclick="closeModal()">Fechar</button>
+    <button class="primary" onclick="openForm('${col}','${id}')">Editar</button>
+  </div>`;
+}
+function copiarResumoEvento(eventoId){
+  const ev = state.eventos.find(e=>e.id===eventoId);
+  if(!ev) return;
+  const cliente = state.clientes.find(c=>c.id===ev.clienteId);
+  const nomeCliente = cliente ? (cliente.nome + (cliente.nomeConjuge ? " & "+cliente.nomeConjuge : "")) : "—";
+  const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
+  const linhas = [
+    `${capitalize((ev.tipo||"").replace("_"," "))} — ${nomeCliente}`,
+    `Data: ${formatDate(ev.data)}${ev.horario ? " às "+ev.horario : ""}`,
+    ev.valorContratado ? `Valor: ${money(ev.valorContratado)}` : null,
+    ev.valorContratado ? (saldo>0 ? `Saldo pendente: ${money(saldo)}` : `Status: pago integralmente`) : null,
+    ev.dataEntregaPrevista ? `Entrega prevista: ${formatDate(ev.dataEntregaPrevista)}` : null,
+    cliente?.telefone ? `Contato: ${cliente.telefone}` : null
+  ].filter(Boolean);
+  const texto = linhas.join("\n");
+  navigator.clipboard.writeText(texto)
+    .then(()=> toast("Resumo copiado!"))
+    .catch(()=> toast("Não foi possível copiar. Copie manualmente: "+texto));
+}
+
+function openView(col, id){
+  const item = state[col]?.find(i=>i.id===id);
+  if(!item) return;
+  const renderers = { eventos: renderViewEvento, clientes: renderViewCliente, criancas: renderViewCrianca, casamentos: renderViewCasamento };
+  const html = (renderers[col] || renderViewGeneric)(item, col);
+  document.getElementById("modal-content").innerHTML = html;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+function renderViewGeneric(item, col){
+  const schema = SCHEMAS[col];
+  return `<h3>${schema.singular}</h3>
+    ${schema.fields.map(f=>{
+      let val = item[f.key];
+      if(f.type==="ref") val = val ? nomeRef(f.ref, val) : "—";
+      else if(Array.isArray(val)) val = val.join(", ") || "—";
+      else val = val || "—";
+      return viewRow(f.label, val);
+    }).join("")}
+    ${viewActions(col, item.id)}`;
+}
+
+function renderViewEvento(ev){
+  const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
+  const symbols = {orcamento:'○', fechado:'◐', realizado:'●', entregue:'✓'};
+  const s = ev.status || 'orcamento';
+  return `<h3>${capitalize((ev.tipo||"").replace("_"," "))} · ${formatDate(ev.data)}</h3>
+    ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${ev.clienteId}');return false;">${nomeRef("clientes",ev.clienteId)}</a>`)}
+    ${ev.criancaId ? viewRow("Criança", `<a href="#" onclick="openView('criancas','${ev.criancaId}');return false;">${nomeRef("criancas",ev.criancaId)}</a>`) : ""}
+    ${ev.casamentoId ? viewRow("Casamento", `<a href="#" onclick="openView('casamentos','${ev.casamentoId}');return false;">${nomeRef("casamentos",ev.casamentoId)}</a>`) : ""}
+    ${viewRow("Horário", ev.horario || "—")}
+    ${viewRow("Status", `<span class="badge ${s}">${symbols[s]||''} ${capitalize(s)}</span>`)}
+    ${viewRow("Valor contratado", money(ev.valorContratado))}
+    ${viewRow("Saldo pendente", saldo>0 ? money(saldo) : "Pago")}
+    ${ev.tags && ev.tags.length ? viewRow("Tags", ev.tags.map(t=>`<span class="tag-chip">${t}</span>`).join("")) : ""}
+    ${ev.dataEntregaPrevista ? viewRow("Entrega prevista", formatDate(ev.dataEntregaPrevista)) : ""}
+    ${ev.dataEntregaReal ? viewRow("Entrega realizada", formatDate(ev.dataEntregaReal)) : ""}
+    ${ev.linkGaleriaCompleta ? viewRow("Galeria completa", `<a href="${ev.linkGaleriaCompleta}" target="_blank" rel="noopener">Abrir galeria ↗</a>`) : ""}
+    ${viewActions("eventos", ev.id, `<button class="ghost" onclick="copiarResumoEvento('${ev.id}')">Copiar resumo</button>`)}`;
+}
+
+function renderViewCliente(cli){
+  const wa = whatsappLink(cli.telefone);
+  const eventosCliente = state.eventos.filter(e=>e.clienteId===cli.id).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+  const hoje = new Date().toISOString().slice(0,10);
+  const proximo = eventosCliente.filter(e=>e.data>=hoje).sort((a,b)=>(a.data||"").localeCompare(b.data||""))[0];
+
+  return `<h3>${cli.nome}${cli.nomeConjuge ? " & "+cli.nomeConjuge : ""}</h3>
+    ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener">${cli.telefone} ↗ WhatsApp</a>` : cli.telefone) : "—")}
+    ${viewRow("Cidade", cli.cidade || "—")}
+    ${viewRow("Origem", cli.origem ? capitalize(cli.origem) : "—")}
+    ${viewRow("Indicado por", cli.indicadoPor || "—")}
+    ${cli.observacoes ? viewRow("Observações", cli.observacoes) : ""}
+    <div class="view-section-title">Próximo evento</div>
+    ${proximo
+      ? `<div class="view-link-card" onclick="openView('eventos','${proximo.id}')">${capitalize((proximo.tipo||"").replace("_"," "))} · ${formatDate(proximo.data)} ${proximo.horario?"· "+proximo.horario:""}</div>`
+      : `<div style="font-size:13px; color:var(--muted-2);">Nenhum evento futuro.</div>`}
+    ${eventosCliente.length ? `
+      <div class="view-section-title">Histórico de eventos (${eventosCliente.length})</div>
+      ${eventosCliente.map(e=>`<div class="view-link-card" onclick="openView('eventos','${e.id}')">${formatDate(e.data)} · ${capitalize((e.tipo||"").replace("_"," "))}</div>`).join("")}
+    ` : ""}
+    ${viewActions("clientes", cli.id)}`;
+}
+
+function renderViewCrianca(c){
+  return `<h3>${c.nome}</h3>
+    ${viewRow("Data de nascimento", formatDate(c.dataNascimento))}
+    ${viewRow("Idade atual", idadeAtual(c.dataNascimento)+" anos")}
+    ${viewRow("Próximo aniversário em", diasParaAniversario(c.dataNascimento)+" dias")}
+    ${c.clientePaiId ? viewRow("Responsável 1", `<a href="#" onclick="openView('clientes','${c.clientePaiId}');return false;">${nomeRef("clientes",c.clientePaiId)}</a>`) : ""}
+    ${c.clienteMaeId ? viewRow("Responsável 2", `<a href="#" onclick="openView('clientes','${c.clienteMaeId}');return false;">${nomeRef("clientes",c.clienteMaeId)}</a>`) : ""}
+    ${c.observacoes ? viewRow("Observações", c.observacoes) : ""}
+    ${viewActions("criancas", c.id, `<button class="ghost" onclick="enviarMensagemAniversario('${c.id}')">Enviar mensagem de aniversário</button>`)}`;
+}
+
+function renderViewCasamento(c){
+  return `<h3>${c.nomeCasal}</h3>
+    ${viewRow("Data do casamento", formatDate(c.dataCasamento))}
+    ${viewRow("Anos de casados", idadeAtual(c.dataCasamento)+" anos")}
+    ${viewRow("Próximas bodas em", diasParaAniversario(c.dataCasamento)+" dias")}
+    ${c.clienteId ? viewRow("Cliente vinculado", `<a href="#" onclick="openView('clientes','${c.clienteId}');return false;">${nomeRef("clientes",c.clienteId)}</a>`) : ""}
+    ${c.observacoes ? viewRow("Observações", c.observacoes) : ""}
+    ${viewActions("casamentos", c.id)}`;
+}
+
+function openForm(col, id){
+  const schema = SCHEMAS[col];
+  const existing = id ? state[col].find(i=>i.id===id) : null;
+  formState = existing ? { ...existing } : {};
+  formState._col = col; formState._id = id || null;
+
+  const showMarkPaid = col==="eventos" && existing && (Number(existing.valorContratado)||0) > totalPago(id);
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>${existing ? "Editar" : "Novo"} ${schema.singular}</h3>
+    <div id="form-fields">${schema.fields.map(f=>renderField(f, formState[f.key])).join("")}</div>
+    ${showMarkPaid ? `
+      <div class="card" style="margin-top:4px; padding:12px 14px;">
+        <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">
+          Saldo pendente neste evento: ${money((Number(existing.valorContratado)||0) - totalPago(id))}. Cadastrando evento antigo? Marque como já recebido em vez de deixar pendente no financeiro.
+        </div>
+        <button class="sm" onclick="marcarComoRecebido('${id}')">Marcar valor total como já recebido</button>
+      </div>
+    ` : ""}
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="saveDoc()">Salvar</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function marcarComoRecebido(eventoId){
+  const ev = state.eventos.find(e=>e.id===eventoId);
+  if(!ev) return;
+  const saldo = (Number(ev.valorContratado)||0) - totalPago(eventoId);
+  if(saldo<=0) return;
+  try{
+    await db.collection("pagamentos").add({
+      eventoId, clienteId: ev.clienteId||"", valor: saldo,
+      data: ev.data || new Date().toISOString().slice(0,10),
+      forma: "outro", tipo: "saldo",
+      criadoEm: new Date().toISOString()
+    });
+    toast("Evento marcado como totalmente recebido.");
+    closeModal();
+  }catch(err){
+    console.error(err);
+    toast("Erro ao registrar o recebimento.");
+  }
+}
+
+function abrirBaixaRapida(eventoId){
+  const ev = state.eventos.find(e=>e.id===eventoId);
+  if(!ev) return;
+  const saldo = (Number(ev.valorContratado)||0) - totalPago(eventoId);
+  formState = { _baixaEventoId: eventoId, valor: saldo, data: new Date().toISOString().slice(0,10), forma: "pix", tipo: saldo===(Number(ev.valorContratado)||0) ? "saldo" : "parcela" };
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Dar baixa — ${capitalize((ev.tipo||"").replace("_"," "))} · ${nomeRef("clientes",ev.clienteId)}</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">Saldo pendente: ${money(saldo)}</div>
+    <div class="field"><label>Valor recebido (R$)</label>
+      <input type="number" value="${saldo}" oninput="formState.valor=this.value">
+    </div>
+    <div class="field"><label>Data</label>
+      <input type="date" value="${formState.data}" oninput="formState.data=this.value">
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Forma de pagamento</label>
+        <select onchange="formState.forma=this.value" style="width:100%">
+          ${["pix","cartao","dinheiro","transferencia"].map(o=>`<option value="${o}" ${formState.forma===o?"selected":""}>${capitalize(o)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Tipo</label>
+        <select onchange="formState.tipo=this.value" style="width:100%">
+          ${["entrada","parcela","saldo"].map(o=>`<option value="${o}" ${formState.tipo===o?"selected":""}>${capitalize(o)}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="confirmarBaixaRapida()">Registrar pagamento</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+async function confirmarBaixaRapida(){
+  const ev = state.eventos.find(e=>e.id===formState._baixaEventoId);
+  if(!ev) return;
+  const valor = Number(formState.valor);
+  if(!valor || valor<=0){ toast("Informe um valor válido."); return; }
+  try{
+    await db.collection("pagamentos").add({
+      eventoId: ev.id, clienteId: ev.clienteId||"", valor,
+      data: formState.data, forma: formState.forma, tipo: formState.tipo,
+      criadoEm: new Date().toISOString()
+    });
+    toast("Pagamento registrado.");
+    closeModal();
+  }catch(err){
+    console.error(err);
+    toast("Erro ao registrar o pagamento.");
+  }
+}
+function closeModal(){ document.getElementById("modal-backdrop").classList.remove("active"); formState = {}; }
+
+function renderField(f, value){
+  const id = `field-${f.key}`;
+  if(f.type==="textarea"){
+    return `<div class="field"><label>${f.label}</label><textarea id="${id}" oninput="formState['${f.key}']=this.value">${value||""}</textarea></div>`;
+  }
+  if(f.type==="select"){
+    return `<div class="field"><label>${f.label}</label>
+      <select id="${id}" onchange="formState['${f.key}']=this.value" style="width:100%">
+        <option value="">—</option>
+        ${f.options.map(o=>`<option value="${o}" ${value===o?"selected":""}>${capitalize(o.replace("_"," "))}</option>`).join("")}
+      </select></div>`;
+  }
+  if(f.type==="ref"){
+    const opts = state[f.ref] || [];
+    const isNew = value === "__new__";
+    return `<div class="field"><label>${f.label}</label>
+      <select id="${id}" onchange="onRefChange('${f.key}','${f.ref}',this.value)" style="width:100%">
+        <option value="">—</option>
+        <option value="__new__" ${isNew?"selected":""}>+ Cadastrar novo${f.ref==='criancas'?'a':''} ${SCHEMAS[f.ref].singular.toLowerCase()}</option>
+        ${opts.map(o=>`<option value="${o.id}" ${value===o.id?"selected":""}>${o.nome ? (o.nomeConjuge ? `${o.nome} & ${o.nomeConjuge}` : o.nome) : labelEvento(o.id)}</option>`).join("")}
+      </select>
+      <div id="quick-new-${f.key}">${isNew ? renderQuickNew(f.key, f.ref) : ""}</div>
+      </div>`;
+  }
+  if(f.type==="tags"){
+    const str = Array.isArray(value) ? value.join(", ") : (value||"");
+    return `<div class="field"><label>${f.label}</label>
+      <input id="${id}" type="text" value="${str}" oninput="formState['${f.key}']=this.value.split(',').map(s=>s.trim()).filter(Boolean)">
+      </div>`;
+  }
+  return `<div class="field"><label>${f.label}</label><input id="${id}" type="${f.type}" value="${value||""}" oninput="formState['${f.key}']=this.value"></div>`;
+}
+
+function onRefChange(fKey, ref, val){
+  formState[fKey] = val;
+  const container = document.getElementById(`quick-new-${fKey}`);
+  if(val === "__new__"){
+    if(!formState[`_quickNew_${fKey}`]) formState[`_quickNew_${fKey}`] = {};
+    container.innerHTML = renderQuickNew(fKey, ref);
+  } else {
+    container.innerHTML = "";
+    delete formState[`_quickNew_${fKey}`];
+  }
+}
+function renderQuickNew(fKey, ref){
+  const qf = QUICK_FIELDS[ref];
+  if(!qf) return "";
+  const quick = formState[`_quickNew_${fKey}`] || {};
+  return `<div class="quick-new-box">
+    <div style="font-size:12px;color:var(--muted);margin:10px 0 8px;">Dados d${ref==='criancas'?'a nova criança':'o novo cliente'}:</div>
+    ${qf.map(q=>`<div class="field"><label>${q.label}</label><input type="${q.type}" value="${quick[q.key]||""}" oninput="formState['_quickNew_${fKey}']['${q.key}']=this.value"></div>`).join("")}
+  </div>`;
+}
+
+
+async function saveDoc(){
+  const col = formState._col;
+  const id = formState._id;
+  const schema = SCHEMAS[col];
+  const data = {};
+
+  for(const f of schema.fields){
+    let val = formState[f.key];
+
+    if(val === "__new__"){
+      const ref = f.ref;
+      const quick = formState[`_quickNew_${f.key}`] || {};
+      const qFields = QUICK_FIELDS[ref] || [];
+      const missingQuick = qFields.filter(q=>q.required && !quick[q.key]);
+      if(missingQuick.length){
+        toast(`Preencha: ${missingQuick.map(q=>q.label).join(", ")}`);
+        return;
+      }
+      const quickData = {};
+      qFields.forEach(q=> quickData[q.key] = quick[q.key] || "");
+      if(ref === "criancas" && data.clienteId){
+        quickData.clientePaiId = data.clienteId; // já vincula a criança ao cliente do evento
+      }
+      quickData.criadoEm = new Date().toISOString();
+      try{
+        const newDocRef = await db.collection(ref).add(quickData);
+        val = newDocRef.id;
+      }catch(err){
+        console.error(err);
+        toast(`Erro ao cadastrar ${SCHEMAS[ref].singular.toLowerCase()} automaticamente.`);
+        return;
+      }
+    }
+
+    data[f.key] = val ?? (f.type==="tags" ? [] : "");
+  }
+
+  const missing = schema.fields.filter(f=>f.required && !data[f.key]);
+  if(missing.length){
+    toast(`Preencha: ${missing.map(f=>f.label).join(", ")}`);
+    return;
+  }
+
+  try{
+    if(id){
+      await db.collection(col).doc(id).update(data);
+      toast(`${schema.singular} atualizado.`);
+    } else {
+      data.criadoEm = new Date().toISOString();
+      await db.collection(col).add(data);
+      toast(`${schema.singular} criado.`);
+    }
+    closeModal();
+  }catch(err){
+    console.error(err);
+    toast("Erro ao salvar. Veja o console.");
+  }
+}
+
+async function deleteDoc(col, id){
+  if(!confirm("Tem certeza que deseja excluir?")) return;
+  await db.collection(col).doc(id).delete();
+  toast("Excluído.");
+}
+</script>
+</body>
+</html>
