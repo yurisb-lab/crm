@@ -1346,6 +1346,27 @@ async function saveDoc(){
     data[f.key] = val ?? (f.type==="tags" ? [] : "");
   }
 
+  // vincula/cria automaticamente o registro em "Casamentos" para eventos de casamento
+  if(col === "eventos" && (data.tipo==="casamento_civil" || data.tipo==="casamento_religioso") && !data.casamentoId && data.clienteId){
+    const existente = state.casamentos.find(c=>c.clienteId===data.clienteId);
+    if(existente){
+      data.casamentoId = existente.id;
+    } else {
+      const cliente = state.clientes.find(c=>c.id===data.clienteId);
+      const nomeCasal = cliente ? (cliente.nome + (cliente.nomeConjuge ? " & "+cliente.nomeConjuge : "")) : "Casal";
+      try{
+        const novoCasamento = await db.collection("casamentos").add({
+          nomeCasal, dataCasamento: data.data || "", clienteId: data.clienteId,
+          observacoes: "", criadoEm: new Date().toISOString()
+        });
+        data.casamentoId = novoCasamento.id;
+      }catch(err){
+        console.error("[casamentos] erro ao criar automaticamente:", err);
+        // não bloqueia o salvamento do evento por causa disso
+      }
+    }
+  }
+
   const missing = schema.fields.filter(f=>f.required && !data[f.key]);
   if(missing.length){
     toast(`Preencha: ${missing.map(f=>f.label).join(", ")}`);
