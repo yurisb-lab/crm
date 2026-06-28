@@ -209,6 +209,11 @@
   .badge.realizado{ background:color-mix(in srgb, var(--text) 45%, transparent); color:var(--text); }
   .badge.entregue{ background:var(--text); color:var(--bg); border-color:var(--text); }
   .badge.perdido{ background:transparent; color:var(--muted-2); border-style:dashed; text-decoration:line-through; }
+  .badge.lead-novo{ background:transparent; color:var(--muted); border-style:dashed; }
+  .badge.lead-contatado{ background:color-mix(in srgb, var(--text) 14%, transparent); color:var(--text); }
+  .badge.lead-negociando{ background:color-mix(in srgb, var(--text) 32%, transparent); color:var(--text); }
+  .badge.lead-convertido{ background:var(--text); color:var(--bg); border-color:var(--text); }
+  .badge.lead-perdido{ background:transparent; color:var(--muted-2); border-style:dashed; text-decoration:line-through; }
   .tag-chip{ display:inline-block; background:var(--surface-2); border:1px solid var(--border-solid); color:var(--muted); font-size:11px; padding:2px 8px; border-radius:20px; margin:2px 3px 0 0; }
 
   .empty-state{ text-align:center; padding:50px 20px; color:var(--muted-2); }
@@ -318,7 +323,7 @@ const db = firebase.firestore();
    STATE
    ========================================================= */
 const state = {
-  clientes: [], criancas: [], casamentos: [], eventos: [], pagamentos: [],
+  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], pagamentos: [],
   config: {},
   currentPage: "dashboard"
 };
@@ -404,7 +409,7 @@ auth.onAuthStateChanged(user=>{
    FIRESTORE LIVE LISTENERS
    ========================================================= */
 function startListeners(){
-  ["clientes","criancas","casamentos","eventos","pagamentos"].forEach(col=>{
+  ["leads","clientes","criancas","casamentos","eventos","pagamentos"].forEach(col=>{
     const unsub = db.collection(col).onSnapshot(
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
@@ -451,6 +456,29 @@ const QUICK_FIELDS = {
    COLLECTION SCHEMAS (driven UI)
    ========================================================= */
 const SCHEMAS = {
+  leads: {
+    label: "Leads", singular:"Lead",
+    fields: [
+      {key:"nome", label:"Nome", type:"text", required:true},
+      {key:"telefone", label:"Telefone", type:"tel"},
+      {key:"origem", label:"Como chegou até você", type:"select", options:["instagram","indicacao","google","igreja","outro"]},
+      {key:"interesseTipo", label:"Interesse em", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"]},
+      {key:"status", label:"Status", type:"select", options:["novo","contatado","negociando","convertido","perdido"]},
+      {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"]},
+      {key:"observacoes", label:"Observações", type:"textarea"}
+    ],
+    columns: [
+      {key:"nome", label:"Nome"},
+      {key:"telefone", label:"Telefone"},
+      {key:"interesseTipo", label:"Interesse", format:v=>v?capitalize(v.replace("_"," ")):"—"},
+      {key:"status", label:"Status", format:v=>{
+        const s = v||"novo";
+        const sym = {novo:"○", contatado:"◐", negociando:"◑", convertido:"✓", perdido:"✕"};
+        const lbl = {novo:"Novo", contatado:"Contatado", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+        return `<span class="badge lead-${s}">${sym[s]||""} ${lbl[s]||capitalize(s)}</span>`;
+      }}
+    ]
+  },
   clientes: {
     label: "Clientes", singular:"Cliente",
     fields: [
@@ -525,7 +553,7 @@ const SCHEMAS = {
       {key:"criancaId", label:"Criança (opcional)", type:"ref", ref:"criancas"},
       {key:"casamentoId", label:"Casamento vinculado (opcional)", type:"ref", ref:"casamentos"},
       {key:"valorContratado", label:"Valor contratado (R$)", type:"number"},
-      {key:"status", label:"Status", type:"select", options:["lead","orcamento","negociacao","fechado","realizado","entregue","perdido"]},
+      {key:"status", label:"Status", type:"select", options:["orcamento","negociacao","fechado","realizado","entregue","perdido"]},
       {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"]},
       {key:"tags", label:"Tags (separe por vírgula)", type:"tags"},
       {key:"linkGaleriaCompleta", label:"Link da galeria completa", type:"text"},
@@ -539,7 +567,7 @@ const SCHEMAS = {
       {key:"valorContratado", label:"Valor", format:v=>v?money(v):"—"},
       {key:"status", label:"Status", format:v=>{
         const s = v||'orcamento';
-        const symbols = {lead:'◯', orcamento:'○', negociacao:'◐', fechado:'●', realizado:'●', entregue:'✓', perdido:'✕'};
+        const symbols = {orcamento:'○', negociacao:'◐', fechado:'●', realizado:'●', entregue:'✓', perdido:'✕'};
         return `<span class="badge ${s}">${symbols[s]||""} ${statusLabel(s)}</span>`;
       }},
       {key:"_saldo", label:"Saldo", format:(v,row)=>{
@@ -638,6 +666,7 @@ function totalPago(eventoId){
    ========================================================= */
 const NAV_ITEMS = [
   {key:"dashboard", label:"Dashboard"},
+  {key:"leads", label:"Leads"},
   {key:"eventos", label:"Eventos"},
   {key:"clientes", label:"Clientes"},
   {key:"criancas", label:"Aniversariantes"},
@@ -924,9 +953,12 @@ function renderRelatorios(main){
   const clientesRecorrentes = clientesComEvento.filter(id=>eventosPorCliente[id].length>1);
   const taxaRetorno = clientesComEvento.length ? (clientesRecorrentes.length/clientesComEvento.length*100) : 0;
   const mediaEventosPorCliente = clientesComEvento.length ? (state.eventos.filter(e=>e.clienteId).length/clientesComEvento.length) : 0;
-  const rankingRecorrentes = clientesRecorrentes
-    .map(id=>({id, nome:nomeRef("clientes",id), n:eventosPorCliente[id].length}))
-    .sort((a,b)=>b.n-a.n).slice(0,8);
+  const clientesVip = clientesRecorrentes
+    .map(id=>({
+      id, nome:nomeRef("clientes",id), n:eventosPorCliente[id].length,
+      valorTotal: eventosPorCliente[id].reduce((s,e)=>s+(Number(e.valorContratado)||0),0)
+    }))
+    .sort((a,b)=>b.valorTotal-a.valorTotal).slice(0,10);
 
   // padrões de recorrência (tipo A -> tipo B em sequência cronológica)
   const padroes = {};
@@ -941,29 +973,32 @@ function renderRelatorios(main){
 
   // ---------- Funil de vendas ----------
   const funilEtapas = [
-    {key:"lead", label:"Lead recebido"},
     {key:"orcamento", label:"Orçamento enviado"},
     {key:"negociacao", label:"Negociação"},
     {key:"fechado", label:"Fechado", extra:["realizado","entregue"]},
-    {key:"perdido", label:"Perdido"}
+    {key:"perdido", label:"Perdido (eventos)"}
   ];
   const funilContagem = funilEtapas.map(et=>{
     const statusesContados = [et.key, ...(et.extra||[])];
     return { ...et, n: state.eventos.filter(e=>statusesContados.includes(e.status||"orcamento")).length };
   });
+  const totalLeads = state.leads.length;
+  const leadsPerdidos = state.leads.filter(l=>l.status==="perdido").length;
+  const leadsConvertidos = state.leads.filter(l=>l.status==="convertido").length;
   const totalFunil = state.eventos.length;
-  const totalLeads = funilContagem.find(f=>f.key==="lead").n;
   const totalFechados = funilContagem.find(f=>f.key==="fechado").n;
-  const totalPerdidos = funilContagem.find(f=>f.key==="perdido").n;
-  const baseConversao = totalFunil - totalLeads; // exclui quem ainda nem recebeu orçamento
-  const taxaConversao = baseConversao>0 ? (totalFechados/baseConversao*100) : 0;
+  const totalPerdidos = funilContagem.find(f=>f.key==="perdido").n + leadsPerdidos;
+  const taxaConversao = totalLeads>0 ? (totalFechados/totalLeads*100) : 0;
 
   const motivosPerda = ["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"];
   const motivosLabel = {outro_fotografo:"Fechou com outro fotógrafo", achou_caro:"Achou caro", cancelou_festa:"Cancelou a festa", nao_respondeu:"Não respondeu", outro:"Outro motivo"};
   const porMotivo = motivosPerda.map(m=>({
-    motivo:m, n: state.eventos.filter(e=>e.status==="perdido" && e.motivoPerda===m).length
+    motivo:m,
+    n: state.eventos.filter(e=>e.status==="perdido" && e.motivoPerda===m).length
+      + state.leads.filter(l=>l.status==="perdido" && l.motivoPerda===m).length
   })).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
-  const perdidosSemMotivo = state.eventos.filter(e=>e.status==="perdido" && !e.motivoPerda).length;
+  const perdidosSemMotivo = state.eventos.filter(e=>e.status==="perdido" && !e.motivoPerda).length
+    + state.leads.filter(l=>l.status==="perdido" && !l.motivoPerda).length;
 
   main.innerHTML = `
     <div class="page-header"><div><div class="eyebrow">Visão de negócio</div><h2>Relatórios</h2></div></div>
@@ -1016,9 +1051,11 @@ function renderRelatorios(main){
       <div class="card stat-card"><div class="label">Taxa de retorno</div><div class="value">${taxaRetorno.toFixed(1)}%</div></div>
       <div class="card stat-card"><div class="label">Eventos por cliente (média)</div><div class="value">${mediaEventosPorCliente.toFixed(1)}</div></div>
     </div>
-    <div class="card" style="padding:0; margin-top:14px;">
-      ${rankingRecorrentes.length ? `<table><thead><tr><th>Cliente</th><th>Eventos</th></tr></thead><tbody>
-        ${rankingRecorrentes.map(x=>`<tr><td><a href="#" onclick="openView('clientes','${x.id}');return false;">${x.nome}</a></td><td>${x.n}</td></tr>`).join("")}
+
+    <div class="section-title">🌟 Clientes VIP</div>
+    <div class="card" style="padding:0;">
+      ${clientesVip.length ? `<table><thead><tr><th>#</th><th>Cliente</th><th>Eventos</th><th>Valor total gerado</th></tr></thead><tbody>
+        ${clientesVip.map((x,i)=>`<tr><td>${i+1}</td><td><a href="#" onclick="openView('clientes','${x.id}');return false;">${x.nome}</a></td><td>${x.n}</td><td>${money(x.valorTotal)}</td></tr>`).join("")}
       </tbody></table>` : `<div class="empty-state">Ainda não há clientes recorrentes.</div>`}
     </div>
     ${padroesOrdenados.length ? `
@@ -1033,11 +1070,13 @@ function renderRelatorios(main){
     <div class="section-title">Funil de vendas</div>
     <div class="card" style="padding:0;">
       <table><thead><tr><th>Etapa</th><th>Quantidade</th></tr></thead><tbody>
+        <tr><td>Leads recebidos</td><td>${totalLeads}</td></tr>
         ${funilContagem.map(f=>`<tr><td>${f.label}</td><td>${f.n}</td></tr>`).join("")}
+        <tr><td>Leads convertidos em cliente</td><td>${leadsConvertidos}</td></tr>
       </tbody></table>
     </div>
     <div class="grid grid-3" style="margin-top:14px;">
-      <div class="card stat-card"><div class="label">Taxa de conversão</div><div class="value">${taxaConversao.toFixed(1)}%</div><div class="sub">fechados ÷ (total − leads)</div></div>
+      <div class="card stat-card"><div class="label">Taxa de conversão</div><div class="value">${taxaConversao.toFixed(1)}%</div><div class="sub">eventos fechados ÷ leads recebidos</div></div>
       <div class="card stat-card"><div class="label">Fechados</div><div class="value">${totalFechados}</div></div>
       <div class="card stat-card"><div class="label">Perdidos</div><div class="value">${totalPerdidos}</div></div>
     </div>
@@ -1066,9 +1105,6 @@ function renderDashboard(main){
   const aniversariosCriancas = state.criancas.map(c=>({id:c.id, tipo:"crianca", nome:c.nome, data:c.dataNascimento, vinculo:nomeRef("clientes",c.clientePaiId), dias:diasParaAniversario(c.dataNascimento), idade:idadeAtual(c.dataNascimento)}));
   const aniversariosCasamentos = state.casamentos.map(c=>({id:c.id, tipo:"casamento", nome:c.nomeCasal, data:c.dataCasamento, vinculo:nomeRef("clientes",c.clienteId), dias:diasParaAniversario(c.dataCasamento), idade:idadeAtual(c.dataCasamento)}));
   const aniversarios = [...aniversariosCriancas, ...aniversariosCasamentos].filter(c=>c.dias<=60).sort((a,b)=>a.dias-b.dias);
-  const contagemPorCliente = {};
-  state.eventos.forEach(e=>{ if(e.clienteId) contagemPorCliente[e.clienteId] = (contagemPorCliente[e.clienteId]||0)+1; });
-  const recorrentes = Object.entries(contagemPorCliente).filter(([_,n])=>n>1).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const pendentesEntrega = state.eventos.filter(e=>e.status==="realizado");
   const entregues = state.eventos.filter(e=>e.status==="entregue");
 
@@ -1111,13 +1147,6 @@ function renderDashboard(main){
           <td>${c.tipo==='crianca' ? `<button class="sm" onclick="enviarMensagemAniversario('${c.id}')">Enviar mensagem</button>` : `<button class="sm" onclick="enviarMensagemCasamento('${c.id}')">Enviar mensagem</button>`}</td>
         </tr>`).join("")}
       </tbody></table>` : `<div class="empty-state">Nenhum aniversário nos próximos 60 dias.</div>`}
-    </div>
-
-    <div class="section-title">Clientes recorrentes para contatar</div>
-    <div class="card">
-      ${recorrentes.length ? `<table><thead><tr><th>Cliente</th><th>Eventos contratados</th></tr></thead><tbody>
-        ${recorrentes.map(([id,n])=>`<tr><td>${nomeRef("clientes",id)}</td><td>${n}×</td></tr>`).join("")}
-      </tbody></table>` : `<div class="empty-state">Ainda não há clientes com mais de um evento.</div>`}
     </div>
   `;
 }
@@ -1170,6 +1199,7 @@ function renderCollectionList(col){
             <tr>
               ${schema.columns.map(c=>`<td>${c.format ? c.format(item[c.key],item) : (item[c.key] ?? "—")}</td>`).join("")}
               <td class="row-actions">
+                ${(col==="leads" && !item.clienteId) ? `<button class="sm" onclick="converterLeadEmCliente('${item.id}')">Converter</button>` : ""}
                 <button class="sm" onclick="openView('${col}','${item.id}')">Ver</button>
                 <button class="sm" onclick="openForm('${col}','${item.id}')">Editar</button>
                 <button class="sm danger" onclick="deleteDoc('${col}','${item.id}')">Excluir</button>
@@ -1263,7 +1293,7 @@ function copiarResumoEvento(eventoId){
 function openView(col, id){
   const item = state[col]?.find(i=>i.id===id);
   if(!item) return;
-  const renderers = { eventos: renderViewEvento, clientes: renderViewCliente, criancas: renderViewCrianca, casamentos: renderViewCasamento };
+  const renderers = { eventos: renderViewEvento, clientes: renderViewCliente, criancas: renderViewCrianca, casamentos: renderViewCasamento, leads: renderViewLead };
   const html = (renderers[col] || renderViewGeneric)(item, col);
   document.getElementById("modal-content").innerHTML = html;
   document.getElementById("modal-backdrop").classList.add("active");
@@ -1284,7 +1314,7 @@ function renderViewGeneric(item, col){
 
 function renderViewEvento(ev){
   const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
-  const symbols = {lead:'◯', orcamento:'○', negociacao:'◐', fechado:'●', realizado:'●', entregue:'✓', perdido:'✕'};
+  const symbols = {orcamento:'○', negociacao:'◐', fechado:'●', realizado:'●', entregue:'✓', perdido:'✕'};
   const s = ev.status || 'orcamento';
   return `<h3>${capitalize((ev.tipo||"").replace("_"," "))} · ${formatDate(ev.data)}</h3>
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${ev.clienteId}');return false;">${nomeRef("clientes",ev.clienteId)}</a>`)}
@@ -1300,6 +1330,44 @@ function renderViewEvento(ev){
     ${ev.dataEntregaReal ? viewRow("Entrega realizada", formatDate(ev.dataEntregaReal)) : ""}
     ${ev.linkGaleriaCompleta ? viewRow("Galeria completa", `<a href="${ev.linkGaleriaCompleta}" target="_blank" rel="noopener">Abrir galeria ↗</a>`) : ""}
     ${viewActions("eventos", ev.id, `<button class="ghost" onclick="copiarResumoEvento('${ev.id}')">Copiar resumo</button>`)}`;
+}
+
+function renderViewLead(lead){
+  const sym = {novo:"○", contatado:"◐", negociando:"◑", convertido:"✓", perdido:"✕"};
+  const lbl = {novo:"Novo", contatado:"Contatado", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+  const s = lead.status || "novo";
+  const wa = whatsappLink(lead.telefone);
+  const jaConvertido = !!lead.clienteId;
+
+  return `<h3>${lead.nome}</h3>
+    ${viewRow("Telefone", lead.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener">${lead.telefone} ↗ WhatsApp</a>` : lead.telefone) : "—")}
+    ${viewRow("Origem", lead.origem ? capitalize(lead.origem) : "—")}
+    ${viewRow("Interesse em", lead.interesseTipo ? capitalize(lead.interesseTipo.replace("_"," ")) : "—")}
+    ${viewRow("Status", `<span class="badge lead-${s}">${sym[s]||""} ${lbl[s]||capitalize(s)}</span>`)}
+    ${lead.motivoPerda && s==="perdido" ? viewRow("Motivo da perda", capitalize(lead.motivoPerda.replace("_"," "))) : ""}
+    ${lead.observacoes ? viewRow("Observações", lead.observacoes) : ""}
+    ${jaConvertido ? viewRow("Cliente vinculado", `<a href="#" onclick="openView('clientes','${lead.clienteId}');return false;">${nomeRef("clientes",lead.clienteId)}</a>`) : ""}
+    ${viewActions("leads", lead.id, jaConvertido ? "" : `<button class="ghost" onclick="converterLeadEmCliente('${lead.id}')">Converter em cliente</button>`)}`;
+}
+
+async function converterLeadEmCliente(leadId){
+  const lead = state.leads.find(l=>l.id===leadId);
+  if(!lead) return;
+  try{
+    const novoCliente = await db.collection("clientes").add({
+      nome: lead.nome || "",
+      telefone: lead.telefone || "",
+      origem: lead.origem || "",
+      observacoes: lead.observacoes || "",
+      criadoEm: new Date().toISOString()
+    });
+    await db.collection("leads").doc(leadId).update({ status:"convertido", clienteId: novoCliente.id });
+    toast("Lead convertido em cliente!");
+    openView("clientes", novoCliente.id);
+  }catch(err){
+    console.error(err);
+    toast("Erro ao converter o lead. Veja o console.");
+  }
 }
 
 function renderViewCliente(cli){
