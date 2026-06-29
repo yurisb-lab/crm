@@ -539,7 +539,7 @@ const SCHEMAS = {
       {key:"clienteId", label:"Cliente responsável", type:"ref", ref:"clientes", required:true},
       {key:"conjugeEvento", label:"Cônjuge", type:"text", visibleIf: fs=>["casamento_civil","casamento_religioso"].includes(fs.tipo)},
       {key:"criancaId", label:"Criança (opcional)", type:"ref", ref:"criancas", visibleIf: fs=>!["casamento_civil","casamento_religioso"].includes(fs.tipo)},
-      {key:"recepcao", label:"Houve recepção? (descreva)", type:"text", visibleIf: fs=>["casamento_civil","casamento_religioso","batizado"].includes(fs.tipo)},
+      {key:"recepcao", label:"Houve recepção?", type:"checkbox", visibleIf: fs=>["casamento_civil","casamento_religioso","batizado"].includes(fs.tipo)},
       {key:"valorContratado", label:"Valor contratado (R$)", type:"number"},
       {key:"status", label:"Status", type:"select", options:["orcamento","negociacao","fechado","realizado","entregue","perdido"], triggersRefresh:true},
       {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"], visibleIf: fs=>fs.status==="perdido" && !["casamento_civil","casamento_religioso"].includes(fs.tipo)},
@@ -1183,7 +1183,7 @@ function renderCollectionList(col){
   }
   items.sort((a,b)=>{
     if(a.data && b.data) return b.data.localeCompare(a.data);
-    return (a.nome||a.nomeCasal||"").localeCompare(b.nome||b.nomeCasal||"");
+    return (a.nome||a.nomeCasal||"").localeCompare(b.nome||b.nomeCasal||"", "pt-BR");
   });
 
   container.innerHTML = `
@@ -1263,9 +1263,21 @@ function whatsappLink(telefone){
 function viewActions(col, id, extraHtml){
   return `<div class="modal-actions">
     ${extraHtml||""}
+    <button class="danger" onclick="excluirEFechar('${col}','${id}')">Excluir</button>
     <button class="ghost" onclick="closeModal()">Fechar</button>
     <button class="primary" onclick="openForm('${col}','${id}')">Editar</button>
   </div>`;
+}
+async function excluirEFechar(col, id){
+  if(!confirm("Tem certeza que deseja excluir? Essa ação não pode ser desfeita.")) return;
+  try{
+    await db.collection(col).doc(id).delete();
+    toast("Excluído.");
+    closeModal();
+  }catch(err){
+    console.error(err);
+    toast("Erro ao excluir. Veja o console.");
+  }
 }
 function copiarResumoEvento(eventoId){
   const ev = state.eventos.find(e=>e.id===eventoId);
@@ -1318,7 +1330,7 @@ function renderViewEvento(ev){
     ${ev.conjugeEvento ? viewRow("Cônjuge", ev.conjugeEvento) : ""}
     ${ev.criancaId ? viewRow("Criança", `<a href="#" onclick="openView('criancas','${ev.criancaId}');return false;">${nomeRef("criancas",ev.criancaId)}</a>`) : ""}
     ${ev.casamentoId ? viewRow("Casamento", `<a href="#" onclick="openView('casamentos','${ev.casamentoId}');return false;">${nomeRef("casamentos",ev.casamentoId)}</a>`) : ""}
-    ${ev.recepcao ? viewRow("Recepção", ev.recepcao) : ""}
+    ${ev.recepcao!==undefined && ev.recepcao!=="" ? viewRow("Houve recepção?", ev.recepcao ? "Sim" : "Não") : ""}
     ${viewRow("Horário", ev.horario || "—")}
     ${viewRow("Status", `<span class="badge ${s}">${symbols[s]||""} ${statusLabel(s)}</span>`)}
     ${ev.motivoPerda && s==="perdido" ? viewRow("Motivo da perda", capitalize(ev.motivoPerda.replace("_"," "))) : ""}
@@ -1375,12 +1387,33 @@ function renderViewCliente(cli){
   const hoje = new Date().toISOString().slice(0,10);
   const proximo = eventosCliente.filter(e=>e.data>=hoje).sort((a,b)=>(a.data||"").localeCompare(b.data||""))[0];
 
+  const criancasVinculadas = state.criancas.filter(c=>c.clientePaiId===cli.id || c.clienteMaeId===cli.id)
+    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  const criancasDisponiveis = state.criancas.filter(c=>c.clientePaiId!==cli.id && c.clienteMaeId!==cli.id)
+    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+
   return `<h3>${cli.nome}${cli.nomeConjuge ? " & "+cli.nomeConjuge : ""}</h3>
     ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener">${cli.telefone} ↗ WhatsApp</a>` : cli.telefone) : "—")}
     ${viewRow("Cidade", cli.cidade || "—")}
     ${viewRow("Origem", cli.origem ? capitalize(cli.origem) : "—")}
     ${viewRow("Indicado por", cli.indicadoPor || "—")}
     ${cli.observacoes ? viewRow("Observações", cli.observacoes) : ""}
+
+    <div class="view-section-title">Crianças vinculadas</div>
+    ${criancasVinculadas.length ? criancasVinculadas.map(c=>`
+      <div class="view-link-card" style="display:flex; align-items:center; justify-content:space-between;">
+        <span style="cursor:pointer;" onclick="openView('criancas','${c.id}')">${c.nome}</span>
+        <button class="sm ghost" onclick="desvincularCrianca('${c.id}','${cli.id}')">Desvincular</button>
+      </div>
+    `).join("") : `<div style="font-size:13px; color:var(--muted-2); margin-bottom:8px;">Nenhuma criança vinculada ainda.</div>`}
+    <div style="display:flex; gap:8px; margin-top:8px;">
+      <select id="select-vincular-crianca-${cli.id}" style="flex:1;">
+        <option value="">Vincular criança existente...</option>
+        ${criancasDisponiveis.map(c=>`<option value="${c.id}">${c.nome}</option>`).join("")}
+      </select>
+      <button class="sm" onclick="vincularCriancaExistente('${cli.id}')">Vincular</button>
+    </div>
+
     <div class="view-section-title">Próximo evento</div>
     ${proximo
       ? `<div class="view-link-card" onclick="openView('eventos','${proximo.id}')">${capitalize((proximo.tipo||"").replace("_"," "))} · ${formatDate(proximo.data)} ${proximo.horario?"· "+proximo.horario:""}</div>`
@@ -1390,6 +1423,38 @@ function renderViewCliente(cli){
       ${eventosCliente.map(e=>`<div class="view-link-card" onclick="openView('eventos','${e.id}')">${formatDate(e.data)} · ${capitalize((e.tipo||"").replace("_"," "))}</div>`).join("")}
     ` : ""}
     ${viewActions("clientes", cli.id)}`;
+}
+async function vincularCriancaExistente(clienteId){
+  const select = document.getElementById(`select-vincular-crianca-${clienteId}`);
+  const criancaId = select ? select.value : "";
+  if(!criancaId){ toast("Selecione uma criança primeiro."); return; }
+  const crianca = state.criancas.find(c=>c.id===criancaId);
+  if(!crianca) return;
+  const campo = !crianca.clientePaiId ? "clientePaiId" : "clienteMaeId";
+  try{
+    await db.collection("criancas").doc(criancaId).update({ [campo]: clienteId });
+    toast("Criança vinculada.");
+    openView("clientes", clienteId);
+  }catch(err){
+    console.error(err);
+    toast("Erro ao vincular. Veja o console.");
+  }
+}
+async function desvincularCrianca(criancaId, clienteId){
+  if(!confirm("Desvincular essa criança deste cliente?")) return;
+  const crianca = state.criancas.find(c=>c.id===criancaId);
+  if(!crianca) return;
+  const updates = {};
+  if(crianca.clientePaiId===clienteId) updates.clientePaiId = "";
+  if(crianca.clienteMaeId===clienteId) updates.clienteMaeId = "";
+  try{
+    await db.collection("criancas").doc(criancaId).update(updates);
+    toast("Criança desvinculada.");
+    openView("clientes", clienteId);
+  }catch(err){
+    console.error(err);
+    toast("Erro ao desvincular. Veja o console.");
+  }
 }
 
 function renderViewCrianca(c){
@@ -1541,7 +1606,14 @@ function renderField(f, value){
       </select></div>`;
   }
   if(f.type==="ref"){
-    const opts = state[f.ref] || [];
+    const opts = [...(state[f.ref] || [])].sort((a,b)=>{
+      if(f.key==="criancaId" && formState.clienteId){
+        const aLinked = (a.clientePaiId===formState.clienteId || a.clienteMaeId===formState.clienteId) ? 0 : 1;
+        const bLinked = (b.clientePaiId===formState.clienteId || b.clienteMaeId===formState.clienteId) ? 0 : 1;
+        if(aLinked !== bLinked) return aLinked - bLinked;
+      }
+      return (a.nome||a.nomeCasal||"").localeCompare(b.nome||b.nomeCasal||"", "pt-BR");
+    });
     const isNew = value === "__new__";
     return `<div class="field"><label>${f.label}</label>
       <select id="${id}" onchange="onRefChange('${f.key}','${f.ref}',this.value)" style="width:100%">
@@ -1550,6 +1622,12 @@ function renderField(f, value){
         ${opts.map(o=>`<option value="${o.id}" ${value===o.id?"selected":""}>${o.nome ? (o.nomeConjuge ? `${o.nome} & ${o.nomeConjuge}` : o.nome) : labelEvento(o.id)}</option>`).join("")}
       </select>
       <div id="quick-new-${f.key}">${isNew ? renderQuickNew(f.key, f.ref) : ""}</div>
+      </div>`;
+  }
+  if(f.type==="checkbox"){
+    return `<div class="field" style="display:flex; align-items:center; gap:10px;">
+      <input type="checkbox" id="${id}" ${value?"checked":""} onchange="formState['${f.key}']=this.checked" style="width:18px; height:18px;">
+      <label for="${id}" style="margin:0;">${f.label}</label>
       </div>`;
   }
   if(f.type==="tags"){
@@ -1563,6 +1641,10 @@ function renderField(f, value){
 
 function onRefChange(fKey, ref, val){
   formState[fKey] = val;
+  if(fKey==="clienteId"){
+    refreshFormFields();
+    return;
+  }
   const container = document.getElementById(`quick-new-${fKey}`);
   if(val === "__new__"){
     if(!formState[`_quickNew_${fKey}`]) formState[`_quickNew_${fKey}`] = {};
@@ -1617,7 +1699,7 @@ async function saveDoc(){
       }
     }
 
-    data[f.key] = val ?? (f.type==="tags" ? [] : "");
+    data[f.key] = val ?? (f.type==="tags" ? [] : f.type==="checkbox" ? false : "");
   }
 
   // atualiza o cônjuge do cliente, se informado no evento de casamento
