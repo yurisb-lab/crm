@@ -516,28 +516,14 @@ const SCHEMAS = {
   casamentos: {
     label: "Casamentos", singular:"Casamento",
     fields: [
-      {key:"nomeCasal", label:"Nome do casal", type:"text", required:true},
+      {key:"nomeCasal", label:"Nome do(a) noivo(a)", type:"text", required:true},
+      {key:"conjuge", label:"Cônjuge", type:"text"},
       {key:"dataCasamento", label:"Data do casamento", type:"date", required:true},
       {key:"clienteId", label:"Cliente vinculado", type:"ref", ref:"clientes"},
       {key:"observacoes", label:"Observações", type:"textarea"}
     ],
     columns: [
-      {key:"nomeCasal", label:"Casal"},
-      {key:"dataCasamento", label:"Casamento", format:v=>formatDate(v)},
-      {key:"_anos", label:"Anos de casados", format:(v,row)=>idadeAtual(row.dataCasamento)+" anos"},
-      {key:"_proximo", label:"Próximo aniversário em", format:(v,row)=>diasParaAniversario(row.dataCasamento)+" dias"}
-    ]
-  },
-  casamentos: {
-    label: "Casamentos", singular:"Casamento",
-    fields: [
-      {key:"nomeCasal", label:"Nome do casal", type:"text", required:true},
-      {key:"dataCasamento", label:"Data do casamento", type:"date", required:true},
-      {key:"clienteId", label:"Cliente vinculado", type:"ref", ref:"clientes"},
-      {key:"observacoes", label:"Observações", type:"textarea"}
-    ],
-    columns: [
-      {key:"nomeCasal", label:"Casal"},
+      {key:"nomeCasal", label:"Casal", format:(v,row)=> row.conjuge ? `${v} & ${row.conjuge}` : v},
       {key:"dataCasamento", label:"Data do casamento", format:v=>formatDate(v)},
       {key:"_anos", label:"Anos de casados", format:(v,row)=>idadeAtual(row.dataCasamento)+" anos"},
       {key:"_proximo", label:"Próximas bodas em", format:(v,row)=>diasParaAniversario(row.dataCasamento)+" dias"}
@@ -546,15 +532,17 @@ const SCHEMAS = {
   eventos: {
     label: "Eventos", singular:"Evento",
     fields: [
-      {key:"tipo", label:"Tipo", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"], required:true},
+      {key:"tipo", label:"Tipo", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"], required:true, triggersRefresh:true},
+      {key:"outroDescricao", label:"Especifique o tipo de evento", type:"text", visibleIf: fs=>fs.tipo==="outro"},
       {key:"data", label:"Data", type:"date", required:true},
       {key:"horario", label:"Horário", type:"time"},
       {key:"clienteId", label:"Cliente responsável", type:"ref", ref:"clientes", required:true},
-      {key:"criancaId", label:"Criança (opcional)", type:"ref", ref:"criancas"},
-      {key:"casamentoId", label:"Casamento vinculado (opcional)", type:"ref", ref:"casamentos"},
+      {key:"conjugeEvento", label:"Cônjuge", type:"text", visibleIf: fs=>["casamento_civil","casamento_religioso"].includes(fs.tipo)},
+      {key:"criancaId", label:"Criança (opcional)", type:"ref", ref:"criancas", visibleIf: fs=>!["casamento_civil","casamento_religioso"].includes(fs.tipo)},
+      {key:"recepcao", label:"Houve recepção? (descreva)", type:"text", visibleIf: fs=>["casamento_civil","casamento_religioso","batizado"].includes(fs.tipo)},
       {key:"valorContratado", label:"Valor contratado (R$)", type:"number"},
-      {key:"status", label:"Status", type:"select", options:["orcamento","negociacao","fechado","realizado","entregue","perdido"]},
-      {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"]},
+      {key:"status", label:"Status", type:"select", options:["orcamento","negociacao","fechado","realizado","entregue","perdido"], triggersRefresh:true},
+      {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"], visibleIf: fs=>fs.status==="perdido" && !["casamento_civil","casamento_religioso"].includes(fs.tipo)},
       {key:"tags", label:"Tags (separe por vírgula)", type:"tags"},
       {key:"linkGaleriaCompleta", label:"Link da galeria completa", type:"text"},
       {key:"dataEntregaPrevista", label:"Entrega prevista", type:"date"},
@@ -562,7 +550,7 @@ const SCHEMAS = {
     ],
     columns: [
       {key:"data", label:"Data", format:v=>formatDate(v)},
-      {key:"tipo", label:"Tipo", format:v=>v?capitalize(v.replace("_"," ")):"—"},
+      {key:"tipo", label:"Tipo", format:(v,row)=> v==="outro" && row.outroDescricao ? `Outro: ${row.outroDescricao}` : (v?capitalize(v.replace("_"," ")):"—")},
       {key:"clienteId", label:"Cliente", format:v=>nomeRef("clientes",v)},
       {key:"valorContratado", label:"Valor", format:v=>v?money(v):"—"},
       {key:"status", label:"Status", format:v=>{
@@ -615,6 +603,7 @@ function nomeRef(col, id){
   const item = state[col]?.find(i=>i.id===id);
   if(!item) return "—";
   if(col==="clientes" && item.nomeConjuge) return `${item.nome} & ${item.nomeConjuge}`;
+  if(col==="casamentos") return item.conjuge ? `${item.nomeCasal} & ${item.conjuge}` : item.nomeCasal;
   return item.nome;
 }
 function labelEvento(id){
@@ -628,6 +617,14 @@ function idadeAtual(dataNasc){
   let idade = hoje.getFullYear() - nasc.getFullYear();
   const aindaNaoFezAniversario = (hoje.getMonth()<nasc.getMonth()) || (hoje.getMonth()===nasc.getMonth() && hoje.getDate()<nasc.getDate());
   if(aindaNaoFezAniversario) idade--;
+  return idade;
+}
+function idadeNaData(dataNasc, dataRef){
+  if(!dataNasc || !dataRef) return "—";
+  const ref = new Date(dataRef+"T00:00:00"); const nasc = new Date(dataNasc+"T00:00:00");
+  let idade = ref.getFullYear() - nasc.getFullYear();
+  const aindaNao = (ref.getMonth()<nasc.getMonth()) || (ref.getMonth()===nasc.getMonth() && ref.getDate()<nasc.getDate());
+  if(aindaNao) idade--;
   return idade;
 }
 function tempoDesde(dataStr){
@@ -888,7 +885,7 @@ function montarMensagemCasamento(casamentoId){
   const anos = idadeAtual(c.dataCasamento) + 1;
   const dataFormatada = proximaDataAniversario(c.dataCasamento).toLocaleDateString('pt-BR');
   const texto = template
-    .replaceAll("{nomeCasal}", c.nomeCasal||"")
+    .replaceAll("{nomeCasal}", c.nomeCasal ? (c.conjuge ? `${c.nomeCasal} & ${c.conjuge}` : c.nomeCasal) : "")
     .replaceAll("{anos}", String(anos))
     .replaceAll("{data}", dataFormatada);
   return { texto, cliente };
@@ -1277,7 +1274,7 @@ function copiarResumoEvento(eventoId){
   const nomeCliente = cliente ? (cliente.nome + (cliente.nomeConjuge ? " & "+cliente.nomeConjuge : "")) : "—";
   const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
   const linhas = [
-    `${capitalize((ev.tipo||"").replace("_"," "))} — ${nomeCliente}`,
+    `${ev.tipo==="outro" && ev.outroDescricao ? ev.outroDescricao : capitalize((ev.tipo||"").replace("_"," "))} — ${nomeCliente}`,
     `Data: ${formatDate(ev.data)}${ev.horario ? " às "+ev.horario : ""}`,
     ev.valorContratado ? `Valor: ${money(ev.valorContratado)}` : null,
     ev.valorContratado ? (saldo>0 ? `Saldo pendente: ${money(saldo)}` : `Status: pago integralmente`) : null,
@@ -1316,10 +1313,12 @@ function renderViewEvento(ev){
   const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
   const symbols = {orcamento:'○', negociacao:'◐', fechado:'●', realizado:'●', entregue:'✓', perdido:'✕'};
   const s = ev.status || 'orcamento';
-  return `<h3>${capitalize((ev.tipo||"").replace("_"," "))} · ${formatDate(ev.data)}</h3>
+  return `<h3>${ev.tipo==="outro" && ev.outroDescricao ? ev.outroDescricao : capitalize((ev.tipo||"").replace("_"," "))} · ${formatDate(ev.data)}</h3>
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${ev.clienteId}');return false;">${nomeRef("clientes",ev.clienteId)}</a>`)}
+    ${ev.conjugeEvento ? viewRow("Cônjuge", ev.conjugeEvento) : ""}
     ${ev.criancaId ? viewRow("Criança", `<a href="#" onclick="openView('criancas','${ev.criancaId}');return false;">${nomeRef("criancas",ev.criancaId)}</a>`) : ""}
     ${ev.casamentoId ? viewRow("Casamento", `<a href="#" onclick="openView('casamentos','${ev.casamentoId}');return false;">${nomeRef("casamentos",ev.casamentoId)}</a>`) : ""}
+    ${ev.recepcao ? viewRow("Recepção", ev.recepcao) : ""}
     ${viewRow("Horário", ev.horario || "—")}
     ${viewRow("Status", `<span class="badge ${s}">${symbols[s]||""} ${statusLabel(s)}</span>`)}
     ${ev.motivoPerda && s==="perdido" ? viewRow("Motivo da perda", capitalize(ev.motivoPerda.replace("_"," "))) : ""}
@@ -1403,7 +1402,7 @@ function renderViewCrianca(c){
     ${viewRow("Data de nascimento", formatDate(c.dataNascimento))}
     ${viewRow("Idade atual", idadeAtual(c.dataNascimento)+" anos")}
     ${viewRow("Próximo aniversário em", diasParaAniversario(c.dataNascimento)+" dias")}
-    ${ultimo ? viewRow("Último trabalho", `<a href="#" onclick="openView('eventos','${ultimo.id}');return false;">${capitalize((ultimo.tipo||"").replace("_"," "))} · ${formatDate(ultimo.data)}</a><br><span style="font-size:12px; color:var(--muted);">faz ${tempoDesde(ultimo.data)}</span>`) : ""}
+    ${ultimo ? viewRow("Último trabalho", `<a href="#" onclick="openView('eventos','${ultimo.id}');return false;">${capitalize((ultimo.tipo||"").replace("_"," "))} · ${formatDate(ultimo.data)}</a><br><span style="font-size:12px; color:var(--muted);">ela tinha ${idadeNaData(c.dataNascimento, ultimo.data)} anos · faz ${tempoDesde(ultimo.data)}</span>`) : ""}
     ${c.clientePaiId ? viewRow("Responsável 1", `<a href="#" onclick="openView('clientes','${c.clientePaiId}');return false;">${nomeRef("clientes",c.clientePaiId)}</a>`) : ""}
     ${c.clienteMaeId ? viewRow("Responsável 2", `<a href="#" onclick="openView('clientes','${c.clienteMaeId}');return false;">${nomeRef("clientes",c.clienteMaeId)}</a>`) : ""}
     ${c.observacoes ? viewRow("Observações", c.observacoes) : ""}
@@ -1411,7 +1410,7 @@ function renderViewCrianca(c){
 }
 
 function renderViewCasamento(c){
-  return `<h3>${c.nomeCasal}</h3>
+  return `<h3>${c.nomeCasal}${c.conjuge ? " & "+c.conjuge : ""}</h3>
     ${viewRow("Data do casamento", formatDate(c.dataCasamento))}
     ${viewRow("Anos de casados", idadeAtual(c.dataCasamento)+" anos")}
     ${viewRow("Próximas bodas em", diasParaAniversario(c.dataCasamento)+" dias")}
@@ -1425,12 +1424,13 @@ function openForm(col, id){
   const existing = id ? state[col].find(i=>i.id===id) : null;
   formState = existing ? { ...existing } : {};
   formState._col = col; formState._id = id || null;
+  if(!existing && col==="eventos") formState.status = "orcamento"; // deixa explícito em vez de só "parecer" orçamento na tela
 
   const showMarkPaid = col==="eventos" && existing && (Number(existing.valorContratado)||0) > totalPago(id);
 
   document.getElementById("modal-content").innerHTML = `
     <h3>${existing ? "Editar" : "Novo"} ${schema.singular}</h3>
-    <div id="form-fields">${schema.fields.map(f=>renderField(f, formState[f.key])).join("")}</div>
+    <div id="form-fields">${camposVisiveis(schema).map(f=>renderField(f, formState[f.key])).join("")}</div>
     ${showMarkPaid ? `
       <div class="card" style="margin-top:4px; padding:12px 14px;">
         <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">
@@ -1445,6 +1445,13 @@ function openForm(col, id){
     </div>
   `;
   document.getElementById("modal-backdrop").classList.add("active");
+}
+function camposVisiveis(schema){
+  return schema.fields.filter(f=> !f.visibleIf || f.visibleIf(formState));
+}
+function refreshFormFields(){
+  const schema = SCHEMAS[formState._col];
+  document.getElementById("form-fields").innerHTML = camposVisiveis(schema).map(f=>renderField(f, formState[f.key])).join("");
 }
 async function marcarComoRecebido(eventoId){
   const ev = state.eventos.find(e=>e.id===eventoId);
@@ -1528,7 +1535,7 @@ function renderField(f, value){
   }
   if(f.type==="select"){
     return `<div class="field"><label>${f.label}</label>
-      <select id="${id}" onchange="formState['${f.key}']=this.value" style="width:100%">
+      <select id="${id}" onchange="formState['${f.key}']=this.value;${f.triggersRefresh?' refreshFormFields();':''}" style="width:100%">
         <option value="">—</option>
         ${f.options.map(o=>`<option value="${o}" ${value===o?"selected":""}>${f.key==="status" ? statusLabel(o) : capitalize(o.replace("_"," "))}</option>`).join("")}
       </select></div>`;
@@ -1582,7 +1589,7 @@ async function saveDoc(){
   const schema = SCHEMAS[col];
   const data = {};
 
-  for(const f of schema.fields){
+  for(const f of camposVisiveis(schema)){
     let val = formState[f.key];
 
     if(val === "__new__"){
@@ -1613,17 +1620,28 @@ async function saveDoc(){
     data[f.key] = val ?? (f.type==="tags" ? [] : "");
   }
 
+  // atualiza o cônjuge do cliente, se informado no evento de casamento
+  if(col === "eventos" && data.clienteId && data.conjugeEvento){
+    try{ await db.collection("clientes").doc(data.clienteId).update({ nomeConjuge: data.conjugeEvento }); }
+    catch(err){ console.error("[clientes] erro ao atualizar cônjuge:", err); }
+  }
+
   // vincula/cria automaticamente o registro em "Casamentos" para eventos de casamento
-  if(col === "eventos" && (data.tipo==="casamento_civil" || data.tipo==="casamento_religioso") && !data.casamentoId && data.clienteId){
+  if(col === "eventos" && (data.tipo==="casamento_civil" || data.tipo==="casamento_religioso") && data.clienteId){
+    const cliente = state.clientes.find(c=>c.id===data.clienteId);
+    const conjugeFinal = data.conjugeEvento || cliente?.nomeConjuge || "";
     const existente = state.casamentos.find(c=>c.clienteId===data.clienteId);
     if(existente){
       data.casamentoId = existente.id;
+      if(conjugeFinal && !existente.conjuge){
+        try{ await db.collection("casamentos").doc(existente.id).update({ conjuge: conjugeFinal }); }
+        catch(err){ console.error(err); }
+      }
     } else {
-      const cliente = state.clientes.find(c=>c.id===data.clienteId);
-      const nomeCasal = cliente ? (cliente.nome + (cliente.nomeConjuge ? " & "+cliente.nomeConjuge : "")) : "Casal";
       try{
         const novoCasamento = await db.collection("casamentos").add({
-          nomeCasal, dataCasamento: data.data || "", clienteId: data.clienteId,
+          nomeCasal: cliente ? cliente.nome : "Casal", conjuge: conjugeFinal,
+          dataCasamento: data.data || "", clienteId: data.clienteId,
           observacoes: "", criadoEm: new Date().toISOString()
         });
         data.casamentoId = novoCasamento.id;
@@ -1634,7 +1652,7 @@ async function saveDoc(){
     }
   }
 
-  const missing = schema.fields.filter(f=>f.required && !data[f.key]);
+  const missing = camposVisiveis(schema).filter(f=>f.required && !data[f.key]);
   if(missing.length){
     toast(`Preencha: ${missing.map(f=>f.label).join(", ")}`);
     return;
