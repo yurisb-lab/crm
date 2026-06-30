@@ -244,6 +244,19 @@
   .view-link-card:hover{ border-color:var(--text); }
   .view-section-title{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:18px 0 8px; }
 
+  .chat-container{ display:flex; flex-direction:column; height:calc(100vh - 160px); min-height:400px; }
+  .chat-messages{ flex:1; overflow-y:auto; padding:8px 0; display:flex; flex-direction:column; gap:12px; }
+  .chat-bubble{ max-width:85%; padding:12px 16px; border-radius:12px; font-size:14px; line-height:1.6; }
+  .chat-bubble.user{ align-self:flex-end; background:var(--text); color:var(--bg); border-bottom-right-radius:4px; }
+  .chat-bubble.ai{ align-self:flex-start; background:var(--surface-2); border:1px solid var(--border-solid); border-bottom-left-radius:4px; }
+  .chat-bubble.ai .ai-label{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:6px; }
+  .chat-bubble.thinking{ opacity:.6; }
+  .chat-input-row{ display:flex; gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-solid); }
+  .chat-input-row textarea{ flex:1; min-height:48px; max-height:120px; font-size:14px; resize:none; }
+  .chat-suggestions{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+  .chat-suggestion{ font-size:12px; padding:6px 12px; border-radius:20px; cursor:pointer; background:var(--surface-2); border:1px solid var(--border-solid); color:var(--muted); }
+  .chat-suggestion:hover{ border-color:var(--text); color:var(--text); }
+
   .comentario-item{ padding:10px 0; border-bottom:1px solid var(--border); }
   .comentario-item:last-child{ border-bottom:none; }
   .comentario-data{ font-size:11px; color:var(--muted-2); margin-bottom:4px; }
@@ -679,6 +692,7 @@ const NAV_ITEMS = [
   {key:"casamentos", label:"Casamentos"},
   {key:"pagamentos", label:"Financeiro"},
   {key:"relatorios", label:"Relatórios"},
+  {key:"conversar", label:"✦ Conversar"},
   {key:"configuracoes", label:"Configurações"}
 ];
 function buildNav(){
@@ -806,6 +820,7 @@ function renderPage(page){
   if(page==="dashboard") return renderDashboard(main);
   if(page==="eventos") return renderEventosPage(main);
   if(page==="relatorios") return renderRelatorios(main);
+  if(page==="conversar") return renderConversar(main);
   if(page==="configuracoes") return renderConfiguracoes(main);
   return renderCollectionPage(main, page);
 }
@@ -911,6 +926,186 @@ function enviarMensagemCasamento(casamentoId){
 }
 
 /* ---------- RELATÓRIOS ---------- */
+/* =========================================================
+   CONVERSAR COM O CRM
+   ========================================================= */
+let chatHistory = [];
+
+function buildCrmContext(){
+  const hoje = new Date().toISOString().slice(0,10);
+
+  // Resumo financeiro
+  const totalContratado = state.eventos.reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
+  const totalRecebido = state.pagamentos.reduce((s,p)=>s+(Number(p.valor)||0),0);
+  const aReceber = state.eventos.reduce((s,e)=>s+Math.max((Number(e.valorContratado)||0)-totalPago(e.id),0),0);
+
+  // Clientes compactos
+  const clientesCtx = state.clientes.map(c=>{
+    const evs = state.eventos.filter(e=>e.clienteId===c.id);
+    const ult = evs.sort((a,b)=>(b.data||"").localeCompare(a.data||""))[0];
+    const comentarios = (c.comentarios||[]).sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||"")).slice(0,3).map(x=>`[${formatarDataHora(x.criadoEm)}] ${x.texto}`).join(" | ");
+    return `${c.nome}${c.nomeConjuge?" & "+c.nomeConjuge:""} | origem:${c.origem||"?"} | cidade:${c.cidade||"?"} | ${evs.length} evento(s) | último:${ult?capitalize((ult.tipo||"").replace("_"," "))+" "+formatDate(ult.data):"nenhum"}${comentarios?" | notas: "+comentarios:""}`;
+  }).join("\n");
+
+  // Eventos compactos
+  const eventosCtx = state.eventos.map(e=>{
+    const saldo = (Number(e.valorContratado)||0)-totalPago(e.id);
+    return `${formatDate(e.data)} | ${capitalize((e.tipo||"").replace("_"," "))}${e.outroDescricao?" ("+e.outroDescricao+")":""} | cliente:${nomeRef("clientes",e.clienteId)} | valor:${money(e.valorContratado)} | saldo:${money(saldo)} | status:${statusLabel(e.status||"orcamento")}`;
+  }).sort((a,b)=>b.localeCompare(a)).join("\n");
+
+  // Leads compactos
+  const leadsCtx = state.leads.map(l=>{
+    const lbl = {novo:"Novo",contatado:"Contatado",negociando:"Negociando",convertido:"Convertido",perdido:"Perdido"};
+    const comentarios = (l.comentarios||[]).sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||"")).slice(0,2).map(x=>`[${formatarDataHora(x.criadoEm)}] ${x.texto}`).join(" | ");
+    const diasSemContato = (()=>{
+      const ults = (l.comentarios||[]).map(c=>c.criadoEm||"").sort().reverse()[0];
+      const ref = ults ? new Date(ults) : new Date(l.criadoEm||new Date());
+      return Math.floor((new Date()-ref)/86400000);
+    })();
+    return `${l.nome} | status:${lbl[l.status||"novo"]} | interesse:${capitalize((l.interesseTipo||"?").replace("_"," "))} | origem:${l.origem||"?"} | sem contato há ${diasSemContato} dias${comentarios?" | notas: "+comentarios:""}`;
+  }).join("\n");
+
+  // Crianças compactas
+  const criancasCtx = state.criancas.map(c=>{
+    const resp = nomeRef("clientes",c.clientePaiId||c.clienteMaeId||"");
+    const prox = diasParaAniversario(c.dataNascimento);
+    return `${c.nome} | nasc:${formatDate(c.dataNascimento)} | ${idadeAtual(c.dataNascimento)} anos | próx.aniversário em ${prox} dias | responsável:${resp}`;
+  }).join("\n");
+
+  // Alertas ativos
+  const alertas = calcularAlertas().map(a=>a.texto.replace(/<[^>]+>/g,"")).join("\n");
+
+  return `Você é um assistente especializado do fotógrafo Yuri Silva (Yuri Silva Fotografias, Pacatuba/CE, Brasil). Seu papel é responder perguntas sobre o negócio dele usando exclusivamente os dados abaixo. Seja direto, prático e use linguagem informal. Quando citar nomes, valores ou datas, seja específico. Se a informação não estiver nos dados, diga claramente.
+
+DATA DE HOJE: ${hoje}
+
+=== RESUMO FINANCEIRO ===
+Total contratado: ${money(totalContratado)}
+Total recebido: ${money(totalRecebido)}
+A receber: ${money(aReceber)}
+Total de eventos: ${state.eventos.length}
+Total de clientes: ${state.clientes.length}
+Total de leads: ${state.leads.length}
+
+=== ALERTAS ATIVOS ===
+${alertas||"Nenhum alerta no momento."}
+
+=== CLIENTES (${state.clientes.length}) ===
+${clientesCtx||"Nenhum cliente cadastrado."}
+
+=== EVENTOS (${state.eventos.length}) ===
+${eventosCtx||"Nenhum evento cadastrado."}
+
+=== LEADS (${state.leads.length}) ===
+${leadsCtx||"Nenhum lead cadastrado."}
+
+=== ANIVERSARIANTES (${state.criancas.length}) ===
+${criancasCtx||"Nenhuma criança cadastrada."}`;
+}
+
+function renderConversar(main){
+  if(!temIA()){
+    main.innerHTML = `
+      <div class="page-header"><div><div class="eyebrow">Inteligência Artificial</div><h2>Conversar com o CRM</h2></div></div>
+      <div class="card" style="text-align:center; padding:40px;">
+        <div class="serif" style="font-size:20px; margin-bottom:10px;">Chave Gemini não configurada</div>
+        <div style="color:var(--muted); font-size:14px; margin-bottom:18px;">Para usar o chat com IA, configure sua chave gratuita do Google Gemini em Configurações.</div>
+        <button class="primary" onclick="renderPage('configuracoes')">Ir para Configurações</button>
+      </div>`;
+    return;
+  }
+
+  const sugestoes = [
+    "Quais leads estão parados há mais de 7 dias?",
+    "Qual foi meu faturamento este ano?",
+    "Quem são meus clientes mais recorrentes?",
+    "Quais eventos tenho pendentes de entrega?",
+    "Quem faz aniversário nos próximos 30 dias?",
+    "Qual meu ticket médio por tipo de evento?",
+    "Tem algum saldo a receber de cliente?",
+    "Como está meu funil de leads?"
+  ];
+
+  main.innerHTML = `
+    <div class="page-header"><div><div class="eyebrow">Inteligência Artificial</div><h2>Conversar com o CRM</h2></div></div>
+    <div class="chat-suggestions">
+      ${sugestoes.map(s=>`<span class="chat-suggestion" onclick="usarSugestao('${s.replace(/'/g,"\\'")}')">${s}</span>`).join("")}
+    </div>
+    <div class="card" style="padding:16px; flex:1;">
+      <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+          ${chatHistory.length===0 ? `<div style="text-align:center; color:var(--muted-2); font-size:13px; margin:auto;">Faça uma pergunta sobre seu negócio — clientes, eventos, financeiro, leads...</div>` : renderChatHistory()}
+        </div>
+        <div class="chat-input-row">
+          <textarea id="chat-input" placeholder="Ex: quais leads estão sem resposta? quem tem saldo pendente?" onkeydown="chatKeyDown(event)"></textarea>
+          <button class="primary" onclick="enviarMensagemChat()" style="align-self:flex-end;">Enviar</button>
+        </div>
+      </div>
+    </div>
+    ${chatHistory.length>0 ? `<div style="text-align:right; margin-top:8px;"><button class="ghost sm" onclick="limparChat()">Limpar conversa</button></div>` : ""}
+  `;
+
+  const msgs = document.getElementById("chat-messages");
+  if(msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
+function renderChatHistory(){
+  return chatHistory.map(m=>`
+    <div class="chat-bubble ${m.role}">
+      ${m.role==="ai" ? '<div class="ai-label">CRM Assistant</div>' : ""}
+      ${escapeHtml(m.content).replace(/\n/g,"<br>")}
+    </div>
+  `).join("");
+}
+
+function usarSugestao(texto){
+  const input = document.getElementById("chat-input");
+  if(input){ input.value = texto; input.focus(); }
+}
+
+function chatKeyDown(e){
+  if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); enviarMensagemChat(); }
+}
+
+async function enviarMensagemChat(){
+  const input = document.getElementById("chat-input");
+  const texto = input ? input.value.trim() : "";
+  if(!texto) return;
+  if(input) input.value = "";
+
+  chatHistory.push({ role:"user", content:texto });
+
+  const msgs = document.getElementById("chat-messages");
+  if(msgs){
+    msgs.innerHTML = renderChatHistory() + `<div class="chat-bubble ai thinking"><div class="ai-label">CRM Assistant</div>Pensando...</div>`;
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  const contexto = buildCrmContext();
+  const historico = chatHistory.slice(-6).map(m=>`${m.role==="user"?"Yuri":"Assistente"}: ${m.content}`).join("\n");
+  const prompt = `${contexto}\n\n=== CONVERSA ===\n${historico}`;
+
+  const resposta = await callGemini(prompt);
+
+  if(resposta){
+    chatHistory.push({ role:"ai", content:resposta });
+  } else {
+    chatHistory.push({ role:"ai", content:"Não consegui processar sua pergunta. Verifique sua conexão ou a chave Gemini em Configurações." });
+  }
+
+  if(msgs){
+    msgs.innerHTML = renderChatHistory();
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  const btn = document.querySelector(".chat-input-row button");
+  if(btn) btn.disabled = false;
+}
+
+function limparChat(){
+  chatHistory = [];
+  renderPage("conversar");
+}
+
 function renderRelatorios(main){
   const todosOsTipos = ["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"];
   const porTipo = todosOsTipos.map(t=>{
