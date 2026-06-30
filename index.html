@@ -1373,6 +1373,7 @@ function renderCollectionPage(main, col){
       <div class="page-actions">
         <input type="text" id="busca-${col}" placeholder="Buscar..." value="${collectionSearch[col]||""}"
           oninput="collectionSearch['${col}']=this.value; renderCollectionList('${col}');" style="width:160px;">
+        ${col==="clientes" ? `<button class="ghost" onclick="verificarDuplicados()">Verificar duplicados</button>` : ""}
         <button class="primary" onclick="openForm('${col}')">+ Novo ${schema.singular}</button>
       </div>
     </div>
@@ -1602,6 +1603,93 @@ async function salvarComentario(col, id){
 /* =========================================================
    IA — GEMINI
    ========================================================= */
+/* =========================================================
+   DETECÇÃO DE DUPLICIDADE (heurística local + reforço opcional de IA)
+   ========================================================= */
+function normalizarTexto(s){
+  return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+}
+function levenshtein(a,b){
+  const m=a.length, n=b.length;
+  if(!m) return n; if(!n) return m;
+  const dp = Array.from({length:m+1},(_,i)=>[i,...Array(n).fill(0)]);
+  for(let j=0;j<=n;j++) dp[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++)
+    dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
+  return dp[m][n];
+}
+function similaridadeNome(a,b){
+  const na = normalizarTexto(a), nb = normalizarTexto(b);
+  if(!na || !nb) return 0;
+  if(na===nb) return 1;
+  const dist = levenshtein(na,nb);
+  const maxLen = Math.max(na.length, nb.length);
+  return 1 - (dist/maxLen);
+}
+function telefoneNormalizado(t){
+  const d = (t||"").replace(/\D/g,"");
+  return d.slice(-8); // últimos 8 dígitos, ignora DDI/DDD pra comparar
+}
+
+async function verificarDuplicados(){
+  const clientes = state.clientes;
+  const pares = [];
+  for(let i=0;i<clientes.length;i++){
+    for(let j=i+1;j<clientes.length;j++){
+      const a = clientes[i], b = clientes[j];
+      const simNome = similaridadeNome(a.nome, b.nome);
+      const telA = telefoneNormalizado(a.telefone), telB = telefoneNormalizado(b.telefone);
+      const mesmoTelefone = telA && telB && telA===telB;
+      if(simNome>=0.78 || mesmoTelefone){
+        pares.push({ a, b, simNome, mesmoTelefone });
+      }
+    }
+  }
+  pares.sort((x,y)=> (y.mesmoTelefone-x.mesmoTelefone) || (y.simNome-x.simNome));
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Verificar duplicados</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+      ${pares.length ? `Encontrei ${pares.length} par(es) que podem ser a mesma pessoa.` : "Nenhum possível duplicado encontrado — comparando nomes parecidos e telefones iguais."}
+    </div>
+    <div id="duplicados-lista">
+      ${pares.map((p,i)=>`
+        <div class="view-link-card" style="cursor:default;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div><a href="#" onclick="openView('clientes','${p.a.id}');return false;">${p.a.nome}</a> ${p.a.telefone?`· ${p.a.telefone}`:""}</div>
+              <div style="margin-top:4px;"><a href="#" onclick="openView('clientes','${p.b.id}');return false;">${p.b.nome}</a> ${p.b.telefone?`· ${p.b.telefone}`:""}</div>
+            </div>
+            <div style="font-size:11px; color:var(--muted-2); text-align:right;">
+              ${p.mesmoTelefone?"mesmo telefone<br>":""}${Math.round(p.simNome*100)}% nome parecido
+            </div>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+    ${pares.length && temIA() ? `<button class="ghost" style="margin-top:10px;" onclick="analisarDuplicadosIA()">✦ Pedir opinião da IA</button><div class="ai-box" id="ai-duplicados" style="display:none;"></div>` : ""}
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Fechar</button>
+    </div>
+  `;
+  window._paresDuplicados = pares;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+async function analisarDuplicadosIA(){
+  const pares = window._paresDuplicados || [];
+  if(!pares.length) return;
+  const box = document.getElementById("ai-duplicados");
+  box.style.display = "block";
+  box.innerHTML = `<div class="ai-label">Analisando...</div>`;
+  const listaTexto = pares.map((p,i)=>`${i+1}) "${p.a.nome}" (tel: ${p.a.telefone||"—"}, cidade: ${p.a.cidade||"—"}) vs "${p.b.nome}" (tel: ${p.b.telefone||"—"}, cidade: ${p.b.cidade||"—"})`).join("\n");
+  const prompt = `Você está ajudando um fotógrafo a identificar clientes duplicados no CRM dele. Abaixo estão pares de nomes parecidos ou com telefone igual. Para cada par, diga rapidamente se provavelmente é a MESMA pessoa ou são pessoas DIFERENTES, e por quê (uma linha por par, seja direto).\n\n${listaTexto}`;
+  const resultado = await callGemini(prompt);
+  box.innerHTML = resultado.texto
+    ? `<div class="ai-label">Opinião da IA</div>${escapeHtml(resultado.texto).replace(/\n/g,"<br>")}`
+    : `<div class="ai-label">Erro</div>${resultado.erro||"não foi possível analisar."}`;
+}
+
 async function callGemini(prompt){
   const key = state.config?.geminiKey || "";
   if(!key) return { erro: "Nenhuma chave Gemini configurada." };
@@ -1912,6 +2000,110 @@ function renderViewCasamento(c){
     ${viewActions("casamentos", c.id, `<button class="ghost" onclick="enviarMensagemCasamento('${c.id}')">Enviar mensagem</button>`)}`;
 }
 
+async function callGeminiVision(base64Data, mimeType, prompt){
+  const key = state.config?.geminiKey || "";
+  if(!key) return { erro: "Nenhuma chave Gemini configurada." };
+  try{
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ contents:[{ parts:[
+        { inline_data:{ mime_type: mimeType, data: base64Data } },
+        { text: prompt }
+      ]}]})
+    });
+    const data = await res.json();
+    if(!res.ok){
+      const msg = data?.error?.message || `Erro HTTP ${res.status}`;
+      console.error("[gemini-vision] erro da API:", msg, data);
+      return { erro: msg };
+    }
+    const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if(!texto){
+      console.error("[gemini-vision] resposta sem texto:", data);
+      return { erro: "A IA não retornou texto." };
+    }
+    return { texto };
+  }catch(err){
+    console.error("[gemini-vision] erro de rede:", err);
+    return { erro: "Falha de conexão com o Gemini." };
+  }
+}
+
+function triggerPrintUpload(col){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = (e)=> processarPrint(col, e.target.files[0]);
+  input.click();
+}
+
+async function processarPrint(col, file){
+  if(!file) return;
+  toast("Lendo a imagem...");
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    const base64 = reader.result.split(",")[1];
+    const mimeType = file.type || "image/png";
+    const hoje = new Date().toISOString().slice(0,10);
+
+    let prompt;
+    if(col==="leads"){
+      prompt = `Você está ajudando um fotógrafo brasileiro a cadastrar um lead a partir de um print de conversa (WhatsApp, Instagram, etc). Extraia as informações visíveis na imagem e retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
+{"nome": "", "telefone": "", "origem": "instagram|indicacao|google|igreja|outro", "interesseTipo": "aniversario|batizado|casamento_civil|casamento_religioso|ensaio|outro", "observacoes": ""}
+Se não conseguir identificar um campo com confiança, deixe vazio. Em "observacoes", resuma o que a pessoa pediu/perguntou.`;
+    } else {
+      prompt = `Você está ajudando um fotógrafo brasileiro a cadastrar um evento a partir de um print de conversa. A data de hoje é ${hoje}. Extraia as informações e retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
+{"nomeCliente": "", "telefoneCliente": "", "tipo": "aniversario|batizado|casamento_civil|casamento_religioso|ensaio|outro", "data": "AAAA-MM-DD", "horario": "HH:MM", "valorContratado": ""}
+Se a data mencionada não tiver ano, assuma o próximo ano em que essa data ainda não passou a partir de hoje. Se não conseguir identificar um campo com confiança, deixe vazio.`;
+    }
+
+    const resultado = await callGeminiVision(base64, mimeType, prompt);
+    if(!resultado.texto){
+      toast(`Erro ao ler a imagem: ${resultado.erro||"tente novamente."}`);
+      return;
+    }
+    let dados;
+    try{
+      const limpo = resultado.texto.replace(/```json|```/g,"").trim();
+      dados = JSON.parse(limpo);
+    }catch(err){
+      console.error("[print] erro ao parsear JSON:", err, resultado.texto);
+      toast("Não consegui interpretar os dados extraídos. Veja o console.");
+      return;
+    }
+
+    if(col==="leads"){
+      if(dados.nome) formState.nome = dados.nome;
+      if(dados.telefone) formState.telefone = dados.telefone;
+      if(dados.origem) formState.origem = dados.origem;
+      if(dados.interesseTipo) formState.interesseTipo = dados.interesseTipo;
+      if(dados.observacoes) formState.observacoes = dados.observacoes;
+      refreshFormFields();
+      toast("Campos preenchidos a partir do print. Confira antes de salvar.");
+    } else {
+      if(dados.tipo) formState.tipo = dados.tipo;
+      if(dados.data) formState.data = dados.data;
+      if(dados.horario) formState.horario = dados.horario;
+      if(dados.valorContratado) formState.valorContratado = dados.valorContratado;
+
+      // tenta casar o nome do cliente extraído com um cliente já existente
+      if(dados.nomeCliente){
+        const existente = state.clientes.find(c=> similaridadeNome(c.nome, dados.nomeCliente) >= 0.85);
+        if(existente){
+          formState.clienteId = existente.id;
+        } else {
+          formState.clienteId = "__new__";
+          formState._quickNew_clienteId = { nome: dados.nomeCliente, telefone: dados.telefoneCliente||"" };
+        }
+      }
+      refreshFormFields();
+      toast("Campos preenchidos a partir do print. Confira antes de salvar.");
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
 function openForm(col, id){
   const schema = SCHEMAS[col];
   const existing = id ? state[col].find(i=>i.id===id) : null;
@@ -1921,8 +2113,11 @@ function openForm(col, id){
 
   const showMarkPaid = col==="eventos" && existing && (Number(existing.valorContratado)||0) > totalPago(id);
 
+  const podeUsarPrint = !existing && (col==="leads" || col==="eventos") && temIA();
+
   document.getElementById("modal-content").innerHTML = `
     <h3>${existing ? "Editar" : "Novo"} ${schema.singular}</h3>
+    ${podeUsarPrint ? `<button class="ghost" style="margin-bottom:14px;" onclick="triggerPrintUpload('${col}')">📷 Preencher com print (IA)</button>` : ""}
     <div id="form-fields">${camposVisiveis(schema).map(f=>renderField(f, formState[f.key])).join("")}</div>
     ${showMarkPaid ? `
       <div class="card" style="margin-top:4px; padding:12px 14px;">
