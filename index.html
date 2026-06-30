@@ -244,6 +244,15 @@
   .view-link-card:hover{ border-color:var(--text); }
   .view-section-title{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:18px 0 8px; }
 
+  .comentario-item{ padding:10px 0; border-bottom:1px solid var(--border); }
+  .comentario-item:last-child{ border-bottom:none; }
+  .comentario-data{ font-size:11px; color:var(--muted-2); margin-bottom:4px; }
+  .comentario-texto{ font-size:13px; line-height:1.5; }
+  .comentario-input-row{ display:flex; gap:8px; margin-top:10px; }
+  .comentario-input-row textarea{ flex:1; min-height:48px; font-size:13px; }
+  .ai-box{ background:var(--surface-2); border:1px solid var(--border-solid); border-radius:8px; padding:14px; margin-top:10px; font-size:13px; line-height:1.6; }
+  .ai-box .ai-label{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:8px; }
+
   #toast{
     position:fixed; bottom:24px; right:24px; background:var(--surface-2); border:1px solid var(--amber);
     color:var(--text); padding:12px 18px; border-radius:8px; font-size:13px; z-index:99; display:none;
@@ -830,6 +839,16 @@ function renderConfiguracoes(main){
         oninput="configDraft.mensagemCasamento=this.value">${state.config.mensagemCasamento||""}</textarea>
     </div>
 
+    <div class="card" style="margin-top:16px;">
+      <div class="section-title" style="margin-top:0;">Inteligência Artificial (Gemini)</div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
+        Cole aqui sua chave gratuita do Google Gemini — obtenha em <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--text);">aistudio.google.com ↗</a>.<br>
+        O app funciona normalmente sem ela — a IA é um recurso opcional.
+      </div>
+      <input type="password" id="gemini-key" placeholder="AIza..." value="${state.config.geminiKey||""}"
+        oninput="configDraft.geminiKey=this.value" style="width:100%;">
+    </div>
+
     <div style="margin-top:14px; display:flex; justify-content:flex-end;">
       <button class="primary" onclick="salvarConfiguracoes()">Salvar</button>
     </div>
@@ -867,14 +886,7 @@ function enviarMensagemAniversario(criancaId){
   const resultado = montarMensagemAniversario(criancaId);
   if(!resultado) return;
   if(resultado.erro){ toast(resultado.erro); return; }
-  const wa = resultado.cliente ? whatsappLink(resultado.cliente.telefone) : null;
-  if(wa){
-    window.open(`${wa}?text=${encodeURIComponent(resultado.texto)}`, "_blank");
-  } else {
-    navigator.clipboard.writeText(resultado.texto)
-      .then(()=> toast("Sem telefone cadastrado — mensagem copiada."))
-      .catch(()=> toast("Não foi possível copiar."));
-  }
+  abrirModalEnvioMensagem(resultado.texto, resultado.cliente, `Aniversário de ${state.criancas.find(c=>c.id===criancaId)?.nome||""}`);
 }
 function montarMensagemCasamento(casamentoId){
   const c = state.casamentos.find(x=>x.id===casamentoId);
@@ -894,14 +906,8 @@ function enviarMensagemCasamento(casamentoId){
   const resultado = montarMensagemCasamento(casamentoId);
   if(!resultado) return;
   if(resultado.erro){ toast(resultado.erro); return; }
-  const wa = resultado.cliente ? whatsappLink(resultado.cliente.telefone) : null;
-  if(wa){
-    window.open(`${wa}?text=${encodeURIComponent(resultado.texto)}`, "_blank");
-  } else {
-    navigator.clipboard.writeText(resultado.texto)
-      .then(()=> toast("Sem telefone cadastrado — mensagem copiada."))
-      .catch(()=> toast("Não foi possível copiar."));
-  }
+  const c = state.casamentos.find(x=>x.id===casamentoId);
+  abrirModalEnvioMensagem(resultado.texto, resultado.cliente, `Bodas de ${c?.nomeCasal||""}`);
 }
 
 /* ---------- RELATÓRIOS ---------- */
@@ -1133,6 +1139,20 @@ function renderDashboard(main){
       </div>
     </div>
 
+    ${(()=>{
+      const alertas = calcularAlertas();
+      if(!alertas.length) return "";
+      return `<div class="section-title">⚠️ Alertas</div>
+      <div class="card" style="padding:0;">
+        <table><tbody>
+          ${alertas.map(a=>`<tr>
+            <td style="padding:11px 12px; font-size:13px; line-height:1.5;">${a.texto}</td>
+            <td class="row-actions"><button class="sm" onclick="openView('${a.col}','${a.id}')">Ver</button></td>
+          </tr>`).join("")}
+        </tbody></table>
+      </div>`;
+    })()}
+
     <div class="section-title">Aniversários próximos (60 dias)</div>
     <div class="card">
       ${aniversarios.length ? `<table><thead><tr><th>Quem</th><th>Vai completar</th><th>Em quantos dias</th><th>Vínculo</th><th></th></tr></thead><tbody>
@@ -1343,22 +1363,223 @@ function renderViewEvento(ev){
     ${viewActions("eventos", ev.id, `<button class="ghost" onclick="copiarResumoEvento('${ev.id}')">Copiar resumo</button>`)}`;
 }
 
+/* =========================================================
+   COMENTÁRIOS
+   ========================================================= */
+function renderComentarios(col, id){
+  const item = state[col]?.find(i=>i.id===id);
+  const comentarios = item?.comentarios || [];
+  const sorted = [...comentarios].sort((a,b)=>b.criadoEm?.localeCompare(a.criadoEm||"")||0);
+  return `
+    <div class="view-section-title">Comentários</div>
+    <div id="comentarios-lista-${col}-${id}">
+      ${sorted.length ? sorted.map((c,i)=>`
+        <div class="comentario-item">
+          <div class="comentario-data">${formatarDataHora(c.criadoEm)}</div>
+          <div class="comentario-texto">${escapeHtml(c.texto)}</div>
+        </div>`).join("") : `<div style="font-size:13px;color:var(--muted-2);">Nenhum comentário ainda.</div>`}
+    </div>
+    <div class="comentario-input-row">
+      <textarea id="novo-comentario-${col}-${id}" placeholder="Escreva um comentário..."></textarea>
+      <button class="sm" onclick="salvarComentario('${col}','${id}')">Salvar</button>
+    </div>
+  `;
+}
+function escapeHtml(s){ return s ? s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : ""; }
+function formatarDataHora(iso){
+  if(!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR") + " às " + d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+}
+async function salvarComentario(col, id){
+  const input = document.getElementById(`novo-comentario-${col}-${id}`);
+  const texto = input ? input.value.trim() : "";
+  if(!texto){ toast("Escreva algo antes de salvar."); return; }
+  const item = state[col]?.find(i=>i.id===id);
+  const novos = [...(item?.comentarios||[]), { texto, criadoEm: new Date().toISOString() }];
+  try{
+    await db.collection(col).doc(id).update({ comentarios: novos });
+    if(input) input.value = "";
+    toast("Comentário salvo.");
+  }catch(err){ console.error(err); toast("Erro ao salvar comentário."); }
+}
+
+/* =========================================================
+   IA — GEMINI
+   ========================================================= */
+async function callGemini(prompt){
+  const key = state.config?.geminiKey || "";
+  if(!key) return null;
+  try{
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ contents:[{ parts:[{ text: prompt }] }] })
+    });
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  }catch(err){
+    console.error("[gemini] erro:", err);
+    return null;
+  }
+}
+function temIA(){ return !!(state.config?.geminiKey); }
+
+async function gerarResumoCliente(col, id){
+  const btn = document.getElementById(`btn-resumo-${col}-${id}`);
+  const box = document.getElementById(`ai-resumo-${col}-${id}`);
+  if(!btn || !box) return;
+  if(!temIA()){ toast("Configure a chave Gemini em Configurações para usar a IA."); return; }
+  btn.disabled = true; btn.textContent = "Analisando...";
+  const item = state[col]?.find(i=>i.id===id);
+  if(!item){ btn.disabled=false; btn.textContent="Resumo IA"; return; }
+  const comentarios = (item.comentarios||[]).sort((a,b)=>a.criadoEm?.localeCompare(b.criadoEm||"")||0)
+    .map(c=>`[${formatarDataHora(c.criadoEm)}] ${c.texto}`).join("\n");
+  const eventos = col==="clientes" ? state.eventos.filter(e=>e.clienteId===id)
+    .map(e=>`${capitalize((e.tipo||"").replace("_"," "))} em ${formatDate(e.data)} — ${statusLabel(e.status||"orcamento")}`)
+    .join("\n") : "";
+  const prompt = `Você é um assistente de um fotógrafo brasileiro chamado Yuri. Analise as informações abaixo sobre um ${col==="leads"?"lead":"cliente"} e escreva um resumo prático em 3-5 linhas, como se fosse uma nota de briefing antes de retomar contato. Inclua pontos de atenção se houver.\n\n${col==="leads"?"LEAD":"CLIENTE"}: ${item.nome||""}\nOrigem: ${item.origem||"—"}\nStatus: ${item.status||"—"}\n${eventos?"Histórico de eventos:\n"+eventos+"\n":""}\nComentários:\n${comentarios||"(nenhum comentário ainda)"}`;
+  const resposta = await callGemini(prompt);
+  btn.disabled=false; btn.textContent="Resumo IA";
+  if(resposta){
+    box.innerHTML = `<div class="ai-label">Resumo gerado por IA</div>${escapeHtml(resposta).replace(/\n/g,"<br>")}`;
+    box.style.display="block";
+  } else {
+    toast("Não foi possível gerar o resumo. Verifique a chave Gemini.");
+  }
+}
+
+async function gerarVariacoesMensagem(texto, dadosContexto){
+  if(!temIA()){ toast("Configure a chave Gemini em Configurações para usar a IA."); return null; }
+  const prompt = `Você é um assistente de um fotógrafo brasileiro. Reescreva a mensagem abaixo em 3 versões com tons diferentes: 1) Formal e profissional, 2) Caloroso e próximo, 3) Curto e direto. Mantenha a mesma intenção e informações. Retorne APENAS as 3 versões numeradas, sem explicações.\n\nContexto: ${dadosContexto}\n\nMensagem original:\n${texto}`;
+  return await callGemini(prompt);
+}
+
+/* =========================================================
+   ALERTAS PROATIVOS
+   ========================================================= */
+function calcularAlertas(){
+  const alertas = [];
+  const agora = new Date();
+  const hoje = agora.toISOString().slice(0,10);
+
+  // Leads sem atualização há 7+ dias
+  state.leads.filter(l=>l.status!=="convertido"&&l.status!=="perdido").forEach(l=>{
+    const ults = (l.comentarios||[]).map(c=>c.criadoEm||"").sort().reverse()[0];
+    const ref = ults ? new Date(ults) : new Date(l.criadoEm||agora);
+    const dias = Math.floor((agora-ref)/86400000);
+    if(dias>=7) alertas.push({tipo:"lead_parado", texto:`Lead <b>${l.nome}</b> sem atualização há ${dias} dias.`, id:l.id, col:"leads"});
+  });
+
+  // Orçamentos sem resposta há 5+ dias
+  state.eventos.filter(e=>e.status==="orcamento").forEach(e=>{
+    const ref = new Date(e.criadoEm||e.data||agora);
+    const dias = Math.floor((agora-ref)/86400000);
+    if(dias>=5){
+      const cli = nomeRef("clientes",e.clienteId);
+      alertas.push({tipo:"orcamento_parado", texto:`Orçamento de <b>${cli}</b> (${capitalize((e.tipo||"").replace("_"," "))}) sem resposta há ${dias} dias.`, id:e.id, col:"eventos"});
+    }
+  });
+
+  // Eventos realizados sem entrega há 30+ dias
+  state.eventos.filter(e=>e.status==="realizado"&&!e.dataEntregaReal).forEach(e=>{
+    const ref = new Date(e.data||agora);
+    const dias = Math.floor((agora-ref)/86400000);
+    if(dias>=30){
+      const cli = nomeRef("clientes",e.clienteId);
+      alertas.push({tipo:"entrega_atrasada", texto:`Evento de <b>${cli}</b> realizado há ${dias} dias ainda sem entrega.`, id:e.id, col:"eventos"});
+    }
+  });
+
+  // Saldo a receber em eventos entregues
+  state.eventos.filter(e=>e.status==="entregue").forEach(e=>{
+    const saldo = (Number(e.valorContratado)||0)-totalPago(e.id);
+    if(saldo>0){
+      const cli = nomeRef("clientes",e.clienteId);
+      alertas.push({tipo:"saldo_pendente", texto:`Evento entregue de <b>${cli}</b> ainda tem ${money(saldo)} a receber.`, id:e.id, col:"eventos"});
+    }
+  });
+
+  return alertas;
+}
+
+function abrirModalEnvioMensagem(textoOriginal, cliente, contexto){
+  const wa = cliente ? whatsappLink(cliente.telefone) : null;
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Enviar mensagem</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:10px;">${contexto}</div>
+    <div class="field"><label>Mensagem</label>
+      <textarea id="msg-envio-texto" rows="5" style="width:100%;">${textoOriginal}</textarea>
+    </div>
+    ${temIA() ? `
+      <button class="ghost" id="btn-variacoes" onclick="gerarVariacoesModal('${contexto}')">✦ Gerar variações com IA</button>
+      <div id="variacoes-container" style="margin-top:10px;"></div>
+    ` : ""}
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="ghost" onclick="copiarMsgEnvio()">Copiar</button>
+      ${wa ? `<button class="primary" onclick="abrirWhatsapp('${wa}')">Abrir WhatsApp ↗</button>` : `<button class="primary" onclick="copiarMsgEnvio()">Copiar</button>`}
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+function copiarMsgEnvio(){
+  const texto = document.getElementById("msg-envio-texto")?.value||"";
+  navigator.clipboard.writeText(texto).then(()=>toast("Copiado!")).catch(()=>toast("Não foi possível copiar."));
+}
+function abrirWhatsapp(wa){
+  const texto = document.getElementById("msg-envio-texto")?.value||"";
+  window.open(`${wa}?text=${encodeURIComponent(texto)}`, "_blank");
+}
+async function gerarVariacoesModal(contexto){
+  const btn = document.getElementById("btn-variacoes");
+  const container = document.getElementById("variacoes-container");
+  const textoAtual = document.getElementById("msg-envio-texto")?.value||"";
+  if(!btn || !container) return;
+  btn.disabled=true; btn.textContent="Gerando variações...";
+  const resposta = await gerarVariacoesMensagem(textoAtual, contexto);
+  btn.disabled=false; btn.textContent="✦ Gerar variações com IA";
+  if(!resposta){ toast("Não foi possível gerar variações. Verifique a chave Gemini."); return; }
+  const blocos = resposta.split(/\n(?=\d[\)\.])/).filter(Boolean);
+  container.innerHTML = blocos.map((b,i)=>`
+    <div class="ai-box" style="margin-bottom:8px; cursor:pointer;" onclick="usarVariacao(${i})">
+      <div class="ai-label">Variação ${i+1} — clique pra usar</div>
+      <div id="variacao-texto-${i}">${escapeHtml(b.replace(/^\d[\)\.]\s*/,"")).replace(/\n/g,"<br>")}</div>
+    </div>
+  `).join("");
+  window._variacoes = blocos.map(b=>b.replace(/^\d[\)\.]\s*/,"").trim());
+}
+function usarVariacao(i){
+  const t = window._variacoes?.[i];
+  if(!t) return;
+  const el = document.getElementById("msg-envio-texto");
+  if(el) el.value = t;
+  toast("Variação aplicada.");
+}
 function renderViewLead(lead){
   const sym = {novo:"○", contatado:"◐", negociando:"◑", convertido:"✓", perdido:"✕"};
   const lbl = {novo:"Novo", contatado:"Contatado", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
   const s = lead.status || "novo";
   const wa = whatsappLink(lead.telefone);
   const jaConvertido = !!lead.clienteId;
-
-  return `<h3>${lead.nome}</h3>
-    ${viewRow("Telefone", lead.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener">${lead.telefone} ↗ WhatsApp</a>` : lead.telefone) : "—")}
-    ${viewRow("Origem", lead.origem ? capitalize(lead.origem) : "—")}
-    ${viewRow("Interesse em", lead.interesseTipo ? capitalize(lead.interesseTipo.replace("_"," ")) : "—")}
-    ${viewRow("Status", `<span class="badge lead-${s}">${sym[s]||""} ${lbl[s]||capitalize(s)}</span>`)}
-    ${lead.motivoPerda && s==="perdido" ? viewRow("Motivo da perda", capitalize(lead.motivoPerda.replace("_"," "))) : ""}
-    ${lead.observacoes ? viewRow("Observações", lead.observacoes) : ""}
-    ${jaConvertido ? viewRow("Cliente vinculado", `<a href="#" onclick="openView('clientes','${lead.clienteId}');return false;">${nomeRef("clientes",lead.clienteId)}</a>`) : ""}
-    ${viewActions("leads", lead.id, jaConvertido ? "" : `<button class="ghost" onclick="converterLeadEmCliente('${lead.id}')">Converter em cliente</button>`)}`;
+  const lid = lead.id;
+  const cId = lead.clienteId || "";
+  const btnR = temIA() ? "<button class=\"ghost\" onclick=\"gerarResumoCliente('leads','" + lid + "')\" >Resumo IA</button>" : "";
+  const btnC = jaConvertido ? "" : "<button class=\"ghost\" onclick=\"converterLeadEmCliente('" + lid + "')\" >Converter em cliente</button>";
+  const telefoneHtml = lead.telefone ? (wa ? "<a href=\"" + wa + "\" target=\"_blank\" rel=\"noopener\">" + lead.telefone + " ↗ WhatsApp</a>" : lead.telefone) : "—";
+  const statusHtml = "<span class=\"badge lead-" + s + "\">" + (sym[s]||"") + " " + (lbl[s]||capitalize(s)) + "</span>";
+  const vinculoHtml = jaConvertido ? "<a href=\"#\" onclick=\"openView('clientes','" + cId + "');return false;\">" + nomeRef("clientes",cId) + "</a>" : "";
+  return "<h3>" + (lead.nome||"") + "</h3>" +
+    viewRow("Telefone", telefoneHtml) +
+    viewRow("Origem", lead.origem ? capitalize(lead.origem) : "—") +
+    viewRow("Interesse em", lead.interesseTipo ? capitalize(lead.interesseTipo.replace("_"," ")) : "—") +
+    viewRow("Status", statusHtml) +
+    (lead.motivoPerda && s==="perdido" ? viewRow("Motivo da perda", capitalize(lead.motivoPerda.replace("_"," "))) : "") +
+    (lead.observacoes ? viewRow("Observações", lead.observacoes) : "") +
+    (jaConvertido ? viewRow("Cliente vinculado", vinculoHtml) : "") +
+    renderComentarios("leads", lid) +
+    "<div class=\"ai-box\" id=\"ai-resumo-leads-" + lid + "\" style=\"display:none;\"></div>" +
+    viewActions("leads", lid, btnR + btnC);
 }
 
 async function converterLeadEmCliente(leadId){
@@ -1422,7 +1643,9 @@ function renderViewCliente(cli){
       <div class="view-section-title">Histórico de eventos (${eventosCliente.length})</div>
       ${eventosCliente.map(e=>`<div class="view-link-card" onclick="openView('eventos','${e.id}')">${formatDate(e.data)} · ${capitalize((e.tipo||"").replace("_"," "))}</div>`).join("")}
     ` : ""}
-    ${viewActions("clientes", cli.id)}`;
+    ${renderComentarios("clientes", cli.id)}
+    <div class="ai-box" id="ai-resumo-clientes-${cli.id}" style="display:none;"></div>
+    ${viewActions("clientes", cli.id, temIA()?`<button class="ghost" id="btn-resumo-clientes-${cli.id}" onclick="gerarResumoCliente('clientes','${cli.id}')">Resumo IA</button>`:"")}`;
 }
 async function vincularCriancaExistente(clienteId){
   const select = document.getElementById(`select-vincular-crianca-${clienteId}`);
