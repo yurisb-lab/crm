@@ -562,7 +562,9 @@ const SCHEMAS = {
       {key:"conjugeEvento", label:"Cônjuge", type:"text", visibleIf: fs=>["casamento_civil","casamento_religioso"].includes(fs.tipo)},
       {key:"criancaId", label:"Criança (opcional)", type:"ref", ref:"criancas", visibleIf: fs=>!["casamento_civil","casamento_religioso"].includes(fs.tipo)},
       {key:"recepcao", label:"Houve recepção?", type:"checkbox", visibleIf: fs=>["casamento_civil","casamento_religioso","batizado"].includes(fs.tipo)},
-      {key:"valorContratado", label:"Valor contratado (R$)", type:"number"},
+      {key:"valorTabela", label:"Valor de tabela (R$)", type:"number"},
+      {key:"valorContratado", label:"Valor final cobrado (R$)", type:"number"},
+      {key:"motivoDesconto", label:"Motivo do desconto (se houver)", type:"text", visibleIf: fs=>Number(fs.valorTabela||0)>0},
       {key:"status", label:"Status", type:"select", options:["orcamento","negociacao","fechado","realizado","entregue","perdido"], triggersRefresh:true},
       {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"], visibleIf: fs=>fs.status==="perdido" && !["casamento_civil","casamento_religioso"].includes(fs.tipo)},
       {key:"tags", label:"Tags (separe por vírgula)", type:"tags"},
@@ -828,10 +830,35 @@ function renderPage(page){
 /* ---------- CONFIGURAÇÕES ---------- */
 let configDraft = {};
 function renderConfiguracoes(main){
-  configDraft = { ...state.config };
+  configDraft = { ...state.config, precos: { ...(state.config.precos||{}) } };
+  const tiposEvento = [
+    {key:"aniversario", label:"Aniversário"},
+    {key:"batizado", label:"Batizado"},
+    {key:"casamento_civil", label:"Casamento civil"},
+    {key:"casamento_religioso", label:"Casamento religioso"},
+    {key:"ensaio", label:"Ensaio"},
+    {key:"outro", label:"Outro"}
+  ];
   main.innerHTML = `
     <div class="page-header"><div><div class="eyebrow">Personalização</div><h2>Configurações</h2></div></div>
+
     <div class="card">
+      <div class="section-title" style="margin-top:0;">Meus Dados — Tabela de Preços</div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
+        Defina um valor padrão por tipo de evento. Ao criar um evento novo, esse valor já vem preenchido — você só ajusta se for diferente.
+      </div>
+      <div class="grid grid-3">
+        ${tiposEvento.map(t=>`
+          <div class="field">
+            <label>${t.label}</label>
+            <input type="number" value="${state.config.precos?.[t.key]||""}" placeholder="0,00"
+              oninput="configDraft.precos['${t.key}']=this.value">
+          </div>
+        `).join("")}
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
       <div class="section-title" style="margin-top:0;">Mensagem de aniversário</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
         Escreva a mensagem que você manda quando a criança está perto de fazer aniversário. Use estes campos —
@@ -1126,6 +1153,17 @@ function renderRelatorios(main){
   const totalContratado = state.eventos.reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
   const totalRecebido = state.pagamentos.reduce((s,p)=>s+(Number(p.valor)||0),0);
 
+  // ---------- Descontos ----------
+  const eventosComDesconto = state.eventos
+    .map(e=>({ e, desconto: (Number(e.valorTabela)||0) - (Number(e.valorContratado)||0) }))
+    .filter(x=> x.desconto>0 && Number(x.e.valorTabela)>0);
+  const totalDescontoDado = eventosComDesconto.reduce((s,x)=>s+x.desconto,0);
+  const descontoPorTipo = todosOsTipos.map(t=>{
+    const doTipo = eventosComDesconto.filter(x=>x.e.tipo===t);
+    const soma = doTipo.reduce((s,x)=>s+x.desconto,0);
+    return { tipo:t, n: doTipo.length, soma, media: doTipo.length ? soma/doTipo.length : 0 };
+  }).filter(x=>x.n>0);
+
   // ---------- Faturamento por mês ----------
   const mesesMap = {}; // "2025-03" -> {eventos, contratado, recebido}
   state.eventos.forEach(e=>{
@@ -1214,6 +1252,30 @@ function renderRelatorios(main){
         ${porTipo.map(x=>`<tr><td>${capitalize(x.tipo.replace("_"," "))}</td><td>${x.total}</td><td>${x.comValor}</td><td>${money(x.media)}</td></tr>`).join("")}
       </tbody></table>` : `<div class="empty-state">Sem eventos suficientes ainda.</div>`}
     </div>
+
+    <div class="section-title">Descontos concedidos</div>
+    <div class="grid grid-3">
+      <div class="card stat-card"><div class="label">Total de desconto dado</div><div class="value" style="font-size:19px">${money(totalDescontoDado)}</div></div>
+      <div class="card stat-card"><div class="label">Eventos com desconto</div><div class="value">${eventosComDesconto.length}</div></div>
+      <div class="card stat-card"><div class="label">Desconto médio (quando há)</div><div class="value" style="font-size:19px">${money(eventosComDesconto.length ? totalDescontoDado/eventosComDesconto.length : 0)}</div></div>
+    </div>
+    <div class="card" style="padding:0; margin-top:14px; overflow-x:auto;">
+      ${descontoPorTipo.length ? `<table><thead><tr><th>Tipo</th><th>Eventos com desconto</th><th>Total descontado</th><th>Desconto médio</th></tr></thead><tbody>
+        ${descontoPorTipo.map(x=>`<tr><td>${capitalize(x.tipo.replace("_"," "))}</td><td>${x.n}</td><td>${money(x.soma)}</td><td>${money(x.media)}</td></tr>`).join("")}
+      </tbody></table>` : `<div class="empty-state">Nenhum desconto registrado ainda.</div>`}
+    </div>
+    ${eventosComDesconto.filter(x=>x.e.motivoDesconto).length ? `
+      <div class="card" style="padding:0; margin-top:14px; overflow-x:auto;">
+        <table><thead><tr><th>Evento</th><th>Cliente</th><th>Desconto</th><th>Motivo</th></tr></thead><tbody>
+          ${eventosComDesconto.filter(x=>x.e.motivoDesconto).map(x=>`<tr>
+            <td><a href="#" onclick="openView('eventos','${x.e.id}');return false;">${capitalize((x.e.tipo||"").replace("_"," "))} · ${formatDate(x.e.data)}</a></td>
+            <td>${nomeRef("clientes",x.e.clienteId)}</td>
+            <td>${money(x.desconto)}</td>
+            <td>${x.e.motivoDesconto}</td>
+          </tr>`).join("")}
+        </tbody></table>
+      </div>
+    ` : ""}
 
     <div class="section-title">Ranking de origem dos clientes</div>
     <div class="card" style="padding:0;">
@@ -1550,7 +1612,17 @@ function renderViewEvento(ev){
     ${viewRow("Horário", ev.horario || "—")}
     ${viewRow("Status", `<span class="badge ${s}">${symbols[s]||""} ${statusLabel(s)}</span>`)}
     ${ev.motivoPerda && s==="perdido" ? viewRow("Motivo da perda", capitalize(ev.motivoPerda.replace("_"," "))) : ""}
-    ${viewRow("Valor contratado", money(ev.valorContratado))}
+    ${(()=>{
+      const tabela = Number(ev.valorTabela)||0;
+      const final = Number(ev.valorContratado)||0;
+      const desconto = tabela - final;
+      if(tabela>0 && desconto>0){
+        return viewRow("Valor de tabela", money(tabela)) +
+               viewRow("Valor final cobrado", money(final)) +
+               viewRow("Desconto concedido", money(desconto) + (ev.motivoDesconto ? ` — ${ev.motivoDesconto}` : ""));
+      }
+      return viewRow("Valor contratado", money(final));
+    })()}
     ${viewRow("Saldo pendente", saldo>0 ? money(saldo) : "Pago")}
     ${ev.tags && ev.tags.length ? viewRow("Tags", ev.tags.map(t=>`<span class="tag-chip">${t}</span>`).join("")) : ""}
     ${ev.dataEntregaPrevista ? viewRow("Entrega prevista", formatDate(ev.dataEntregaPrevista)) : ""}
@@ -1579,17 +1651,46 @@ function renderComentarios(col, id){
       <textarea id="novo-comentario-${col}-${id}" placeholder="Escreva um comentário..."></textarea>
       <button class="sm" onclick="salvarComentario('${col}','${id}')">Salvar</button>
     </div>
+    ${temIA() ? `
+      <div style="margin-top:10px;">
+        <button class="ghost sm" onclick="toggleImportarConversa('${col}','${id}')">✦ Importar conversa (IA)</button>
+        <div id="importar-conversa-${col}-${id}" style="display:none; margin-top:8px;">
+          <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">Cole o texto exportado da conversa (WhatsApp, Instagram etc). A IA vai ler e gerar uma nota breve sobre o cliente.</div>
+          <textarea id="conversa-texto-${col}-${id}" rows="6" placeholder="Cole a conversa aqui..." style="width:100%;"></textarea>
+          <button class="sm" style="margin-top:6px;" onclick="analisarConversa('${col}','${id}')">Analisar e gerar nota</button>
+        </div>
+      </div>
+    ` : ""}
   `;
 }
-function escapeHtml(s){ return s ? s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : ""; }
-function formatarDataHora(iso){
-  if(!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR") + " às " + d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+function toggleImportarConversa(col, id){
+  const el = document.getElementById(`importar-conversa-${col}-${id}`);
+  if(el) el.style.display = el.style.display==="none" ? "block" : "none";
 }
-async function salvarComentario(col, id){
+async function analisarConversa(col, id){
+  const textarea = document.getElementById(`conversa-texto-${col}-${id}`);
+  const conversa = textarea ? textarea.value.trim() : "";
+  if(!conversa){ toast("Cole o texto da conversa primeiro."); return; }
+  toast("Analisando conversa...");
+  const prompt = `Você é assistente de um fotógrafo brasileiro. Leia a conversa abaixo entre ele e um cliente/lead e extraia observações úteis sobre comportamento, preferências, reclamações ou sinais emocionais — coisas que ajudem o fotógrafo a entender melhor essa pessoa antes do próximo contato.
+
+Responda em formato de lista curta (cada item numa linha começando com "- "), seja telegráfico e direto, sem repetir trechos da conversa. Exemplos do tipo de coisa a observar: reclamou do prazo de entrega; não gostou do tom das fotos; pediu menos fotos dos convidados; muito educada mas parece ansiosa; demorou pra responder; perguntou sobre desconto.
+
+Se não houver nada relevante, responda apenas: "Nada relevante identificado."
+
+Conversa:
+${conversa}`;
+  const resultado = await callGemini(prompt);
+  if(!resultado.texto){ toast(`Erro ao analisar: ${resultado.erro||"tente novamente."}`); return; }
+  await salvarComentario(col, id, `🔎 Análise de conversa (IA):\n${resultado.texto.trim()}`);
+  if(textarea) textarea.value = "";
+  toggleImportarConversa(col, id);
+  openView(col, id);
+}
+
+async function salvarComentario(col, id, textoForcado){
   const input = document.getElementById(`novo-comentario-${col}-${id}`);
-  const texto = input ? input.value.trim() : "";
+  const texto = textoForcado!==undefined ? textoForcado : (input ? input.value.trim() : "");
   if(!texto){ toast("Escreva algo antes de salvar."); return; }
   const item = state[col]?.find(i=>i.id===id);
   const novos = [...(item?.comentarios||[]), { texto, criadoEm: new Date().toISOString() }];
@@ -1598,6 +1699,13 @@ async function salvarComentario(col, id){
     if(input) input.value = "";
     toast("Comentário salvo.");
   }catch(err){ console.error(err); toast("Erro ao salvar comentário."); }
+}
+
+function escapeHtml(s){ return s ? s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : ""; }
+function formatarDataHora(iso){
+  if(!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR") + " às " + d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 }
 
 /* =========================================================
@@ -1907,6 +2015,7 @@ function renderViewCliente(cli){
     .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
 
   return `<h3>${cli.nome}${cli.nomeConjuge ? " & "+cli.nomeConjuge : ""}</h3>
+    ${temIA() ? `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📷 Atualizar com print (IA)</button>` : ""}
     ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener">${cli.telefone} ↗ WhatsApp</a>` : cli.telefone) : "—")}
     ${viewRow("Cidade", cli.cidade || "—")}
     ${viewRow("Origem", cli.origem ? capitalize(cli.origem) : "—")}
@@ -2038,6 +2147,102 @@ function triggerPrintUpload(col){
   input.click();
 }
 
+function triggerPrintUpload(col){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = (e)=> processarPrint(col, e.target.files[0]);
+  input.click();
+}
+
+function triggerClientePrintUpload(clienteId){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = (e)=> processarPrintCliente(clienteId, e.target.files[0]);
+  input.click();
+}
+
+async function processarPrintCliente(clienteId, file){
+  if(!file) return;
+  toast("Lendo a imagem...");
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    const base64 = reader.result.split(",")[1];
+    const mimeType = file.type || "image/png";
+    const prompt = `Você está ajudando um fotógrafo brasileiro a atualizar o cadastro de um cliente a partir de um print (conversa, agenda de contatos, cartão de visita etc). Extraia as informações visíveis e retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
+{"nome": "", "telefone": "", "cidade": "", "origem": "instagram|indicacao|google|igreja|outro"}
+Se não conseguir identificar um campo com confiança, deixe vazio (string vazia). Não invente dados.`;
+
+    const resultado = await callGeminiVision(base64, mimeType, prompt);
+    if(!resultado.texto){
+      toast(`Erro ao ler a imagem: ${resultado.erro||"tente novamente."}`);
+      return;
+    }
+    let dados;
+    try{
+      const limpo = resultado.texto.replace(/```json|```/g,"").trim();
+      dados = JSON.parse(limpo);
+    }catch(err){
+      console.error("[print-cliente] erro ao parsear JSON:", err, resultado.texto);
+      toast("Não consegui interpretar os dados extraídos. Veja o console.");
+      return;
+    }
+    abrirConfirmacaoPrintCliente(clienteId, dados);
+  };
+  reader.readAsDataURL(file);
+}
+
+function abrirConfirmacaoPrintCliente(clienteId, dados){
+  const cliente = state.clientes.find(c=>c.id===clienteId);
+  if(!cliente) return;
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Confirmar dados extraídos</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">Revise antes de atualizar o cadastro de ${cliente.nome}. Campos vazios não serão alterados.</div>
+    <div class="field"><label>Nome</label>
+      <input id="confirm-nome" type="text" value="${dados.nome||""}" placeholder="(sem alteração: ${cliente.nome||"—"})">
+    </div>
+    <div class="field"><label>Telefone</label>
+      <input id="confirm-telefone" type="tel" value="${dados.telefone||""}" placeholder="(sem alteração: ${cliente.telefone||"—"})">
+    </div>
+    <div class="field"><label>Cidade</label>
+      <input id="confirm-cidade" type="text" value="${dados.cidade||""}" placeholder="(sem alteração: ${cliente.cidade||"—"})">
+    </div>
+    <div class="field"><label>Origem</label>
+      <select id="confirm-origem" style="width:100%;">
+        <option value="">(sem alteração: ${cliente.origem?capitalize(cliente.origem):"—"})</option>
+        ${["instagram","indicacao","google","igreja","outro"].map(o=>`<option value="${o}" ${dados.origem===o?"selected":""}>${capitalize(o)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="openView('clientes','${clienteId}')">Cancelar</button>
+      <button class="primary" onclick="confirmarAtualizacaoCliente('${clienteId}')">Atualizar cliente</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+async function confirmarAtualizacaoCliente(clienteId){
+  const nome = document.getElementById("confirm-nome")?.value.trim();
+  const telefone = document.getElementById("confirm-telefone")?.value.trim();
+  const cidade = document.getElementById("confirm-cidade")?.value.trim();
+  const origem = document.getElementById("confirm-origem")?.value;
+  const updates = {};
+  if(nome) updates.nome = nome;
+  if(telefone) updates.telefone = telefone;
+  if(cidade) updates.cidade = cidade;
+  if(origem) updates.origem = origem;
+  if(Object.keys(updates).length===0){ toast("Nenhum campo preenchido para atualizar."); return; }
+  try{
+    await db.collection("clientes").doc(clienteId).update(updates);
+    toast("Cliente atualizado.");
+    openView("clientes", clienteId);
+  }catch(err){
+    console.error(err);
+    toast("Erro ao atualizar cliente. Veja o console.");
+  }
+}
+
 async function processarPrint(col, file){
   if(!file) return;
   toast("Lendo a imagem...");
@@ -2137,6 +2342,16 @@ function openForm(col, id){
 function camposVisiveis(schema){
   return schema.fields.filter(f=> !f.visibleIf || f.visibleIf(formState));
 }
+function aplicarValorTabela(tipo){
+  if(formState._col !== "eventos") return;
+  const precos = state.config?.precos || {};
+  const valorPadrao = precos[tipo];
+  if(valorPadrao===undefined || valorPadrao==="" || valorPadrao==null) return;
+  if(!formState._id){ // só auto-preenche em eventos novos, pra não sobrescrever edição
+    formState.valorTabela = valorPadrao;
+    if(!formState.valorContratado) formState.valorContratado = valorPadrao;
+  }
+}
 function refreshFormFields(){
   const schema = SCHEMAS[formState._col];
   document.getElementById("form-fields").innerHTML = camposVisiveis(schema).map(f=>renderField(f, formState[f.key])).join("");
@@ -2222,8 +2437,9 @@ function renderField(f, value){
     return `<div class="field"><label>${f.label}</label><textarea id="${id}" oninput="formState['${f.key}']=this.value">${value||""}</textarea></div>`;
   }
   if(f.type==="select"){
+    const extraOnchange = f.key==="tipo" ? "aplicarValorTabela(this.value);" : "";
     return `<div class="field"><label>${f.label}</label>
-      <select id="${id}" onchange="formState['${f.key}']=this.value;${f.triggersRefresh?' refreshFormFields();':''}" style="width:100%">
+      <select id="${id}" onchange="formState['${f.key}']=this.value;${extraOnchange}${f.triggersRefresh?' refreshFormFields();':''}" style="width:100%">
         <option value="">—</option>
         ${f.options.map(o=>`<option value="${o}" ${value===o?"selected":""}>${f.key==="status" ? statusLabel(o) : capitalize(o.replace("_"," "))}</option>`).join("")}
       </select></div>`;
