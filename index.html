@@ -193,6 +193,7 @@
   .section-title{ font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:28px 0 12px; }
 
   table{ width:100%; border-collapse:collapse; font-size:14px; }
+  .card table{ min-width:320px; } /* garante scroll horizontal em vez de cortar */
   thead th{
     text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted-2);
     padding:8px 10px; border-bottom:1px solid var(--border-solid);
@@ -222,7 +223,7 @@
   /* Modal */
   .modal-backdrop{
     position:fixed; inset:0; background:#0c0a07cc; display:none; align-items:center; justify-content:center;
-    z-index:50; padding:24px;
+    z-index:50; padding:16px;
   }
   .modal-backdrop.active{ display:flex; }
   .modal{
@@ -230,13 +231,24 @@
     border:1px solid var(--border-solid); border-radius:var(--radius); padding:26px 28px;
   }
   .modal h3{ font-size:20px; margin:0 0 18px; font-weight:500; }
-  .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:18px; border-top:1px solid var(--border); padding-top:16px; }
+  .modal-actions{
+    display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap;
+    margin-top:18px; border-top:1px solid var(--border); padding-top:16px;
+  }
+  @media(max-width:480px){
+    .modal-actions{ flex-direction:column-reverse; }
+    .modal-actions button{ width:100%; text-align:center; }
+  }
 
-  .view-row{ display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-bottom:1px solid var(--border); font-size:14px; }
+  .view-row{ display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); font-size:14px; flex-wrap:wrap; }
   .view-row:last-child{ border-bottom:none; }
-  .view-label{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; flex:0 0 auto; padding-top:2px; }
-  .view-value{ text-align:right; max-width:64%; }
+  .view-label{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; flex:0 0 auto; padding-top:2px; min-width:80px; }
+  .view-value{ text-align:right; max-width:100%; word-break:break-word; }
   .view-value a{ color:var(--text); text-decoration:underline; }
+  @media(max-width:480px){
+    .view-row{ flex-direction:column; gap:4px; }
+    .view-value{ text-align:left; }
+  }
   .view-link-card{
     display:block; text-align:left; width:100%; background:var(--surface-2); border:1px solid var(--border-solid);
     border-radius:8px; padding:10px 12px; margin-top:6px; cursor:pointer; font-size:13px;
@@ -530,9 +542,12 @@ const SCHEMAS = {
     ],
     columns: [
       {key:"nome", label:"Nome"},
-      {key:"dataNascimento", label:"Nascimento", format:v=>formatDate(v)},
-      {key:"_idade", label:"Idade atual", format:(v,row)=>idadeAtual(row.dataNascimento)+" anos"},
-      {key:"_proximo", label:"Próximo aniversário em", format:(v,row)=>diasParaAniversario(row.dataNascimento)+" dias"}
+      {key:"_proximo", label:"Aniversário em", format:(v,row)=>{
+        const dias = diasParaAniversario(row.dataNascimento);
+        if(dias===0) return "🎂 Hoje!";
+        if(dias<=30) return `🎂 ${dias} dias`;
+        return `${dias} dias`;
+      }}
     ]
   },
   casamentos: {
@@ -546,9 +561,12 @@ const SCHEMAS = {
     ],
     columns: [
       {key:"nomeCasal", label:"Casal", format:(v,row)=> row.conjuge ? `${v} & ${row.conjuge}` : v},
-      {key:"dataCasamento", label:"Data do casamento", format:v=>formatDate(v)},
-      {key:"_anos", label:"Anos de casados", format:(v,row)=>idadeAtual(row.dataCasamento)+" anos"},
-      {key:"_proximo", label:"Próximas bodas em", format:(v,row)=>diasParaAniversario(row.dataCasamento)+" dias"}
+      {key:"_proximo", label:"Bodas em", format:(v,row)=>{
+        const dias = diasParaAniversario(row.dataCasamento);
+        if(dias===0) return "💍 Hoje!";
+        if(dias<=30) return `💍 ${dias} dias`;
+        return `${dias} dias`;
+      }}
     ]
   },
   eventos: {
@@ -1653,39 +1671,47 @@ function renderComentarios(col, id){
     </div>
     ${temIA() ? `
       <div style="margin-top:10px;">
-        <button class="ghost sm" onclick="toggleImportarConversa('${col}','${id}')">✦ Importar conversa (IA)</button>
-        <div id="importar-conversa-${col}-${id}" style="display:none; margin-top:8px;">
-          <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">Cole o texto exportado da conversa (WhatsApp, Instagram etc). A IA vai ler e gerar uma nota breve sobre o cliente.</div>
-          <textarea id="conversa-texto-${col}-${id}" rows="6" placeholder="Cole a conversa aqui..." style="width:100%;"></textarea>
-          <button class="sm" style="margin-top:6px;" onclick="analisarConversa('${col}','${id}')">Analisar e gerar nota</button>
-        </div>
+        <button class="ghost sm" onclick="triggerConversaUpload('${col}','${id}')">✦ Importar conversa .txt (IA)</button>
       </div>
     ` : ""}
   `;
 }
-function toggleImportarConversa(col, id){
-  const el = document.getElementById(`importar-conversa-${col}-${id}`);
-  if(el) el.style.display = el.style.display==="none" ? "block" : "none";
+function triggerConversaUpload(col, id){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".txt,text/plain";
+  input.onchange = (e)=> processarConversaTxt(col, id, e.target.files[0]);
+  input.click();
 }
-async function analisarConversa(col, id){
-  const textarea = document.getElementById(`conversa-texto-${col}-${id}`);
-  const conversa = textarea ? textarea.value.trim() : "";
-  if(!conversa){ toast("Cole o texto da conversa primeiro."); return; }
-  toast("Analisando conversa...");
-  const prompt = `Você é assistente de um fotógrafo brasileiro. Leia a conversa abaixo entre ele e um cliente/lead e extraia observações úteis sobre comportamento, preferências, reclamações ou sinais emocionais — coisas que ajudem o fotógrafo a entender melhor essa pessoa antes do próximo contato.
+async function processarConversaTxt(col, id, file){
+  if(!file) return;
+  toast("Lendo o arquivo...");
+  const reader = new FileReader();
+  reader.onload = async (e)=>{
+    let conversa = e.target.result || "";
+    // WhatsApp exporta com BOM e caracteres especiais — limpa
+    conversa = conversa.replace(/^\uFEFF/,"").trim();
+    // Limita a 12.000 caracteres pra não explodir o contexto do Gemini
+    if(conversa.length > 12000){
+      conversa = conversa.slice(0, 12000) + "\n[... conversa truncada para análise ...]";
+    }
+    if(!conversa){ toast("Arquivo vazio ou ilegível."); return; }
+    toast("Analisando conversa...");
+    const prompt = `Você é assistente de um fotógrafo brasileiro. Leia a conversa abaixo entre ele e um cliente/lead e extraia observações úteis sobre comportamento, preferências, reclamações ou sinais emocionais — coisas que ajudem o fotógrafo a entender melhor essa pessoa antes do próximo contato.
 
-Responda em formato de lista curta (cada item numa linha começando com "- "), seja telegráfico e direto, sem repetir trechos da conversa. Exemplos do tipo de coisa a observar: reclamou do prazo de entrega; não gostou do tom das fotos; pediu menos fotos dos convidados; muito educada mas parece ansiosa; demorou pra responder; perguntou sobre desconto.
+Responda em formato de lista curta (cada item numa linha começando com "- "), seja telegráfico e direto, sem repetir trechos da conversa. Exemplos do tipo de coisa a observar: reclamou do prazo de entrega; não gostou do tom das fotos; pediu menos fotos dos convidados; muito educada mas parece ansiosa; demorou pra responder; perguntou sobre desconto; negocia bastante; confirma tudo rapidamente.
 
 Se não houver nada relevante, responda apenas: "Nada relevante identificado."
 
 Conversa:
 ${conversa}`;
-  const resultado = await callGemini(prompt);
-  if(!resultado.texto){ toast(`Erro ao analisar: ${resultado.erro||"tente novamente."}`); return; }
-  await salvarComentario(col, id, `🔎 Análise de conversa (IA):\n${resultado.texto.trim()}`);
-  if(textarea) textarea.value = "";
-  toggleImportarConversa(col, id);
-  openView(col, id);
+    const resultado = await callGemini(prompt);
+    if(!resultado.texto){ toast(`Erro ao analisar: ${resultado.erro||"tente novamente."}`); return; }
+    await salvarComentario(col, id, `🔎 Análise de conversa (IA):\n${resultado.texto.trim()}`);
+    openView(col, id);
+  };
+  reader.onerror = ()=> toast("Erro ao ler o arquivo. Tente novamente.");
+  reader.readAsText(file, "utf-8");
 }
 
 async function salvarComentario(col, id, textoForcado){
@@ -1965,11 +1991,11 @@ function renderViewLead(lead){
   const jaConvertido = !!lead.clienteId;
   const lid = lead.id;
   const cId = lead.clienteId || "";
-  const btnR = temIA() ? "<button class=\"ghost\" onclick=\"gerarResumoCliente('leads','" + lid + "')\" >Resumo IA</button>" : "";
   const btnC = jaConvertido ? "" : "<button class=\"ghost\" onclick=\"converterLeadEmCliente('" + lid + "')\" >Converter em cliente</button>";
   const telefoneHtml = lead.telefone ? (wa ? "<a href=\"" + wa + "\" target=\"_blank\" rel=\"noopener\">" + lead.telefone + " ↗ WhatsApp</a>" : lead.telefone) : "—";
   const statusHtml = "<span class=\"badge lead-" + s + "\">" + (sym[s]||"") + " " + (lbl[s]||capitalize(s)) + "</span>";
   const vinculoHtml = jaConvertido ? "<a href=\"#\" onclick=\"openView('clientes','" + cId + "');return false;\">" + nomeRef("clientes",cId) + "</a>" : "";
+  const btnResumoHtml = temIA() ? "<button class=\"ghost sm\" id=\"btn-resumo-leads-" + lid + "\" onclick=\"gerarResumoCliente('leads','" + lid + "')\" style=\"margin-top:10px;width:100%\">✦ Resumo IA</button>" : "";
   return "<h3>" + (lead.nome||"") + "</h3>" +
     viewRow("Telefone", telefoneHtml) +
     viewRow("Origem", lead.origem ? capitalize(lead.origem) : "—") +
@@ -1979,8 +2005,9 @@ function renderViewLead(lead){
     (lead.observacoes ? viewRow("Observações", lead.observacoes) : "") +
     (jaConvertido ? viewRow("Cliente vinculado", vinculoHtml) : "") +
     renderComentarios("leads", lid) +
+    btnResumoHtml +
     "<div class=\"ai-box\" id=\"ai-resumo-leads-" + lid + "\" style=\"display:none;\"></div>" +
-    viewActions("leads", lid, btnR + btnC);
+    viewActions("leads", lid, btnC);
 }
 
 async function converterLeadEmCliente(leadId){
@@ -2046,9 +2073,9 @@ function renderViewCliente(cli){
       ${eventosCliente.map(e=>`<div class="view-link-card" onclick="openView('eventos','${e.id}')">${formatDate(e.data)} · ${capitalize((e.tipo||"").replace("_"," "))}</div>`).join("")}
     ` : ""}
     ${renderComentarios("clientes", cli.id)}
+    ${temIA() ? `<button class="ghost sm" id="btn-resumo-clientes-${cli.id}" onclick="gerarResumoCliente('clientes','${cli.id}')" style="margin-top:10px; width:100%;">✦ Resumo IA</button>` : ""}
     <div class="ai-box" id="ai-resumo-clientes-${cli.id}" style="display:none;"></div>
-    ${viewActions("clientes", cli.id, temIA()?`<button class="ghost" id="btn-resumo-clientes-${cli.id}" onclick="gerarResumoCliente('clientes','${cli.id}')">Resumo IA</button>`:"")}`;
-}
+    ${viewActions("clientes", cli.id)}`;}
 async function vincularCriancaExistente(clienteId){
   const select = document.getElementById(`select-vincular-crianca-${clienteId}`);
   const criancaId = select ? select.value : "";
