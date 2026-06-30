@@ -1085,12 +1085,12 @@ async function enviarMensagemChat(){
   const historico = chatHistory.slice(-6).map(m=>`${m.role==="user"?"Yuri":"Assistente"}: ${m.content}`).join("\n");
   const prompt = `${contexto}\n\n=== CONVERSA ===\n${historico}`;
 
-  const resposta = await callGemini(prompt);
+  const resultado = await callGemini(prompt);
 
-  if(resposta){
-    chatHistory.push({ role:"ai", content:resposta });
+  if(resultado.texto){
+    chatHistory.push({ role:"ai", content:resultado.texto });
   } else {
-    chatHistory.push({ role:"ai", content:"Não consegui processar sua pergunta. Verifique sua conexão ou a chave Gemini em Configurações." });
+    chatHistory.push({ role:"ai", content:`Erro: ${resultado.erro || "não foi possível processar."}` });
   }
 
   if(msgs){
@@ -1604,18 +1604,28 @@ async function salvarComentario(col, id){
    ========================================================= */
 async function callGemini(prompt){
   const key = state.config?.geminiKey || "";
-  if(!key) return null;
+  if(!key) return { erro: "Nenhuma chave Gemini configurada." };
   try{
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ contents:[{ parts:[{ text: prompt }] }] })
     });
     const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    if(!res.ok){
+      const msg = data?.error?.message || `Erro HTTP ${res.status}`;
+      console.error("[gemini] erro da API:", msg, data);
+      return { erro: msg };
+    }
+    const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if(!texto){
+      console.error("[gemini] resposta sem texto:", data);
+      return { erro: "A IA não retornou texto. Veja o console para detalhes." };
+    }
+    return { texto };
   }catch(err){
-    console.error("[gemini] erro:", err);
-    return null;
+    console.error("[gemini] erro de rede:", err);
+    return { erro: "Falha de conexão com o Gemini. Veja o console." };
   }
 }
 function temIA(){ return !!(state.config?.geminiKey); }
@@ -1634,18 +1644,18 @@ async function gerarResumoCliente(col, id){
     .map(e=>`${capitalize((e.tipo||"").replace("_"," "))} em ${formatDate(e.data)} — ${statusLabel(e.status||"orcamento")}`)
     .join("\n") : "";
   const prompt = `Você é um assistente de um fotógrafo brasileiro chamado Yuri. Analise as informações abaixo sobre um ${col==="leads"?"lead":"cliente"} e escreva um resumo prático em 3-5 linhas, como se fosse uma nota de briefing antes de retomar contato. Inclua pontos de atenção se houver.\n\n${col==="leads"?"LEAD":"CLIENTE"}: ${item.nome||""}\nOrigem: ${item.origem||"—"}\nStatus: ${item.status||"—"}\n${eventos?"Histórico de eventos:\n"+eventos+"\n":""}\nComentários:\n${comentarios||"(nenhum comentário ainda)"}`;
-  const resposta = await callGemini(prompt);
+  const resultado = await callGemini(prompt);
   btn.disabled=false; btn.textContent="Resumo IA";
-  if(resposta){
-    box.innerHTML = `<div class="ai-label">Resumo gerado por IA</div>${escapeHtml(resposta).replace(/\n/g,"<br>")}`;
+  if(resultado.texto){
+    box.innerHTML = `<div class="ai-label">Resumo gerado por IA</div>${escapeHtml(resultado.texto).replace(/\n/g,"<br>")}`;
     box.style.display="block";
   } else {
-    toast("Não foi possível gerar o resumo. Verifique a chave Gemini.");
+    toast(`Erro ao gerar resumo: ${resultado.erro || "verifique a chave Gemini."}`);
   }
 }
 
 async function gerarVariacoesMensagem(texto, dadosContexto){
-  if(!temIA()){ toast("Configure a chave Gemini em Configurações para usar a IA."); return null; }
+  if(!temIA()){ toast("Configure a chave Gemini em Configurações para usar a IA."); return { erro:"Sem chave configurada." }; }
   const prompt = `Você é um assistente de um fotógrafo brasileiro. Reescreva a mensagem abaixo em 3 versões com tons diferentes: 1) Formal e profissional, 2) Caloroso e próximo, 3) Curto e direto. Mantenha a mesma intenção e informações. Retorne APENAS as 3 versões numeradas, sem explicações.\n\nContexto: ${dadosContexto}\n\nMensagem original:\n${texto}`;
   return await callGemini(prompt);
 }
@@ -1732,10 +1742,10 @@ async function gerarVariacoesModal(contexto){
   const textoAtual = document.getElementById("msg-envio-texto")?.value||"";
   if(!btn || !container) return;
   btn.disabled=true; btn.textContent="Gerando variações...";
-  const resposta = await gerarVariacoesMensagem(textoAtual, contexto);
+  const resultado = await gerarVariacoesMensagem(textoAtual, contexto);
   btn.disabled=false; btn.textContent="✦ Gerar variações com IA";
-  if(!resposta){ toast("Não foi possível gerar variações. Verifique a chave Gemini."); return; }
-  const blocos = resposta.split(/\n(?=\d[\)\.])/).filter(Boolean);
+  if(!resultado.texto){ toast(`Erro ao gerar variações: ${resultado.erro || "verifique a chave Gemini."}`); return; }
+  const blocos = resultado.texto.split(/\n(?=\d[\)\.])/).filter(Boolean);
   container.innerHTML = blocos.map((b,i)=>`
     <div class="ai-box" style="margin-bottom:8px; cursor:pointer;" onclick="usarVariacao(${i})">
       <div class="ai-label">Variação ${i+1} — clique pra usar</div>
