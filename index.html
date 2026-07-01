@@ -392,11 +392,11 @@ if("serviceWorker" in navigator){
   });
 }
 
-function toast(msg){
+function toast(msg, duracao=2600){
   const t = document.getElementById("toast");
   t.textContent = msg; t.style.display = "block";
   clearTimeout(window.__toastTimer);
-  window.__toastTimer = setTimeout(()=> t.style.display = "none", 2600);
+  window.__toastTimer = setTimeout(()=> t.style.display = "none", duracao);
 }
 
 /* =========================================================
@@ -497,7 +497,7 @@ const SCHEMAS = {
       {key:"telefone", label:"Telefone", type:"tel"},
       {key:"origem", label:"Como chegou até você", type:"select", options:["instagram","indicacao","google","igreja","outro"]},
       {key:"interesseTipo", label:"Interesse em", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"]},
-      {key:"status", label:"Status", type:"select", options:["novo","contatado","negociando","convertido","perdido"]},
+      {key:"status", label:"Status", type:"select", options:["novo","negociando","convertido","perdido"]},
       {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"]},
       {key:"observacoes", label:"Observações", type:"textarea"}
     ],
@@ -507,8 +507,8 @@ const SCHEMAS = {
       {key:"interesseTipo", label:"Interesse", format:v=>v?capitalize(v.replace("_"," ")):"—"},
       {key:"status", label:"Status", format:v=>{
         const s = v||"novo";
-        const sym = {novo:"○", contatado:"◐", negociando:"◑", convertido:"✓", perdido:"✕"};
-        const lbl = {novo:"Novo", contatado:"Contatado", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+        const sym = {novo:"○", negociando:"◑", convertido:"✓", perdido:"✕"};
+        const lbl = {novo:"Novo", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
         return `<span class="badge lead-${s}">${sym[s]||""} ${lbl[s]||capitalize(s)}</span>`;
       }}
     ]
@@ -839,6 +839,7 @@ function renderPage(page){
   const main = document.getElementById("main");
   if(page==="dashboard") return renderDashboard(main);
   if(page==="eventos") return renderEventosPage(main);
+  if(page==="leads") return renderLeadsPage(main);
   if(page==="relatorios") return renderRelatorios(main);
   if(page==="conversar") return renderConversar(main);
   if(page==="configuracoes") return renderConfiguracoes(main);
@@ -1000,7 +1001,7 @@ function buildCrmContext(){
 
   // Leads compactos
   const leadsCtx = state.leads.map(l=>{
-    const lbl = {novo:"Novo",contatado:"Contatado",negociando:"Negociando",convertido:"Convertido",perdido:"Perdido"};
+    const lbl = {novo:"Novo",negociando:"Negociando",convertido:"Convertido",perdido:"Perdido"};
     const comentarios = (l.comentarios||[]).sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||"")).slice(0,2).map(x=>`[${formatarDataHora(x.criadoEm)}] ${x.texto}`).join(" | ");
     const diasSemContato = (()=>{
       const ults = (l.comentarios||[]).map(c=>c.criadoEm||"").sort().reverse()[0];
@@ -1149,6 +1150,76 @@ async function enviarMensagemChat(){
 function limparChat(){
   chatHistory = [];
   renderPage("conversar");
+}
+
+/* =========================================================
+   LEADS — PÁGINA COM PILHAS
+   ========================================================= */
+const leadsExpandidos = new Set(["ativos"]); // "ativos", "convertidos", "perdidos"
+
+function renderLeadsPage(main){
+  const ativos = state.leads.filter(l=>!["convertido","perdido"].includes(l.status||"novo"))
+    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  const convertidos = state.leads.filter(l=>l.status==="convertido")
+    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  const perdidos = state.leads.filter(l=>l.status==="perdido")
+    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+
+  main.innerHTML = `
+    <div class="page-header">
+      <div><div class="eyebrow">Prospecção</div><h2>Leads</h2></div>
+      <div class="page-actions">
+        <button class="primary" onclick="openForm('leads')">+ Novo Lead</button>
+      </div>
+    </div>
+    ${renderPilhaLeads("ativos", "Leads ativos", ativos)}
+    ${renderPilhaLeads("convertidos", "Convertidos em cliente", convertidos)}
+    ${renderPilhaLeads("perdidos", "Perdidos", perdidos)}
+  `;
+}
+
+function renderPilhaLeads(chave, titulo, itens){
+  const isOpen = leadsExpandidos.has(chave);
+  const sym = {novo:"○", negociando:"◑", convertido:"✓", perdido:"✕"};
+  const lbl = {novo:"Novo", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+  return `
+    <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;"
+           onclick="togglePilhaLead('${chave}')">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:'Fraunces',serif; font-size:18px;">${isOpen?"▾":"▸"} ${titulo}</span>
+          <span style="font-size:12px; color:var(--muted);">${itens.length} lead${itens.length===1?"":"s"}</span>
+        </div>
+        <span style="font-size:12px; color:var(--muted-2);">${isOpen?"recolher":"expandir"}</span>
+      </div>
+      ${isOpen ? `
+        <div style="border-top:1px solid var(--border-solid); overflow-x:auto;">
+          ${itens.length ? `<table>
+            <thead><tr><th>Nome</th><th>Interesse</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${itens.map(lead=>`<tr>
+                <td>${lead.nome||"—"}</td>
+                <td>${lead.interesseTipo ? capitalize(lead.interesseTipo.replace("_"," ")) : "—"}</td>
+                <td><span class="badge lead-${lead.status||"novo"}">${sym[lead.status||"novo"]||""} ${lbl[lead.status||"novo"]||capitalize(lead.status||"")}</span></td>
+                <td class="row-actions">
+                  ${chave==="ativos" && !lead.clienteId ? `<button class="sm" onclick="converterLeadEmCliente('${lead.id}')">Converter</button>` : ""}
+                  <button class="sm" onclick="openView('leads','${lead.id}')">Ver</button>
+                  <button class="sm" onclick="openForm('leads','${lead.id}')">Editar</button>
+                  <button class="sm danger" onclick="deleteDoc('leads','${lead.id}')">Excluir</button>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>` : `<div class="empty-state" style="padding:24px;">Nenhum lead aqui.</div>`}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function togglePilhaLead(chave){
+  if(leadsExpandidos.has(chave)) leadsExpandidos.delete(chave);
+  else leadsExpandidos.add(chave);
+  renderPage("leads");
 }
 
 function renderRelatorios(main){
@@ -1824,7 +1895,42 @@ async function analisarDuplicadosIA(){
     : `<div class="ai-label">Erro</div>${resultado.erro||"não foi possível analisar."}`;
 }
 
-async function callGemini(prompt){
+function parseRetryAfter(mensagemErro){
+  // extrai o número de segundos do texto de erro de rate limit do Gemini
+  const match = (mensagemErro||"").match(/retry in ([\d.]+)\s*s/i);
+  return match ? Math.ceil(parseFloat(match[1])) : null;
+}
+function mostrarErroGemini(erro, elementoId){
+  const segundos = parseRetryAfter(erro);
+  if(segundos){
+    // rate limit — mostra contagem regressiva e retenta automaticamente
+    const el = document.getElementById(elementoId);
+    let restante = segundos;
+    const atualizar = ()=>{
+      if(el) el.textContent = `Limite de requisições atingido. Tentando novamente em ${restante}s...`;
+      else toast(`Limite atingido. Aguardando ${restante}s...`);
+    };
+    atualizar();
+    const intervalo = setInterval(()=>{
+      restante--;
+      if(restante<=0){ clearInterval(intervalo); return; }
+      atualizar();
+    }, 1000);
+    return { rateLimited: true, segundos, intervalo };
+  }
+  // erro genérico — mostra mensagem amigável
+  const amigavel = (()=>{
+    if(!erro) return "Erro desconhecido.";
+    if(erro.includes("API_KEY") || erro.includes("API key")) return "Chave Gemini inválida. Verifique em Configurações.";
+    if(erro.includes("quota") || erro.includes("Quota")) return "Cota do Gemini esgotada. Tente novamente mais tarde.";
+    if(erro.includes("404") || erro.includes("not found")) return "Modelo Gemini não encontrado. Verifique se a chave é válida.";
+    return erro;
+  })();
+  toast(amigavel);
+  return { rateLimited: false };
+}
+
+async function callGemini(prompt, tentativa=0){
   const key = state.config?.geminiKey || "";
   if(!key) return { erro: "Nenhuma chave Gemini configurada." };
   try{
@@ -1837,7 +1943,13 @@ async function callGemini(prompt){
     if(!res.ok){
       const msg = data?.error?.message || `Erro HTTP ${res.status}`;
       console.error("[gemini] erro da API:", msg, data);
-      return { erro: msg };
+      const segundos = parseRetryAfter(msg);
+      if(segundos && tentativa===0){
+        toast(`Limite de requisições atingido. Retentando em ${segundos}s automaticamente...`, (segundos+3)*1000);
+        await new Promise(r=>setTimeout(r, segundos*1000));
+        return callGemini(prompt, 1);
+      }
+      return { erro: msg, segundosRetry: segundos };
     }
     const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if(!texto){
@@ -1847,7 +1959,7 @@ async function callGemini(prompt){
     return { texto };
   }catch(err){
     console.error("[gemini] erro de rede:", err);
-    return { erro: "Falha de conexão com o Gemini. Veja o console." };
+    return { erro: "Falha de conexão com o Gemini. Verifique sua internet." };
   }
 }
 function temIA(){ return !!(state.config?.geminiKey); }
@@ -1984,8 +2096,8 @@ function usarVariacao(i){
   toast("Variação aplicada.");
 }
 function renderViewLead(lead){
-  const sym = {novo:"○", contatado:"◐", negociando:"◑", convertido:"✓", perdido:"✕"};
-  const lbl = {novo:"Novo", contatado:"Contatado", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+  const sym = {novo:"○", negociando:"◑", convertido:"✓", perdido:"✕"};
+  const lbl = {novo:"Novo", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
   const s = lead.status || "novo";
   const wa = whatsappLink(lead.telefone);
   const jaConvertido = !!lead.clienteId;
@@ -2013,6 +2125,7 @@ function renderViewLead(lead){
 async function converterLeadEmCliente(leadId){
   const lead = state.leads.find(l=>l.id===leadId);
   if(!lead) return;
+  if(!confirm(`Converter "${lead.nome}" em cliente?`)) return;
   try{
     const novoCliente = await db.collection("clientes").add({
       nome: lead.nome || "",
@@ -2022,8 +2135,10 @@ async function converterLeadEmCliente(leadId){
       criadoEm: new Date().toISOString()
     });
     await db.collection("leads").doc(leadId).update({ status:"convertido", clienteId: novoCliente.id });
-    toast("Lead convertido em cliente!");
-    openView("clientes", novoCliente.id);
+    leadsExpandidos.add("convertidos"); // abre a pilha de convertidos automaticamente
+    closeModal();
+    toast("Lead convertido em cliente! Abrindo cadastro...");
+    setTimeout(()=> openView("clientes", novoCliente.id), 800);
   }catch(err){
     console.error(err);
     toast("Erro ao converter o lead. Veja o console.");
@@ -2136,7 +2251,7 @@ function renderViewCasamento(c){
     ${viewActions("casamentos", c.id, `<button class="ghost" onclick="enviarMensagemCasamento('${c.id}')">Enviar mensagem</button>`)}`;
 }
 
-async function callGeminiVision(base64Data, mimeType, prompt){
+async function callGeminiVision(base64Data, mimeType, prompt, tentativa=0){
   const key = state.config?.geminiKey || "";
   if(!key) return { erro: "Nenhuma chave Gemini configurada." };
   try{
@@ -2152,7 +2267,13 @@ async function callGeminiVision(base64Data, mimeType, prompt){
     if(!res.ok){
       const msg = data?.error?.message || `Erro HTTP ${res.status}`;
       console.error("[gemini-vision] erro da API:", msg, data);
-      return { erro: msg };
+      const segundos = parseRetryAfter(msg);
+      if(segundos && tentativa===0){
+        toast(`Limite de requisições atingido. Retentando em ${segundos}s automaticamente...`, (segundos+3)*1000);
+        await new Promise(r=>setTimeout(r, segundos*1000));
+        return callGeminiVision(base64Data, mimeType, prompt, 1);
+      }
+      return { erro: msg, segundosRetry: segundos };
     }
     const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if(!texto){
