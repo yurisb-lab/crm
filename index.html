@@ -1243,54 +1243,87 @@ function renderAgenda(main){
 }
 
 function renderAgendaLista(){
-  // agrupa todos os eventos por "AAAA-MM"
+  const hoje = new Date().toISOString().slice(0,10);
+
+  // só eventos futuros (incluindo hoje)
   const porMes = {};
-  state.eventos.filter(e=>e.data).forEach(e=>{
+  state.eventos.filter(e=>e.data && e.data>=hoje).forEach(e=>{
     const chave = e.data.slice(0,7);
     if(!porMes[chave]) porMes[chave] = [];
-    porMes[chave].push(e);
+    porMes[chave].push({tipo:"evento", item:e});
   });
-  const mesesOrdenados = Object.keys(porMes).sort().reverse();
-  if(!mesesOrdenados.length) return `<div class="card"><div class="empty-state">Nenhum evento cadastrado ainda.</div></div>`;
+
+  // bloqueios futuros (incluindo hoje)
+  state.bloqueios.filter(b=>b.data && b.data>=hoje).forEach(b=>{
+    const chave = b.data.slice(0,7);
+    if(!porMes[chave]) porMes[chave] = [];
+    porMes[chave].push({tipo:"bloqueio", item:b});
+  });
+
+  const mesesOrdenados = Object.keys(porMes).sort();
+  if(!mesesOrdenados.length) return `<div class="card"><div class="empty-state">Nenhum evento ou bloqueio futuro cadastrado.</div></div>`;
 
   return mesesOrdenados.map(chave=>{
     const [ano, mes] = chave.split("-");
     const titulo = `${MESES[Number(mes)-1]} ${ano}`;
     const isOpen = agendaListaExpandida.has(chave);
-    const evs = porMes[chave].sort((a,b)=>(a.data+a.horario||"").localeCompare(b.data+b.horario||""));
-    const totalValor = evs.reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
+    const itens = porMes[chave].sort((a,b)=>{
+      const da = (a.item.data||"")+(a.item.horario||"");
+      const db2 = (b.item.data||"")+(b.item.horario||"");
+      return da.localeCompare(db2);
+    });
+    const evs = itens.filter(i=>i.tipo==="evento");
+    const bloqs = itens.filter(i=>i.tipo==="bloqueio");
+    const totalValor = evs.reduce((s,{item:e})=>s+(Number(e.valorContratado)||0),0);
+    const resumo = `${evs.length} evento${evs.length===1?"":"s"}${bloqs.length?` · ${bloqs.length} bloqueio${bloqs.length===1?"":"s"}`:""}${totalValor?` · ${money(totalValor)}`:""}`;
+
     return `
       <div class="card" style="padding:0; margin-bottom:10px; overflow:hidden;">
         <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 18px; cursor:pointer;"
              onclick="toggleAgendaMes('${chave}')">
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="font-family:'Fraunces',serif; font-size:17px;">${isOpen?"▾":"▸"} ${titulo}</span>
-            <span style="font-size:12px; color:var(--muted);">${evs.length} evento${evs.length===1?"":"s"} · ${money(totalValor)}</span>
+            <span style="font-size:12px; color:var(--muted);">${resumo}</span>
           </div>
           <span style="font-size:12px; color:var(--muted-2);">${isOpen?"recolher":"expandir"}</span>
         </div>
         ${isOpen ? `
           <div style="border-top:1px solid var(--border-solid);">
-            ${evs.map(e=>{
-              const cli = state.clientes.find(c=>c.id===e.clienteId);
-              const disp = calcDisponibilidade(e.data);
-              const saldo = (Number(e.valorContratado)||0) - totalPago(e.id);
-              return `<div style="display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; cursor:pointer;"
-                          onclick="openView('eventos','${e.id}')">
-                <div style="width:6px; height:6px; border-radius:50%; background:${corHexTipo(e.tipo)}; flex-shrink:0;"></div>
-                <div style="flex:1; min-width:0;">
-                  <div style="font-weight:600; font-size:14px;">${e.nomeEvento||nomeRef("clientes",e.clienteId)} <span style="font-weight:400; color:var(--muted); font-size:12px;">· ${formatDate(e.data)}${e.horario?" "+e.horario:""}</span></div>
-                  <div style="font-size:12px; color:var(--muted); display:flex; gap:8px; flex-wrap:wrap; margin-top:2px;">
-                    <span class="ev-chip ${e.tipo||'outro'}" style="font-size:10px;">${capitalize((e.tipo||"outro").replace("_"," "))}</span>
-                    <span class="badge ${e.status||'orcamento'}" style="font-size:10px;">${statusLabel(e.status||"orcamento")}</span>
-                    ${e.endereco?`<span>📍 ${e.endereco}</span>`:""}
+            ${itens.map(({tipo, item})=>{
+              if(tipo==="bloqueio") return `
+                <div style="display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; background:repeating-linear-gradient(90deg,var(--surface-2) 0px,var(--surface-2) 6px,transparent 6px,transparent 12px);">
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:13px; font-weight:600; color:var(--muted);">🚫 Data bloqueada · ${formatDate(item.data)}</div>
+                    ${item.motivo?`<div style="font-size:12px;color:var(--muted-2);">${item.motivo}</div>`:""}
                   </div>
-                </div>
-                <div style="text-align:right; font-size:13px; flex-shrink:0;">
-                  ${money(e.valorContratado)}
-                  ${saldo>0?`<div style="font-size:11px;color:#ef4444;">-${money(saldo)}</div>`:`<div style="font-size:11px;color:#22c55e;">✓ pago</div>`}
-                </div>
-              </div>`;
+                  <div class="row-actions">
+                    <button class="sm" onclick="abrirBloquearDataEditar('${item.id}','${item.data}','${(item.motivo||"").replace(/'/g,"\\'")}')">Editar</button>
+                    <button class="sm danger" onclick="desbloquearData('${item.id}')">Remover</button>
+                  </div>
+                </div>`;
+              const e = item;
+              const saldo = (Number(e.valorContratado)||0) - totalPago(e.id);
+              return `
+                <div style="display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
+                  <div style="width:6px; height:36px; border-radius:3px; background:${corHexTipo(e.tipo)}; flex-shrink:0;"></div>
+                  <div style="flex:1; min-width:0; cursor:pointer;" onclick="openView('eventos','${e.id}')">
+                    <div style="font-weight:600; font-size:14px;">${e.nomeEvento||nomeRef("clientes",e.clienteId)}</div>
+                    <div style="font-size:12px; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap; margin-top:2px;">
+                      <span>${formatDate(e.data)}${e.horario?" · "+e.horario:""}</span>
+                      <span class="ev-chip ${e.tipo||'outro'}" style="font-size:10px;">${capitalize((e.tipo||"outro").replace("_"," "))}</span>
+                      <span class="badge ${e.status||'orcamento'}" style="font-size:10px;">${statusLabel(e.status||"orcamento")}</span>
+                    </div>
+                    ${e.endereco?`<div style="font-size:11px;color:var(--muted-2);margin-top:2px;">📍 ${e.endereco}</div>`:""}
+                  </div>
+                  <div style="text-align:right; font-size:13px; flex-shrink:0; margin-right:8px;">
+                    ${e.valorContratado?money(e.valorContratado):"—"}
+                    ${saldo>0?`<div style="font-size:11px;color:#ef4444;">-${money(saldo)}</div>`:(e.valorContratado?`<div style="font-size:11px;color:#22c55e;">✓ pago</div>`:"")}
+                  </div>
+                  <div class="row-actions">
+                    <button class="sm" onclick="openView('eventos','${e.id}')">Ver</button>
+                    <button class="sm" onclick="openForm('eventos','${e.id}')">Editar</button>
+                  </div>
+                </div>`;
             }).join("")}
           </div>
         ` : ""}
@@ -1402,6 +1435,29 @@ function openFormComData(iso){
   openForm("eventos");
   setTimeout(()=>{ formState.data=iso; refreshFormFields(); },100);
 }
+function abrirBloquearDataEditar(id, dataAtual, motivoAtual){
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Editar bloqueio</h3>
+    <div class="field"><label>Data</label><input id="bloq-data" type="date" value="${dataAtual||""}"></div>
+    <div class="field"><label>Motivo (opcional)</label><input id="bloq-motivo" type="text" value="${motivoAtual||""}" placeholder="Ex: Férias, Igreja, Compromisso pessoal"></div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="atualizarBloqueio('${id}')">Salvar</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function atualizarBloqueio(id){
+  const data = document.getElementById("bloq-data")?.value;
+  const motivo = document.getElementById("bloq-motivo")?.value.trim();
+  if(!data){ toast("Informe a data."); return; }
+  try{
+    await db.collection("bloqueios").doc(id).update({ data, motivo: motivo||"" });
+    toast("Bloqueio atualizado.");
+    closeModal();
+  }catch(err){ console.error(err); toast("Erro ao atualizar bloqueio."); }
+}
+
 function abrirBloquearData(dataPreenchida){
   document.getElementById("modal-content").innerHTML = `
     <h3>Bloquear data</h3>
