@@ -269,6 +269,53 @@
   .chat-suggestion{ font-size:12px; padding:6px 12px; border-radius:20px; cursor:pointer; background:var(--surface-2); border:1px solid var(--border-solid); color:var(--muted); }
   .chat-suggestion:hover{ border-color:var(--text); color:var(--text); }
 
+  /* ---- CORES DE EVENTOS (calendário e badges) ---- */
+  :root{ --cor-aniversario:#f97316; --cor-batizado:#06b6d4; --cor-casamento:#a855f7; --cor-ensaio:#3b82f6; --cor-outro:#6b7280; --cor-fechado:#22c55e; --cor-orcamento:#eab308; --cor-perdido:#ef4444; }
+  .ev-chip{ display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:20px; font-size:11px; font-weight:600; color:#fff; white-space:nowrap; }
+  .ev-chip.aniversario{ background:var(--cor-aniversario); }
+  .ev-chip.batizado{ background:var(--cor-batizado); }
+  .ev-chip.casamento_civil,.ev-chip.casamento_religioso{ background:var(--cor-casamento); }
+  .ev-chip.ensaio{ background:var(--cor-ensaio); }
+  .ev-chip.outro{ background:var(--cor-outro); }
+  .ev-chip.status-orcamento{ background:var(--cor-orcamento); color:#1a1a1a; }
+  .ev-chip.status-perdido{ background:var(--cor-perdido); }
+  .ev-chip.status-fechado,.ev-chip.status-realizado,.ev-chip.status-entregue{ background:var(--cor-fechado); }
+
+  /* ---- CALENDÁRIO ---- */
+  .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .cal-nav h3{ font-family:'Fraunces',serif; font-size:20px; margin:0; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+  .cal-header-day{ text-align:center; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); padding:6px 0; }
+  .cal-day{
+    min-height:72px; background:var(--surface-2); border-radius:6px; padding:6px;
+    cursor:pointer; position:relative; transition:.15s;
+  }
+  .cal-day:hover{ background:var(--border-solid); }
+  .cal-day.other-month{ opacity:.3; }
+  .cal-day.today{ outline:2px solid var(--text); outline-offset:-2px; }
+  .cal-day.blocked{ background:repeating-linear-gradient(45deg,var(--surface-2),var(--surface-2) 4px,var(--border-solid) 4px,var(--border-solid) 8px); }
+  .cal-day-num{ font-size:12px; font-weight:600; margin-bottom:4px; }
+  .cal-day-events{ display:flex; flex-direction:column; gap:2px; }
+  .cal-ev{ font-size:10px; padding:1px 5px; border-radius:3px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cal-ev.aniversario{ background:var(--cor-aniversario); }
+  .cal-ev.batizado{ background:var(--cor-batizado); }
+  .cal-ev.casamento_civil,.cal-ev.casamento_religioso{ background:var(--cor-casamento); }
+  .cal-ev.ensaio{ background:var(--cor-ensaio); }
+  .cal-ev.outro{ background:var(--cor-outro); }
+  .cal-legend{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; font-size:11px; }
+  .cal-legend-item{ display:flex; align-items:center; gap:4px; }
+  .cal-legend-dot{ width:10px; height:10px; border-radius:50%; }
+  @media(max-width:900px){
+    .cal-day{ min-height:44px; padding:3px; }
+    .cal-day-num{ font-size:11px; }
+    .cal-ev{ display:none; } /* no mobile mostra só o ponto */
+    .cal-day.has-events::after{ content:'•'; position:absolute; bottom:3px; right:5px; font-size:14px; color:var(--amber); }
+  }
+
+  /* ---- AÇÕES RÁPIDAS ---- */
+  .quick-actions{ display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; padding:12px; background:var(--surface-2); border-radius:8px; }
+  .quick-actions button{ font-size:13px; padding:8px 12px; }
+
   .comentario-item{ padding:10px 0; border-bottom:1px solid var(--border); }
   .comentario-item:last-child{ border-bottom:none; }
   .comentario-data{ font-size:11px; color:var(--muted-2); margin-bottom:4px; }
@@ -357,7 +404,7 @@ const db = firebase.firestore();
    STATE
    ========================================================= */
 const state = {
-  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], pagamentos: [],
+  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], pagamentos: [], recibos: [], bloqueios: [],
   config: {},
   currentPage: "dashboard"
 };
@@ -443,7 +490,7 @@ auth.onAuthStateChanged(user=>{
    FIRESTORE LIVE LISTENERS
    ========================================================= */
 function startListeners(){
-  ["leads","clientes","criancas","casamentos","eventos","pagamentos"].forEach(col=>{
+  ["leads","clientes","criancas","casamentos","eventos","pagamentos","recibos","bloqueios"].forEach(col=>{
     const unsub = db.collection(col).onSnapshot(
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
@@ -576,6 +623,8 @@ const SCHEMAS = {
       {key:"outroDescricao", label:"Especifique o tipo de evento", type:"text", visibleIf: fs=>fs.tipo==="outro"},
       {key:"data", label:"Data", type:"date", required:true},
       {key:"horario", label:"Horário", type:"time"},
+      {key:"nomeEvento", label:"Nome do evento (opcional, ex: Festinha da Sofia)", type:"text"},
+      {key:"endereco", label:"Endereço / Local", type:"text"},
       {key:"clienteId", label:"Cliente responsável", type:"ref", ref:"clientes", required:true},
       {key:"conjugeEvento", label:"Cônjuge", type:"text", visibleIf: fs=>["casamento_civil","casamento_religioso"].includes(fs.tipo)},
       {key:"criancaId", label:"Criança (opcional)", type:"ref", ref:"criancas", visibleIf: fs=>!["casamento_civil","casamento_religioso"].includes(fs.tipo)},
@@ -705,6 +754,7 @@ function totalPago(eventoId){
    ========================================================= */
 const NAV_ITEMS = [
   {key:"dashboard", label:"Dashboard"},
+  {key:"agenda", label:"📅 Agenda"},
   {key:"leads", label:"Leads"},
   {key:"eventos", label:"Eventos"},
   {key:"clientes", label:"Clientes"},
@@ -839,6 +889,7 @@ function renderPage(page){
   const main = document.getElementById("main");
   if(page==="dashboard") return renderDashboard(main);
   if(page==="eventos") return renderEventosPage(main);
+  if(page==="agenda") return renderAgenda(main);
   if(page==="leads") return renderLeadsPage(main);
   if(page==="relatorios") return renderRelatorios(main);
   if(page==="conversar") return renderConversar(main);
@@ -1155,7 +1206,153 @@ function limparChat(){
 /* =========================================================
    LEADS — PÁGINA COM PILHAS
    ========================================================= */
-const leadsExpandidos = new Set(["ativos"]); // "ativos", "convertidos", "perdidos"
+/* =========================================================
+   AGENDA — CALENDÁRIO + DISPONIBILIDADE + BLOQUEIOS
+   ========================================================= */
+let calAno = new Date().getFullYear();
+let calMes = new Date().getMonth();
+const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+function renderAgenda(main){
+  main.innerHTML = `
+    <div class="page-header">
+      <div><div class="eyebrow">Agenda</div><h2>Calendário</h2></div>
+      <div class="page-actions">
+        <button class="ghost" onclick="abrirBloquearData('')">🚫 Bloquear data</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cal-nav">
+        <button class="ghost" onclick="navCal(-1)">‹</button>
+        <h3>${MESES[calMes]} ${calAno}</h3>
+        <button class="ghost" onclick="navCal(1)">›</button>
+      </div>
+      <div class="cal-grid">
+        ${DIAS_SEMANA.map(d=>`<div class="cal-header-day">${d}</div>`).join("")}
+        ${renderGridCal()}
+      </div>
+      <div class="cal-legend">
+        ${[["var(--cor-aniversario)","Aniversário"],["var(--cor-batizado)","Batizado"],["var(--cor-casamento)","Casamento"],["var(--cor-ensaio)","Ensaio"],["var(--cor-fechado)","Confirmado"],["var(--cor-orcamento)","Aguard. sinal"]].map(([c,l])=>`<div class="cal-legend-item"><div class="cal-legend-dot" style="background:${c}"></div>${l}</div>`).join("")}
+      </div>
+    </div>
+  `;
+}
+function navCal(dir){
+  calMes += dir;
+  if(calMes>11){calMes=0;calAno++;}
+  if(calMes<0){calMes=11;calAno--;}
+  renderPage("agenda");
+}
+function renderGridCal(){
+  const primeiroDia = new Date(calAno, calMes, 1).getDay();
+  const ultimoDia = new Date(calAno, calMes+1, 0).getDate();
+  const hoje = new Date().toISOString().slice(0,10);
+  let cells = [];
+  for(let i=0;i<primeiroDia;i++){
+    const d = new Date(calAno, calMes, i-primeiroDia+1);
+    cells.push(renderDiaCal(d,true));
+  }
+  for(let d=1;d<=ultimoDia;d++) cells.push(renderDiaCal(new Date(calAno,calMes,d),false));
+  while(cells.length%7!==0) cells.push(renderDiaCal(new Date(calAno,calMes+1,cells.length-primeiroDia-ultimoDia+1),true));
+  return cells.join("");
+}
+function isoFromDate(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function renderDiaCal(data, outromes){
+  const iso = isoFromDate(data);
+  const hoje = new Date().toISOString().slice(0,10);
+  const evsDia = state.eventos.filter(e=>e.data===iso);
+  const bloqDia = state.bloqueios.find(b=>b.data===iso);
+  const classes = ["cal-day", outromes?"other-month":"", iso===hoje?"today":"", bloqDia?"blocked":"", evsDia.length?"has-events":""].filter(Boolean).join(" ");
+  return `<div class="${classes}" onclick="abrirDiaCal('${iso}')">
+    <div class="cal-day-num">${data.getDate()}</div>
+    <div class="cal-day-events">
+      ${evsDia.slice(0,3).map(e=>`<div class="cal-ev ${corClasseTipo(e)}">${e.horario?e.horario.slice(0,5)+" ":""}${nomeEventoCurto(e)}</div>`).join("")}
+      ${evsDia.length>3?`<div style="font-size:10px;color:var(--muted)">+${evsDia.length-3} mais</div>`:""}
+    </div>
+    ${bloqDia?`<div style="font-size:9px;color:var(--muted-2);margin-top:2px;">${bloqDia.motivo||"Bloqueado"}</div>`:""}
+  </div>`;
+}
+function corClasseTipo(e){
+  const s = e.status||"orcamento";
+  if(s==="perdido") return "status-perdido";
+  if(["fechado","realizado","entregue"].includes(s)) return "status-fechado";
+  if(s==="orcamento") return "status-orcamento";
+  return e.tipo||"outro";
+}
+function corHexTipo(tipo){ return {aniversario:"#f97316",batizado:"#06b6d4",casamento_civil:"#a855f7",casamento_religioso:"#a855f7",ensaio:"#3b82f6"}[tipo]||"#6b7280"; }
+function nomeEventoCurto(e){
+  if(e.nomeEvento) return e.nomeEvento.split(" ").slice(0,3).join(" ");
+  const c = state.clientes.find(x=>x.id===e.clienteId);
+  return c ? c.nome.split(" ")[0] : capitalize((e.tipo||"outro").replace("_"," "));
+}
+function calcDisponibilidade(iso){
+  const bloq = state.bloqueios.find(b=>b.data===iso);
+  if(bloq) return {label:"Bloqueada 🚫", cor:"#6b7280"};
+  const evs = state.eventos.filter(e=>e.data===iso);
+  if(!evs.length) return {label:"Livre ✓", cor:"#22c55e"};
+  const temFechado = evs.some(e=>["fechado","realizado","entregue"].includes(e.status||""));
+  if(temFechado) return {label:"Ocupada ●", cor:"#ef4444"};
+  return {label:"Reservada (orçamento)", cor:"#eab308"};
+}
+function abrirDiaCal(iso){
+  const evsDia = state.eventos.filter(e=>e.data===iso).sort((a,b)=>(a.horario||"").localeCompare(b.horario||""));
+  const bloqDia = state.bloqueios.find(b=>b.data===iso);
+  const disp = calcDisponibilidade(iso);
+  document.getElementById("modal-content").innerHTML = `
+    <h3>${formatDate(iso)}</h3>
+    <div style="margin-bottom:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span style="background:${disp.cor}; color:#fff; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600;">${disp.label}</span>
+      ${bloqDia ? `<button class="ghost sm" onclick="desbloquearData('${bloqDia.id}')">Remover bloqueio</button>` : `<button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirBloquearData('${iso}'),200)">Bloquear esta data</button>`}
+    </div>
+    ${evsDia.length ? evsDia.map(e=>`
+      <div style="border-left:4px solid ${corHexTipo(e.tipo)}; background:var(--surface-2); border-radius:0 8px 8px 0; padding:12px; margin-bottom:10px; cursor:pointer;" onclick="closeModal();setTimeout(()=>openView('eventos','${e.id}'),200)">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+          <span class="ev-chip ${e.tipo||'outro'}">${capitalize((e.tipo||"outro").replace("_"," "))}</span>
+          ${e.horario?`<span style="font-size:13px;font-weight:600;">${e.horario}</span>`:""}
+          <span class="badge ${e.status||'orcamento'}" style="font-size:10px;">${statusLabel(e.status||"orcamento")}</span>
+        </div>
+        <div style="font-weight:600; margin-bottom:2px;">${e.nomeEvento||nomeRef("clientes",e.clienteId)}</div>
+        ${e.endereco?`<div style="font-size:12px;color:var(--muted);">📍 ${e.endereco}</div>`:""}
+      </div>
+    `).join("") : `<div style="font-size:13px;color:var(--muted-2);padding:12px 0;">Nenhum evento nesta data.</div>`}
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Fechar</button>
+      <button class="primary" onclick="closeModal();openFormComData('${iso}')">+ Evento aqui</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+function openFormComData(iso){
+  openForm("eventos");
+  setTimeout(()=>{ formState.data=iso; refreshFormFields(); },100);
+}
+function abrirBloquearData(dataPreenchida){
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Bloquear data</h3>
+    <div class="field"><label>Data</label><input id="bloq-data" type="date" value="${dataPreenchida||""}"></div>
+    <div class="field"><label>Motivo (opcional)</label><input id="bloq-motivo" type="text" placeholder="Ex: Férias, Igreja, Compromisso pessoal"></div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="salvarBloqueio()">Bloquear</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function salvarBloqueio(){
+  const data = document.getElementById("bloq-data")?.value;
+  const motivo = document.getElementById("bloq-motivo")?.value.trim();
+  if(!data){toast("Informe a data.");return;}
+  await db.collection("bloqueios").add({data,motivo:motivo||"",criadoEm:new Date().toISOString()});
+  toast("Data bloqueada."); closeModal();
+}
+async function desbloquearData(id){
+  if(!confirm("Remover bloqueio desta data?")) return;
+  await db.collection("bloqueios").doc(id).delete();
+  toast("Bloqueio removido."); closeModal();
+}
+
+const leadsExpandidos = new Set(["ativos"]);
 
 function renderLeadsPage(main){
   const ativos = state.leads.filter(l=>!["convertido","perdido"].includes(l.status||"novo"))
@@ -1325,6 +1522,17 @@ function renderRelatorios(main){
   const perdidosSemMotivo = state.eventos.filter(e=>e.status==="perdido" && !e.motivoPerda).length
     + state.leads.filter(l=>l.status==="perdido" && !l.motivoPerda).length;
 
+  // ---------- Histórico de recibos ----------
+  const [buscaRecibo, setBuscaRecibo] = [window._buscaRecibo||"", v=>{window._buscaRecibo=v;}];
+  let recibosVisiveis = [...state.recibos].sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+  if(buscaRecibo){
+    const t = buscaRecibo.toLowerCase();
+    recibosVisiveis = recibosVisiveis.filter(r=>{
+      const c = state.clientes.find(x=>x.id===r.clienteId);
+      return (r.numero||"").toLowerCase().includes(t) || (c?.nome||"").toLowerCase().includes(t);
+    });
+  }
+
   main.innerHTML = `
     <div class="page-header"><div><div class="eyebrow">Visão de negócio</div><h2>Relatórios</h2></div></div>
 
@@ -1441,6 +1649,31 @@ function renderRelatorios(main){
         </tbody></table>
       </div>
     ` : ""}
+
+    <div class="section-title">🧾 Histórico de recibos</div>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <input type="text" placeholder="Buscar por cliente ou número..." value="${buscaRecibo}"
+        oninput="window._buscaRecibo=this.value; renderPage('relatorios')" style="flex:1;">
+    </div>
+    <div class="card" style="padding:0;">
+      ${recibosVisiveis.length ? `<table><thead><tr><th>Nº</th><th>Cliente</th><th>Valor</th><th>Forma</th><th>Situação</th><th></th></tr></thead><tbody>
+        ${recibosVisiveis.map(r=>{
+          const ev = state.eventos.find(e=>e.id===r.eventoId);
+          const cli = state.clientes.find(c=>c.id===r.clienteId);
+          return `<tr>
+            <td><b>${r.numero||"—"}</b></td>
+            <td>${cli?.nome||"—"}</td>
+            <td>${money(r.valor)}</td>
+            <td>${capitalize(r.forma||"—")}</td>
+            <td>${r.quitado?"✅ Quitado":"⚠️ Pendente"}</td>
+            <td class="row-actions">
+              ${ev ? `<button class="sm" onclick="exibirRecibo(state.eventos.find(e=>e.id==='${r.eventoId}'), state.recibos.find(x=>x.id==='${r.id}'))">Ver</button>` : ""}
+              <button class="sm danger" onclick="if(confirm('Excluir este recibo?')) db.collection('recibos').doc('${r.id}').delete().then(()=>toast('Recibo excluído.'))">Excluir</button>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody></table>` : `<div class="empty-state">Nenhum recibo gerado ainda.</div>`}
+    </div>
   `;
 }
 
@@ -1646,6 +1879,187 @@ async function excluirEFechar(col, id){
     toast("Erro ao excluir. Veja o console.");
   }
 }
+/* =========================================================
+   GOOGLE CALENDAR
+   ========================================================= */
+function buildGCalUrl(ev){
+  const titulo = ev.nomeEvento || capitalize((ev.tipo||"evento").replace("_"," ")) + " — " + nomeRef("clientes",ev.clienteId);
+  const dataBase = (ev.data||"").replace(/-/g,"");
+  let datas;
+  if(ev.horario){
+    const [h,m] = ev.horario.split(":");
+    const inicio = dataBase+"T"+h.padStart(2,"0")+(m||"00").padStart(2,"0")+"00";
+    const horaFim = String(Number(h)+2).padStart(2,"0");
+    const fim = dataBase+"T"+horaFim+(m||"00").padStart(2,"0")+"00";
+    datas = inicio+"/"+fim;
+  } else {
+    datas = dataBase+"/"+dataBase;
+  }
+  const descricao = `Cliente: ${nomeRef("clientes",ev.clienteId)}\nValor: ${money(ev.valorContratado)}\nSaldo: ${money(Math.max(0,(Number(ev.valorContratado)||0)-totalPago(ev.id)))}`;
+  const params = new URLSearchParams({
+    action:"TEMPLATE", text:titulo, dates:datas,
+    details:descricao, location:ev.endereco||""
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+/* =========================================================
+   MENSAGEM DE CONFIRMAÇÃO
+   ========================================================= */
+function gerarMsgConfirmacao(ev){
+  const cliente = state.clientes.find(c=>c.id===ev.clienteId);
+  const nomeCliente = cliente ? cliente.nome : "Cliente";
+  const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
+  const pago = totalPago(ev.id);
+  const tipo = ev.tipo||"outro";
+  const emojis = {aniversario:"🎂",batizado:"✝️",casamento_civil:"💍",casamento_religioso:"⛪",ensaio:"📸",outro:"📸"};
+  const prefixos = {
+    aniversario:`${emojis.aniversario} Festinha de aniversário${ev.nomeEvento?" — "+ev.nomeEvento:""}`,
+    batizado:`${emojis.batizado} Batizado${ev.nomeEvento?" — "+ev.nomeEvento:""}`,
+    casamento_civil:`${emojis.casamento_civil} Casamento Civil${ev.nomeEvento?" — "+ev.nomeEvento:""}`,
+    casamento_religioso:`${emojis.casamento_religioso} Casamento Religioso${ev.nomeEvento?" — "+ev.nomeEvento:""}`,
+    ensaio:`${emojis.ensaio} Ensaio fotográfico${ev.nomeEvento?" — "+ev.nomeEvento:""}`,
+    outro:`📸 ${ev.nomeEvento||"Evento"}`
+  };
+  const linhas = [
+    prefixos[tipo]||prefixos.outro,
+    tipo==="aniversario"||tipo==="batizado" ? `${tipo==="aniversario"?"🎉":"✨"} ${nomeCliente}` : `${emojis[tipo]||"📸"} ${nomeCliente}`,
+    `📅 Data: ${formatDate(ev.data)}`,
+    ev.horario ? `🕓 Horário: ${ev.horario}h` : null,
+    ev.endereco ? `📍 Endereço: ${ev.endereco}` : null,
+    pago>0 ? `💰 Sinal recebido: ${money(pago)}` : null,
+    saldo>0 ? `💵 Restante: ${money(saldo)} no dia do evento.` : "✅ Pagamento quitado.",
+    "",
+    "Nos vemos em breve! 🙂"
+  ].filter(l=>l!==null);
+  return linhas.join("\n");
+}
+function copiarMsgConfirmacao(eventoId){
+  const ev = state.eventos.find(e=>e.id===eventoId);
+  if(!ev) return;
+  const msg = gerarMsgConfirmacao(ev);
+  const cliente = state.clientes.find(c=>c.id===ev.clienteId);
+  const wa = cliente ? whatsappLink(cliente.telefone) : null;
+  document.getElementById("modal-content").innerHTML = `
+    <h3>📋 Mensagem de confirmação</h3>
+    <textarea id="msg-confirmacao-txt" rows="10" style="width:100%;font-size:13px;">${msg}</textarea>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Fechar</button>
+      <button class="ghost" onclick="navigator.clipboard.writeText(document.getElementById('msg-confirmacao-txt').value).then(()=>toast('Copiado!'))">Copiar</button>
+      ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent(document.getElementById('msg-confirmacao-txt').value),'_blank')">Enviar WhatsApp</button>` : ""}
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+/* =========================================================
+   RECIBOS
+   ========================================================= */
+async function proximoNumeroRecibo(){
+  const ano = new Date().getFullYear();
+  const deste = state.recibos.filter(r=>r.numero?.startsWith(String(ano)+"-"));
+  if(!deste.length) return `${ano}-100`;
+  const numeros = deste.map(r=>Number(r.numero?.split("-")[1]||0));
+  return `${ano}-${Math.max(...numeros)+1}`;
+}
+async function abrirGerarRecibo(eventoId){
+  const ev = state.eventos.find(e=>e.id===eventoId);
+  if(!ev) return;
+  const cliente = state.clientes.find(c=>c.id===ev.clienteId);
+  const pago = totalPago(ev.id);
+  const saldo = (Number(ev.valorContratado)||0) - pago;
+  const ultimoPag = [...state.pagamentos].filter(p=>p.eventoId===eventoId).sort((a,b)=>(b.data||"").localeCompare(a.data||""))[0];
+  const numSugerido = await proximoNumeroRecibo();
+  // verifica se já tem recibo pra esse evento
+  const reciboExistente = state.recibos.find(r=>r.eventoId===eventoId);
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>🧾 Gerar recibo</h3>
+    <div class="field"><label>Número do recibo</label>
+      <input id="recibo-num" type="text" value="${reciboExistente?.numero||numSugerido}">
+    </div>
+    <div class="field"><label>Forma de pagamento</label>
+      <select id="recibo-forma" style="width:100%">
+        ${["pix","cartao","dinheiro","transferencia"].map(o=>`<option value="${o}" ${ultimoPag?.forma===o?"selected":""}>${capitalize(o)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="field"><label>Valor no recibo</label>
+      <select id="recibo-valor-tipo" style="width:100%">
+        <option value="pago">Valor já recebido (${money(pago)})</option>
+        <option value="total">Valor total (${money(ev.valorContratado)})</option>
+      </select>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+      Situação: ${saldo<=0 ? "✅ Quitado" : `⚠️ Saldo pendente de ${money(saldo)}`}
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="confirmarGerarRecibo('${eventoId}')">Gerar</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function confirmarGerarRecibo(eventoId){
+  const numero = document.getElementById("recibo-num")?.value.trim();
+  const forma = document.getElementById("recibo-forma")?.value;
+  const valorTipo = document.getElementById("recibo-valor-tipo")?.value;
+  if(!numero){toast("Informe o número do recibo.");return;}
+  // verifica duplicata
+  const existe = state.recibos.find(r=>r.numero===numero && r.eventoId!==eventoId);
+  if(existe){toast(`Já existe um recibo com o número ${numero}. Altere antes de continuar.`);return;}
+  const ev = state.eventos.find(e=>e.id===eventoId);
+  const pago = totalPago(eventoId);
+  const saldo = (Number(ev.valorContratado)||0) - pago;
+  const valorRecibo = valorTipo==="total" ? Number(ev.valorContratado)||0 : pago;
+  // salva ou atualiza o recibo no Firestore
+  const reciboExistente = state.recibos.find(r=>r.eventoId===eventoId);
+  const dadosRecibo = { eventoId, clienteId:ev.clienteId||"", numero, forma, valor:valorRecibo, quitado:saldo<=0, criadoEm:new Date().toISOString() };
+  if(reciboExistente){
+    await db.collection("recibos").doc(reciboExistente.id).update(dadosRecibo);
+  } else {
+    await db.collection("recibos").add(dadosRecibo);
+  }
+  const recibo = { ...dadosRecibo, id: reciboExistente?.id||"" };
+  exibirRecibo(ev, recibo);
+}
+function exibirRecibo(ev, recibo){
+  const cliente = state.clientes.find(c=>c.id===ev.clienteId);
+  const nomeCliente = cliente ? cliente.nome : "—";
+  const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
+  const wa = cliente ? whatsappLink(cliente.telefone) : null;
+  const tipoLabel = ev.tipo==="outro" && ev.outroDescricao ? ev.outroDescricao : capitalize((ev.tipo||"").replace("_"," "));
+  const txt = [
+    "📸 Cobertura Fotográfica Confirmada",
+    `Recibo nº ${recibo.numero}`,
+    "",
+    `Cliente: ${nomeCliente}`,
+    `Evento: ${ev.nomeEvento||tipoLabel}`,
+    `Data: ${formatDate(ev.data)}`,
+    ev.endereco ? `Local: ${ev.endereco}` : null,
+    ev.horario ? `Horário: ${ev.horario}h` : null,
+    `Valor recebido: ${money(recibo.valor)}`,
+    `Forma de pagamento: ${capitalize(recibo.forma||"—")}`,
+    `Situação: ${recibo.quitado ? "Quitado ✅" : `Saldo pendente: ${money(saldo)} ⚠️`}`,
+    "",
+    "A cobertura fotográfica deste evento está confirmada e o pagamento foi recebido conforme combinado.",
+    "",
+    "Obrigado pela confiança no meu trabalho. Será uma alegria registrar este momento especial e transformá-lo em lembranças que permanecerão por muitos anos.",
+    "",
+    "Yuri Silva Fotografias"
+  ].filter(l=>l!==null).join("\n");
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>🧾 Recibo nº ${recibo.numero}</h3>
+    <textarea id="recibo-txt" rows="16" style="width:100%;font-size:13px;">${txt}</textarea>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Fechar</button>
+      <button class="ghost" onclick="navigator.clipboard.writeText(document.getElementById('recibo-txt').value).then(()=>toast('Recibo copiado!'))">Copiar</button>
+      ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent(document.getElementById('recibo-txt').value),'_blank')">Enviar WhatsApp</button>` : ""}
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
 function copiarResumoEvento(eventoId){
   const ev = state.eventos.find(e=>e.id===eventoId);
   if(!ev) return;
@@ -1690,13 +2104,30 @@ function renderViewGeneric(item, col){
 
 function renderViewEvento(ev){
   const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
+  const pago = totalPago(ev.id);
   const symbols = {orcamento:'○', negociacao:'◐', fechado:'●', realizado:'●', entregue:'✓', perdido:'✕'};
   const s = ev.status || 'orcamento';
-  return `<h3>${ev.tipo==="outro" && ev.outroDescricao ? ev.outroDescricao : capitalize((ev.tipo||"").replace("_"," "))} · ${formatDate(ev.data)}</h3>
+  const cliente = state.clientes.find(c=>c.id===ev.clienteId);
+  const wa = cliente ? whatsappLink(cliente.telefone) : null;
+  const gcalUrl = buildGCalUrl(ev);
+  const nomeDisplay = ev.tipo==="outro" && ev.outroDescricao ? ev.outroDescricao : capitalize((ev.tipo||"").replace("_"," "));
+
+  return `<h3>${nomeDisplay} · ${formatDate(ev.data)}</h3>
+
+    <div class="quick-actions">
+      ${wa ? `<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
+      ${ev.endereco ? `<button onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.endereco)}','_blank')">🗺️ Maps</button>` : ""}
+      <button onclick="window.open('${gcalUrl}','_blank')">📅 Google Agenda</button>
+      <button onclick="copiarMsgConfirmacao('${ev.id}')">📋 Msg confirmação</button>
+      <button onclick="abrirGerarRecibo('${ev.id}')">🧾 Gerar recibo</button>
+    </div>
+
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${ev.clienteId}');return false;">${nomeRef("clientes",ev.clienteId)}</a>`)}
+    ${ev.nomeEvento ? viewRow("Nome do evento", ev.nomeEvento) : ""}
     ${ev.conjugeEvento ? viewRow("Cônjuge", ev.conjugeEvento) : ""}
     ${ev.criancaId ? viewRow("Criança", `<a href="#" onclick="openView('criancas','${ev.criancaId}');return false;">${nomeRef("criancas",ev.criancaId)}</a>`) : ""}
     ${ev.casamentoId ? viewRow("Casamento", `<a href="#" onclick="openView('casamentos','${ev.casamentoId}');return false;">${nomeRef("casamentos",ev.casamentoId)}</a>`) : ""}
+    ${ev.endereco ? viewRow("Endereço", ev.endereco) : ""}
     ${ev.recepcao!==undefined && ev.recepcao!=="" ? viewRow("Houve recepção?", ev.recepcao ? "Sim" : "Não") : ""}
     ${viewRow("Horário", ev.horario || "—")}
     ${viewRow("Status", `<span class="badge ${s}">${symbols[s]||""} ${statusLabel(s)}</span>`)}
@@ -1712,7 +2143,8 @@ function renderViewEvento(ev){
       }
       return viewRow("Valor contratado", money(final));
     })()}
-    ${viewRow("Saldo pendente", saldo>0 ? money(saldo) : "Pago")}
+    ${viewRow("Recebido", money(pago))}
+    ${viewRow("Saldo pendente", saldo>0 ? `<span style="color:#ef4444;font-weight:600;">${money(saldo)}</span>` : '<span style="color:#22c55e;">Pago ✓</span>')}
     ${ev.tags && ev.tags.length ? viewRow("Tags", ev.tags.map(t=>`<span class="tag-chip">${t}</span>`).join("")) : ""}
     ${ev.dataEntregaPrevista ? viewRow("Entrega prevista", formatDate(ev.dataEntregaPrevista)) : ""}
     ${ev.dataEntregaReal ? viewRow("Entrega realizada", formatDate(ev.dataEntregaReal)) : ""}
@@ -2157,7 +2589,7 @@ function renderViewCliente(cli){
     .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
 
   return `<h3>${cli.nome}${cli.nomeConjuge ? " & "+cli.nomeConjuge : ""}</h3>
-    ${temIA() ? `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📷 Atualizar com print (IA)</button>` : ""}
+    ${temIA() ? `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📷 Atualizar via print ou contato .vcf (IA)</button>` : `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📋 Atualizar via contato .vcf</button>`}
     ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener">${cli.telefone} ↗ WhatsApp</a>` : cli.telefone) : "—")}
     ${viewRow("Cidade", cli.cidade || "—")}
     ${viewRow("Origem", cli.origem ? capitalize(cli.origem) : "—")}
@@ -2306,15 +2738,51 @@ function triggerPrintUpload(col){
 function triggerClientePrintUpload(clienteId){
   const input = document.createElement("input");
   input.type = "file";
-  input.accept = "image/*";
-  input.onchange = (e)=> processarPrintCliente(clienteId, e.target.files[0]);
+  input.accept = "image/*,.vcf,text/vcard";
+  input.onchange = (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    if(file.name?.toLowerCase().endsWith(".vcf") || file.type?.includes("vcard")){
+      processarVcfCliente(clienteId, file);
+    } else {
+      processarPrintCliente(clienteId, file);
+    }
+  };
   input.click();
+}
+
+async function processarVcfCliente(clienteId, file){
+  toast("Lendo contato (.vcf)...");
+  const reader = new FileReader();
+  reader.onerror = ()=> toast("Erro ao ler o arquivo.");
+  reader.onload = (e)=>{
+    const texto = e.target.result || "";
+    const dados = {};
+    // parse básico de vCard
+    const linhas = texto.replace(/\r\n|\r/g,"\n").split("\n");
+    for(const linha of linhas){
+      if(linha.startsWith("FN:")) dados.nome = linha.slice(3).trim();
+      if(linha.startsWith("N:") && !dados.nome){
+        const partes = linha.slice(2).split(";").filter(Boolean);
+        dados.nome = partes.reverse().join(" ").trim();
+      }
+      const telMatch = linha.match(/^TEL[^:]*:(.*)/);
+      if(telMatch && !dados.telefone) dados.telefone = telMatch[1].replace(/[^\d+]/g,"");
+      const emailMatch = linha.match(/^EMAIL[^:]*:(.*)/);
+      if(emailMatch && !dados.email) dados.email = emailMatch[1].trim();
+    }
+    if(!dados.nome && !dados.telefone){ toast("Não encontrei dados no arquivo .vcf."); return; }
+    abrirConfirmacaoPrintCliente(clienteId, dados);
+  };
+  reader.readAsText(file, "utf-8");
 }
 
 async function processarPrintCliente(clienteId, file){
   if(!file) return;
-  toast("Lendo a imagem...");
+  const t = document.getElementById("toast");
+  if(t){ t.textContent = "📷 Lendo a imagem..."; t.style.display="block"; }
   const reader = new FileReader();
+  reader.onerror = ()=> toast("Erro ao ler a imagem.");
   reader.onload = async ()=>{
     const base64 = reader.result.split(",")[1];
     const mimeType = file.type || "image/png";
@@ -2393,8 +2861,10 @@ async function confirmarAtualizacaoCliente(clienteId){
 
 async function processarPrint(col, file){
   if(!file) return;
-  toast("Lendo a imagem...");
+  const t = document.getElementById("toast");
+  if(t){ t.textContent = "📷 Lendo a imagem..."; t.style.display="block"; }
   const reader = new FileReader();
+  reader.onerror = ()=> toast("Erro ao ler o arquivo de imagem.");
   reader.onload = async ()=>{
     const base64 = reader.result.split(",")[1];
     const mimeType = file.type || "image/png";
