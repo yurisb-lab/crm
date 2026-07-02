@@ -1236,8 +1236,83 @@ function renderAgenda(main){
         ${[["var(--cor-aniversario)","Aniversário"],["var(--cor-batizado)","Batizado"],["var(--cor-casamento)","Casamento"],["var(--cor-ensaio)","Ensaio"],["var(--cor-fechado)","Confirmado"],["var(--cor-orcamento)","Aguard. sinal"]].map(([c,l])=>`<div class="cal-legend-item"><div class="cal-legend-dot" style="background:${c}"></div>${l}</div>`).join("")}
       </div>
     </div>
+
+    <div class="section-title">Lista de eventos por mês</div>
+    ${renderAgendaLista()}
   `;
 }
+
+function renderAgendaLista(){
+  // agrupa todos os eventos por "AAAA-MM"
+  const porMes = {};
+  state.eventos.filter(e=>e.data).forEach(e=>{
+    const chave = e.data.slice(0,7);
+    if(!porMes[chave]) porMes[chave] = [];
+    porMes[chave].push(e);
+  });
+  const mesesOrdenados = Object.keys(porMes).sort().reverse();
+  if(!mesesOrdenados.length) return `<div class="card"><div class="empty-state">Nenhum evento cadastrado ainda.</div></div>`;
+
+  return mesesOrdenados.map(chave=>{
+    const [ano, mes] = chave.split("-");
+    const titulo = `${MESES[Number(mes)-1]} ${ano}`;
+    const isOpen = agendaListaExpandida.has(chave);
+    const evs = porMes[chave].sort((a,b)=>(a.data+a.horario||"").localeCompare(b.data+b.horario||""));
+    const totalValor = evs.reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
+    return `
+      <div class="card" style="padding:0; margin-bottom:10px; overflow:hidden;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 18px; cursor:pointer;"
+             onclick="toggleAgendaMes('${chave}')">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-family:'Fraunces',serif; font-size:17px;">${isOpen?"▾":"▸"} ${titulo}</span>
+            <span style="font-size:12px; color:var(--muted);">${evs.length} evento${evs.length===1?"":"s"} · ${money(totalValor)}</span>
+          </div>
+          <span style="font-size:12px; color:var(--muted-2);">${isOpen?"recolher":"expandir"}</span>
+        </div>
+        ${isOpen ? `
+          <div style="border-top:1px solid var(--border-solid);">
+            ${evs.map(e=>{
+              const cli = state.clientes.find(c=>c.id===e.clienteId);
+              const disp = calcDisponibilidade(e.data);
+              const saldo = (Number(e.valorContratado)||0) - totalPago(e.id);
+              return `<div style="display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; cursor:pointer;"
+                          onclick="openView('eventos','${e.id}')">
+                <div style="width:6px; height:6px; border-radius:50%; background:${corHexTipo(e.tipo)}; flex-shrink:0;"></div>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-weight:600; font-size:14px;">${e.nomeEvento||nomeRef("clientes",e.clienteId)} <span style="font-weight:400; color:var(--muted); font-size:12px;">· ${formatDate(e.data)}${e.horario?" "+e.horario:""}</span></div>
+                  <div style="font-size:12px; color:var(--muted); display:flex; gap:8px; flex-wrap:wrap; margin-top:2px;">
+                    <span class="ev-chip ${e.tipo||'outro'}" style="font-size:10px;">${capitalize((e.tipo||"outro").replace("_"," "))}</span>
+                    <span class="badge ${e.status||'orcamento'}" style="font-size:10px;">${statusLabel(e.status||"orcamento")}</span>
+                    ${e.endereco?`<span>📍 ${e.endereco}</span>`:""}
+                  </div>
+                </div>
+                <div style="text-align:right; font-size:13px; flex-shrink:0;">
+                  ${money(e.valorContratado)}
+                  ${saldo>0?`<div style="font-size:11px;color:#ef4444;">-${money(saldo)}</div>`:`<div style="font-size:11px;color:#22c55e;">✓ pago</div>`}
+                </div>
+              </div>`;
+            }).join("")}
+          </div>
+        ` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
+const agendaListaExpandida = new Set();
+// abre automaticamente o mês atual e o próximo
+(()=>{
+  const hoje = new Date();
+  agendaListaExpandida.add(`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}`);
+  const prox = new Date(hoje.getFullYear(), hoje.getMonth()+1, 1);
+  agendaListaExpandida.add(`${prox.getFullYear()}-${String(prox.getMonth()+1).padStart(2,"0")}`);
+})();
+function toggleAgendaMes(chave){
+  if(agendaListaExpandida.has(chave)) agendaListaExpandida.delete(chave);
+  else agendaListaExpandida.add(chave);
+  renderPage("agenda");
+}
+
 function navCal(dir){
   calMes += dir;
   if(calMes>11){calMes=0;calAno++;}
