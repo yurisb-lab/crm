@@ -1627,24 +1627,6 @@ function renderRelatorios(main){
     return { tipo:t, n: doTipo.length, soma, media: doTipo.length ? soma/doTipo.length : 0 };
   }).filter(x=>x.n>0);
 
-  // ---------- Faturamento por mês ----------
-  const mesesMap = {}; // "2025-03" -> {eventos, contratado, recebido}
-  state.eventos.forEach(e=>{
-    if(!e.data) return;
-    const chave = e.data.slice(0,7);
-    if(!mesesMap[chave]) mesesMap[chave] = {eventos:0, contratado:0, recebido:0};
-    mesesMap[chave].eventos++;
-    mesesMap[chave].contratado += Number(e.valorContratado)||0;
-  });
-  state.pagamentos.forEach(p=>{
-    if(!p.data) return;
-    const chave = p.data.slice(0,7);
-    if(!mesesMap[chave]) mesesMap[chave] = {eventos:0, contratado:0, recebido:0};
-    mesesMap[chave].recebido += Number(p.valor)||0;
-  });
-  const chavesMeses = Object.keys(mesesMap).sort().reverse();
-  const nomesMes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-
   // ---------- Taxa de retorno de clientes ----------
   const eventosPorCliente = {};
   state.eventos.forEach(e=>{ if(e.clienteId) (eventosPorCliente[e.clienteId] = eventosPorCliente[e.clienteId]||[]).push(e); });
@@ -1772,25 +1754,6 @@ function renderRelatorios(main){
       </tbody></table>` : `<div class="empty-state">Cadastre a origem dos clientes para ver o ranking.</div>`}
     </div>
 
-    <div class="section-title">Faturamento por mês</div>
-    <div class="card" style="padding:0; overflow-x:auto;">
-      ${chavesMeses.length ? `<table><thead><tr><th>Mês</th><th>Eventos</th><th>Contratado</th><th>Recebido</th><th>Ticket médio</th><th>Vs. ano anterior</th></tr></thead><tbody>
-        ${chavesMeses.map(chave=>{
-          const [ano,mes] = chave.split("-");
-          const m = mesesMap[chave];
-          const ticketMedio = m.eventos ? m.contratado/m.eventos : 0;
-          const chaveAnoAnterior = `${Number(ano)-1}-${mes}`;
-          const anterior = mesesMap[chaveAnoAnterior];
-          let comparacao = "—";
-          if(anterior && anterior.contratado>0){
-            const variacao = ((m.contratado-anterior.contratado)/anterior.contratado)*100;
-            comparacao = `${variacao>=0?"+":""}${variacao.toFixed(0)}%`;
-          }
-          return `<tr><td>${nomesMes[Number(mes)-1]}/${ano}</td><td>${m.eventos}</td><td>${money(m.contratado)}</td><td>${money(m.recebido)}</td><td>${money(ticketMedio)}</td><td>${comparacao}</td></tr>`;
-        }).join("")}
-      </tbody></table>` : `<div class="empty-state">Sem dados suficientes ainda.</div>`}
-    </div>
-
     <div class="section-title">Taxa de retorno de clientes</div>
     <div class="grid grid-4">
       <div class="card stat-card"><div class="label">Clientes com evento</div><div class="value">${clientesComEvento.length}</div></div>
@@ -1839,31 +1802,6 @@ function renderRelatorios(main){
         </tbody></table>
       </div>
     ` : ""}
-
-    <div class="section-title">🧾 Histórico de recibos</div>
-    <div style="display:flex; gap:8px; margin-bottom:10px;">
-      <input type="text" placeholder="Buscar por cliente ou número..." value="${buscaRecibo}"
-        oninput="window._buscaRecibo=this.value; renderPage('relatorios')" style="flex:1;">
-    </div>
-    <div class="card" style="padding:0;">
-      ${recibosVisiveis.length ? `<table><thead><tr><th>Nº</th><th>Cliente</th><th>Valor</th><th>Forma</th><th>Situação</th><th></th></tr></thead><tbody>
-        ${recibosVisiveis.map(r=>{
-          const ev = state.eventos.find(e=>e.id===r.eventoId);
-          const cli = state.clientes.find(c=>c.id===r.clienteId);
-          return `<tr>
-            <td><b>${r.numero||"—"}</b></td>
-            <td>${cli?.nome||"—"}</td>
-            <td>${money(r.valor)}</td>
-            <td>${capitalize(r.forma||"—")}</td>
-            <td>${r.quitado?"✅ Quitado":"⚠️ Pendente"}</td>
-            <td class="row-actions">
-              ${ev ? `<button class="sm" onclick="exibirRecibo(state.eventos.find(e=>e.id==='${r.eventoId}'), state.recibos.find(x=>x.id==='${r.id}'))">Ver</button>` : ""}
-              <button class="sm danger" onclick="if(confirm('Excluir este recibo?')) db.collection('recibos').doc('${r.id}').delete().then(()=>toast('Recibo excluído.'))">Excluir</button>
-            </td>
-          </tr>`;
-        }).join("")}
-      </tbody></table>` : `<div class="empty-state">Nenhum recibo gerado ainda.</div>`}
-    </div>
   `;
 }
 
@@ -1995,6 +1933,9 @@ function renderFinanceiroPage(main){
 
     ${anos.length ? anos.map(ano=>renderPilhaFinanceiro(ano, porAno[ano])).join("") :
       `<div class="card"><div class="empty-state"><div class="serif">Nenhum pagamento registrado</div>Adicione o primeiro pagamento para começar.</div></div>`}
+
+    ${renderFaturamentoPorMes()}
+    ${renderHistoricoRecibos()}
   `;
 }
 
@@ -2059,6 +2000,121 @@ function toggleFinanceiroAno(ano){
   if(financeiroExpandido.has(ano)) financeiroExpandido.delete(ano);
   else financeiroExpandido.add(ano);
   renderPage("pagamentos");
+}
+
+/* ---- FATURAMENTO POR MÊS (pilhas por ano) ---- */
+const fatExpandido = new Set([String(new Date().getFullYear())]);
+
+function renderFaturamentoPorMes(){
+  const nomesMes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const mesesMap = {};
+  state.eventos.forEach(e=>{
+    if(!e.data) return;
+    const chave = e.data.slice(0,7);
+    if(!mesesMap[chave]) mesesMap[chave] = {eventos:0, contratado:0, recebido:0};
+    mesesMap[chave].eventos++;
+    mesesMap[chave].contratado += Number(e.valorContratado)||0;
+  });
+  state.pagamentos.forEach(p=>{
+    if(!p.data) return;
+    const chave = p.data.slice(0,7);
+    if(!mesesMap[chave]) mesesMap[chave] = {eventos:0, contratado:0, recebido:0};
+    mesesMap[chave].recebido += Number(p.valor)||0;
+  });
+
+  const anosMap = {};
+  Object.entries(mesesMap).forEach(([chave, dados])=>{
+    const ano = chave.slice(0,4);
+    if(!anosMap[ano]) anosMap[ano] = {};
+    anosMap[ano][chave] = dados;
+  });
+  const anos = Object.keys(anosMap).sort().reverse();
+
+  return `
+    <div class="section-title">Faturamento por mês</div>
+    ${anos.map(ano=>{
+      const isOpen = fatExpandido.has(ano);
+      const meses = Object.keys(anosMap[ano]).sort().reverse();
+      const totalAno = meses.reduce((s,m)=>s+(anosMap[ano][m].recebido||0),0);
+      return `
+        <div class="card" style="padding:0; margin-bottom:10px; overflow:hidden;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 18px; cursor:pointer;"
+               onclick="fatExpandido.has('${ano}')?fatExpandido.delete('${ano}'):fatExpandido.add('${ano}'); renderPage('pagamentos')">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-family:'Fraunces',serif; font-size:17px;">${isOpen?"▾":"▸"} ${ano}</span>
+              <span style="font-size:12px; color:var(--muted);">Recebido: ${money(totalAno)}</span>
+            </div>
+            <span style="font-size:12px; color:var(--muted-2);">${isOpen?"recolher":"expandir"}</span>
+          </div>
+          ${isOpen ? `
+            <div style="border-top:1px solid var(--border-solid); overflow-x:auto;">
+              <table><thead><tr><th>Mês</th><th>Eventos</th><th>Contratado</th><th>Recebido</th><th>Ticket médio</th><th>Vs. ano ant.</th></tr></thead><tbody>
+                ${meses.map(chave=>{
+                  const [y,m] = chave.split("-");
+                  const d = anosMap[ano][chave];
+                  const ticket = d.eventos ? d.contratado/d.eventos : 0;
+                  const chaveAnt = `${Number(y)-1}-${m}`;
+                  const ant = mesesMap[chaveAnt];
+                  let vs = "—";
+                  if(ant && ant.contratado>0){
+                    const v = ((d.contratado-ant.contratado)/ant.contratado)*100;
+                    vs = `${v>=0?"+":""}${v.toFixed(0)}%`;
+                  }
+                  return `<tr>
+                    <td>${nomesMes[Number(m)-1]}</td>
+                    <td>${d.eventos}</td>
+                    <td>${money(d.contratado)}</td>
+                    <td>${money(d.recebido)}</td>
+                    <td>${money(ticket)}</td>
+                    <td>${vs}</td>
+                  </tr>`;
+                }).join("")}
+              </tbody></table>
+            </div>
+          ` : ""}
+        </div>
+      `;
+    }).join("")}
+  `;
+}
+
+/* ---- HISTÓRICO DE RECIBOS ---- */
+function renderHistoricoRecibos(){
+  const buscaRecibo = window._buscaRecibo||"";
+  let recibosVisiveis = [...state.recibos].sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+  if(buscaRecibo){
+    const t = buscaRecibo.toLowerCase();
+    recibosVisiveis = recibosVisiveis.filter(r=>{
+      const c = state.clientes.find(x=>x.id===r.clienteId);
+      return (r.numero||"").toLowerCase().includes(t)||(c?.nome||"").toLowerCase().includes(t);
+    });
+  }
+  return `
+    <div class="section-title">🧾 Histórico de recibos</div>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <input type="text" placeholder="Buscar por cliente ou número..." value="${buscaRecibo}"
+        oninput="window._buscaRecibo=this.value; renderPage('pagamentos')" style="flex:1;">
+    </div>
+    <div class="card" style="padding:0;">
+      ${recibosVisiveis.length ? `<table><thead><tr><th>Nº</th><th>Cliente</th><th>Valor</th><th>Forma</th><th>Situação</th><th></th></tr></thead><tbody>
+        ${recibosVisiveis.map(r=>{
+          const ev = state.eventos.find(e=>e.id===r.eventoId);
+          const cli = state.clientes.find(c=>c.id===r.clienteId);
+          return `<tr>
+            <td><b>${r.numero||"—"}</b></td>
+            <td>${cli?.nome||"—"}</td>
+            <td>${money(r.valor)}</td>
+            <td>${capitalize(r.forma||"—")}</td>
+            <td>${r.quitado?"✅ Quitado":"⚠️ Pendente"}</td>
+            <td class="row-actions">
+              ${ev?`<button class="sm" onclick="exibirRecibo(state.eventos.find(e=>e.id==='${r.eventoId}'),state.recibos.find(x=>x.id==='${r.id}'))">Ver</button>`:""}
+              <button class="sm danger" onclick="if(confirm('Excluir?')) db.collection('recibos').doc('${r.id}').delete().then(()=>toast('Recibo excluído.'))">Excluir</button>
+            </td>
+          </tr>`;
+        }).join("")}
+      </tbody></table>` : `<div class="empty-state">Nenhum recibo gerado ainda.</div>`}
+    </div>
+  `;
 }
 
 function renderCollectionList(col){
@@ -3274,7 +3330,7 @@ function abrirBaixaRapida(eventoId){
   const ev = state.eventos.find(e=>e.id===eventoId);
   if(!ev) return;
   const saldo = (Number(ev.valorContratado)||0) - totalPago(eventoId);
-  formState = { _baixaEventoId: eventoId, valor: saldo, data: new Date().toISOString().slice(0,10), forma: "pix", tipo: saldo===(Number(ev.valorContratado)||0) ? "saldo" : "parcela" };
+  formState = { _baixaEventoId: eventoId, valor: saldo, data: ev.data || new Date().toISOString().slice(0,10), forma: "pix", tipo: saldo===(Number(ev.valorContratado)||0) ? "saldo" : "parcela" };
 
   document.getElementById("modal-content").innerHTML = `
     <h3>Dar baixa — ${capitalize((ev.tipo||"").replace("_"," "))} · ${nomeRef("clientes",ev.clienteId)}</h3>
