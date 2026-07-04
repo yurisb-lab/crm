@@ -838,8 +838,8 @@ function renderEventosPage(main){
     <div class="page-header">
       <div><div class="eyebrow">Cadastro</div><h2>${schema.label}</h2></div>
       <div class="page-actions">
-        <input type="text" id="filtro-tag-evento" placeholder="Buscar por tag..." value="${eventosFiltroTag}"
-          oninput="eventosFiltroTag=this.value; renderEventosList();" style="width:150px;">
+        <input type="text" id="filtro-tag-evento" placeholder="Buscar cliente, aniversariante, tag, endereço..." value="${eventosFiltroTag}"
+          oninput="eventosFiltroTag=this.value; renderEventosList();" style="width:220px;">
         <select id="filtro-tipo-evento" onchange="eventosFiltroTipo=this.value; renderEventosList();" style="width:auto;">
           <option value="">Todos os tipos</option>
           ${todosOsTipos.map(t=>`<option value="${t}" ${eventosFiltroTipo===t?"selected":""}>${capitalize(t.replace("_"," "))}</option>`).join("")}
@@ -861,7 +861,28 @@ function renderEventosList(){
   if(eventosFiltroTipo) itens = itens.filter(e=>e.tipo===eventosFiltroTipo);
   if(eventosFiltroTag.trim()){
     const termo = eventosFiltroTag.trim().toLowerCase();
-    itens = itens.filter(e=>(e.tags||[]).some(t=>t.toLowerCase().includes(termo)));
+    itens = itens.filter(e=>{
+      // tags
+      if((e.tags||[]).some(t=>t.toLowerCase().includes(termo))) return true;
+      // nome do cliente
+      const cli = state.clientes.find(c=>c.id===e.clienteId);
+      if(cli && (cli.nome||"").toLowerCase().includes(termo)) return true;
+      if(cli && (cli.nomeConjuge||"").toLowerCase().includes(termo)) return true;
+      // nome da criança vinculada
+      const crianca = e.criancaId ? state.criancas.find(c=>c.id===e.criancaId) : null;
+      if(crianca && (crianca.nome||"").toLowerCase().includes(termo)) return true;
+      // nome do evento
+      if((e.nomeEvento||"").toLowerCase().includes(termo)) return true;
+      // endereço
+      if((e.endereco||"").toLowerCase().includes(termo)) return true;
+      // tipo de evento
+      if((e.tipo||"").replace("_"," ").includes(termo)) return true;
+      // status
+      if(statusLabel(e.status||"orcamento").toLowerCase().includes(termo)) return true;
+      // descrição de "outro"
+      if((e.outroDescricao||"").toLowerCase().includes(termo)) return true;
+      return false;
+    });
   }
 
   // agrupa por ano (a partir da data do evento; sem data vai pra "Sem data")
