@@ -603,6 +603,14 @@ const SCHEMAS = {
     ],
     columns: [
       {key:"nome", label:"Nome"},
+      {key:"_idadeAtual", label:"Idade atual", format:(v,row)=>{
+        const idade = idadeAtual(row.dataNascimento);
+        return typeof idade === "number" ? `${idade} anos` : "—";
+      }},
+      {key:"_proximaIdade", label:"Completará", format:(v,row)=>{
+        const idade = idadeAtual(row.dataNascimento);
+        return typeof idade === "number" ? `${idade+1} anos` : "—";
+      }},
       {key:"_proximo", label:"Aniversário em", format:(v,row)=>{
         const dias = diasParaAniversario(row.dataNascimento);
         if(dias===0) return "🎂 Hoje!";
@@ -622,6 +630,14 @@ const SCHEMAS = {
     ],
     columns: [
       {key:"nomeCasal", label:"Casal", format:(v,row)=> row.conjuge ? `${v} & ${row.conjuge}` : v},
+      {key:"_anosAtual", label:"Anos casados", format:(v,row)=>{
+        const anos = idadeAtual(row.dataCasamento);
+        return typeof anos === "number" ? `${anos} anos` : "—";
+      }},
+      {key:"_proximosAnos", label:"Completará", format:(v,row)=>{
+        const anos = idadeAtual(row.dataCasamento);
+        return typeof anos === "number" ? `${anos+1} anos` : "—";
+      }},
       {key:"_proximo", label:"Bodas em", format:(v,row)=>{
         const dias = diasParaAniversario(row.dataCasamento);
         if(dias===0) return "💍 Hoje!";
