@@ -2450,6 +2450,162 @@ function renderViewGeneric(item, col){
     ${viewActions(col, item.id)}`;
 }
 
+/* =========================================================
+   LEITURA DE FOTO DA FESTA (IA)
+   ========================================================= */
+function triggerFotoFesta(eventoId){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = (e)=> processarFotoFesta(eventoId, e.target.files[0]);
+  input.click();
+}
+
+async function processarFotoFesta(eventoId, file){
+  if(!file) return;
+  const t = document.getElementById("toast");
+  if(t){ t.textContent = "📸 Analisando a foto..."; t.style.display="block"; }
+
+  const reader = new FileReader();
+  reader.onerror = ()=> toast("Erro ao ler a imagem.");
+  reader.onload = async ()=>{
+    const base64 = reader.result.split(",")[1];
+    const mimeType = file.type || "image/jpeg";
+    const ev = state.eventos.find(e=>e.id===eventoId);
+    const dataAtual = ev?.data || "";
+
+    const prompt = `Você é um assistente de um fotógrafo brasileiro. Analise esta foto de uma festa ou evento fotográfico e extraia todas as informações visíveis. Retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
+{
+  "dataCapturaExif": "",
+  "nomeNaFoto": "",
+  "idadeCrianca": null,
+  "temaFesta": "",
+  "tags": [],
+  "observacoes": ""
+}
+
+Instruções por campo:
+- "dataCapturaExif": se a foto tiver metadados de data visíveis ou você conseguir inferir a data por qualquer pista (qualidade da câmera, estilo de decoração, etc.), informe no formato AAAA-MM-DD. Caso contrário deixe vazio.
+- "nomeNaFoto": nome da criança ou pessoa homenageada, se aparecer escrito em bolo, topper, faixa, balão ou decoração. Deixe vazio se não aparecer.
+- "idadeCrianca": número inteiro da idade que a criança completou, lendo velas, número em balões, topper ou texto da decoração ("2 aninhos" = 2). Null se não for possível identificar.
+- "temaFesta": tema decorativo identificado (ex: "Dinossauro", "Princesa", "Safari", "Homem-Aranha", "Fazendinha"). Deixe vazio se não identificar.
+- "tags": array de strings com características visuais úteis para busca futura (ex: ["azul","balões","mesa de doces","bolo florido"]). Máximo 6 tags.
+- "observacoes": qualquer outra informação relevante visível na foto (nome do buffet se aparecer, decoração especial, etc).`;
+
+    const resultado = await callGeminiVision(base64, mimeType, prompt);
+    if(!resultado.texto){
+      toast(`Erro ao analisar foto: ${resultado.erro||"tente novamente."}`);
+      return;
+    }
+    let dados;
+    try{
+      const limpo = resultado.texto.replace(/```json|```/g,"").trim();
+      dados = JSON.parse(limpo);
+    }catch(err){
+      console.error("[foto-festa] parse error:", err, resultado.texto);
+      toast("Não consegui interpretar os dados da foto. Veja o console.");
+      return;
+    }
+    abrirConfirmacaoFotoFesta(eventoId, dados);
+  };
+  reader.readAsDataURL(file);
+}
+
+function abrirConfirmacaoFotoFesta(eventoId, dados){
+  const ev = state.eventos.find(e=>e.id===eventoId);
+  if(!ev) return;
+  const crianca = ev.criancaId ? state.criancas.find(c=>c.id===ev.criancaId) : null;
+
+  // calcula data de nascimento aproximada se tiver data do evento e idade
+  let dataNascSugerida = "";
+  if(dados.idadeCrianca!==null && dados.idadeCrianca!==undefined && ev.data){
+    const dataEv = new Date(ev.data+"T00:00:00");
+    const anoNasc = dataEv.getFullYear() - dados.idadeCrianca;
+    dataNascSugerida = `${anoNasc}-${String(dataEv.getMonth()+1).padStart(2,"0")}-${String(dataEv.getDate()).padStart(2,"0")}`;
+  }
+
+  const tagsAtuais = ev.tags||[];
+  const tagsNovos = (dados.tags||[]).filter(t=>!tagsAtuais.includes(t));
+  const tagsCombinadas = [...tagsAtuais, ...tagsNovos];
+  if(dados.temaFesta && !tagsCombinadas.includes(dados.temaFesta)) tagsCombinadas.push(dados.temaFesta);
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>📸 Dados extraídos da foto</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">Confirme o que deseja atualizar — campos em branco não serão alterados.</div>
+
+    <div style="font-weight:600; font-size:13px; margin-bottom:8px; color:var(--muted);">EVENTO</div>
+    <div class="field"><label>Data do evento${dados.dataCapturaExif?"  (extraída da foto)":""}</label>
+      <input id="ff-data" type="date" value="${dados.dataCapturaExif||ev.data||""}">
+    </div>
+    <div class="field"><label>Tags (atual + detectadas na foto)</label>
+      <input id="ff-tags" type="text" value="${tagsCombinadas.join(", ")}" style="width:100%;">
+      <div style="font-size:11px;color:var(--muted-2);margin-top:3px;">Novas detectadas: ${tagsNovos.length?tagsNovos.join(", "):"nenhuma nova"}</div>
+    </div>
+    ${dados.observacoes ? `<div class="field"><label>Observações da foto</label><input id="ff-obs" type="text" value="${dados.observacoes}" style="width:100%;"></div>` : ""}
+
+    ${crianca || dados.nomeNaFoto || dados.idadeCrianca!==null ? `
+      <div style="font-weight:600; font-size:13px; margin:14px 0 8px; color:var(--muted);">CRIANÇA ${crianca?"("+crianca.nome+")":""}</div>
+      ${dados.nomeNaFoto ? `<div class="field"><label>Nome identificado na decoração</label><input id="ff-nome" type="text" value="${dados.nomeNaFoto}" style="width:100%;"></div>` : ""}
+      ${dados.idadeCrianca!==null && dados.idadeCrianca!==undefined ? `
+        <div class="field"><label>Idade que completou (detectada: ${dados.idadeCrianca} anos)</label>
+          <input id="ff-idade" type="number" value="${dados.idadeCrianca}" style="width:100px;">
+        </div>
+        ${dataNascSugerida && crianca ? `
+          <div class="field"><label>Data de nascimento sugerida (evento − idade)</label>
+            <input id="ff-nasc" type="date" value="${dataNascSugerida}">
+            <div style="font-size:11px;color:var(--muted-2);margin-top:3px;">Atual: ${formatDate(crianca.dataNascimento||"")}</div>
+          </div>
+        ` : ""}
+      ` : ""}
+    ` : ""}
+
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="confirmarFotoFesta('${eventoId}')">Atualizar</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+async function confirmarFotoFesta(eventoId){
+  const ev = state.eventos.find(e=>e.id===eventoId);
+  if(!ev) return;
+  const updates = {};
+
+  const data = document.getElementById("ff-data")?.value;
+  if(data && data !== ev.data) updates.data = data;
+
+  const tagsStr = document.getElementById("ff-tags")?.value;
+  if(tagsStr!==undefined){
+    const tags = tagsStr.split(",").map(t=>t.trim()).filter(Boolean);
+    if(JSON.stringify(tags) !== JSON.stringify(ev.tags||[])) updates.tags = tags;
+  }
+
+  const obs = document.getElementById("ff-obs")?.value;
+  if(obs) updates.nomeEvento = updates.nomeEvento || obs;
+
+  try{
+    if(Object.keys(updates).length) await db.collection("eventos").doc(eventoId).update(updates);
+
+    // atualiza a criança se tiver dados
+    const crianca = ev.criancaId ? state.criancas.find(c=>c.id===ev.criancaId) : null;
+    if(crianca){
+      const criancaUpdates = {};
+      const nome = document.getElementById("ff-nome")?.value;
+      if(nome && nome !== crianca.nome) criancaUpdates.nome = nome;
+      const nasc = document.getElementById("ff-nasc")?.value;
+      if(nasc && nasc !== crianca.dataNascimento) criancaUpdates.dataNascimento = nasc;
+      if(Object.keys(criancaUpdates).length) await db.collection("criancas").doc(crianca.id).update(criancaUpdates);
+    }
+
+    toast("Evento atualizado com sucesso!");
+    closeModal();
+  }catch(err){
+    console.error(err);
+    toast("Erro ao salvar. Veja o console.");
+  }
+}
+
 function renderViewEvento(ev){
   const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
   const pago = totalPago(ev.id);
@@ -2468,6 +2624,7 @@ function renderViewEvento(ev){
       <button onclick="window.open('${gcalUrl}','_blank')">📅 Google Agenda</button>
       <button onclick="copiarMsgConfirmacao('${ev.id}')">📋 Msg confirmação</button>
       <button onclick="abrirGerarRecibo('${ev.id}')">🧾 Gerar recibo</button>
+      ${temIA() ? `<button onclick="triggerFotoFesta('${ev.id}')">📸 Ler foto da festa</button>` : ""}
     </div>
 
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${ev.clienteId}');return false;">${nomeRef("clientes",ev.clienteId)}</a>`)}
