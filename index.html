@@ -667,7 +667,10 @@ const SCHEMAS = {
       {key:"tags", label:"Tags (separe por vírgula)", type:"tags"},
       {key:"linkGaleriaCompleta", label:"Link da galeria completa", type:"text"},
       {key:"dataEntregaPrevista", label:"Entrega prevista", type:"date"},
-      {key:"dataEntregaReal", label:"Entrega realizada", type:"date"}
+      {key:"dataEntregaReal", label:"Entrega realizada", type:"date"},
+      {key:"fotoLida", label:"📸 Data verificada por foto", type:"checkbox"},
+      {key:"bloqueado", label:"🔒 Evento bloqueado (impede edição)", type:"checkbox"},
+      {key:"iaVerificado", label:"✨ Dados verificados por IA", type:"checkbox"}
     ],
     columns: [
       {key:"data", label:"Data", format:v=>formatDate(v)},
@@ -683,6 +686,13 @@ const SCHEMAS = {
         const saldo = (Number(row.valorContratado)||0) - totalPago(row.id);
         if(saldo<=0) return `<span style="color:var(--muted);">Pago</span>`;
         return `<button class="sm" onclick="abrirBaixaRapida('${row.id}')">${money(saldo)} → dar baixa</button>`;
+      }},
+      {key:"_markers", label:"", format:(v,row)=>{
+        let m = "";
+        if(row.bloqueado) m += `<span title="Evento bloqueado">🔒</span> `;
+        if(row.fotoLida) m += `<span title="Data verificada por foto">📸</span> `;
+        if(row.iaVerificado) m += `<span title="Verificado por IA">✨</span>`;
+        return m || "";
       }}
     ]
   },
@@ -2474,6 +2484,16 @@ function renderViewGeneric(item, col){
 /* =========================================================
    LEITURA DE FOTO DA FESTA (IA)
    ========================================================= */
+async function toggleBloqueioEvento(eventoId, atualmenteBloqueado){
+  const acao = atualmenteBloqueado ? "desbloquear" : "bloquear";
+  if(!confirm(`Deseja ${acao} este evento?`)) return;
+  try{
+    await db.collection("eventos").doc(eventoId).update({ bloqueado: !atualmenteBloqueado });
+    toast(`Evento ${atualmenteBloqueado?"desbloqueado":"bloqueado"}.`);
+    openView("eventos", eventoId);
+  }catch(err){ console.error(err); toast("Erro ao atualizar o evento."); }
+}
+
 function triggerFotoFesta(eventoId){
   const input = document.createElement("input");
   input.type = "file";
@@ -2606,6 +2626,10 @@ async function confirmarFotoFesta(eventoId){
   if(obs) updates.nomeEvento = updates.nomeEvento || obs;
 
   try{
+    if(Object.keys(updates).length || document.getElementById("ff-data")?.value){
+      updates.fotoLida = true;
+      updates.iaVerificado = true;
+    }
     if(Object.keys(updates).length) await db.collection("eventos").doc(eventoId).update(updates);
 
     // atualiza a criança se tiver dados
@@ -2638,6 +2662,13 @@ function renderViewEvento(ev){
   const nomeDisplay = ev.tipo==="outro" && ev.outroDescricao ? ev.outroDescricao : capitalize((ev.tipo||"").replace("_"," "));
 
   return `<h3>${nomeDisplay} · ${formatDate(ev.data)}</h3>
+
+    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:center;">
+      ${ev.bloqueado ? `<span style="background:#6b728022;padding:3px 10px;border-radius:20px;font-size:12px;">🔒 Bloqueado</span>` : ""}
+      ${ev.fotoLida ? `<span style="background:#3b82f622;padding:3px 10px;border-radius:20px;font-size:12px;">📸 Data por foto</span>` : ""}
+      ${ev.iaVerificado ? `<span style="background:#a855f722;padding:3px 10px;border-radius:20px;font-size:12px;">✨ Verificado por IA</span>` : ""}
+      <button class="ghost sm" onclick="toggleBloqueioEvento('${ev.id}',${!!ev.bloqueado})">${ev.bloqueado?"🔓 Desbloquear":"🔒 Bloquear"}</button>
+    </div>
 
     <div class="quick-actions">
       ${wa ? `<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
@@ -3447,6 +3478,7 @@ Se a data mencionada não tiver ano, assuma o próximo ano em que essa data aind
         }
       }
       refreshFormFields();
+      formState.iaVerificado = true;
       toast("Campos preenchidos a partir do print. Confira antes de salvar.");
     }
   };
@@ -3463,6 +3495,17 @@ function openForm(col, id){
   const showMarkPaid = col==="eventos" && existing && (Number(existing.valorContratado)||0) > totalPago(id);
 
   const podeUsarPrint = !existing && (col==="leads" || col==="eventos") && temIA();
+
+  // bloqueia edição se o evento estiver com cadeado
+  if(col==="eventos" && existing && existing.bloqueado){
+    document.getElementById("modal-content").innerHTML = `
+      <h3>🔒 Evento bloqueado</h3>
+      <div style="font-size:14px; color:var(--muted); margin-bottom:18px;">Este evento está bloqueado e não pode ser editado. Desbloqueie primeiro pelo botão "Ver".</div>
+      <div class="modal-actions"><button class="ghost" onclick="closeModal()">Fechar</button></div>
+    `;
+    document.getElementById("modal-backdrop").classList.add("active");
+    return;
+  }
 
   document.getElementById("modal-content").innerHTML = `
     <h3>${existing ? "Editar" : "Novo"} ${schema.singular}</h3>
