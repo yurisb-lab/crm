@@ -1974,18 +1974,42 @@ function renderDashboard(main){
       </div>`;
     })()}
 
-    <div class="section-title">Aniversários próximos (60 dias)</div>
-    <div class="card">
-      ${aniversarios.length ? `<table><thead><tr><th>Quem</th><th>Vai completar</th><th>Em quantos dias</th><th>Vínculo</th><th></th></tr></thead><tbody>
-        ${aniversarios.map(c=>`<tr>
-          <td>${c.tipo==='casamento'?'💍 ':'🎂 '}${c.nome}</td>
-          <td>${c.idade+1} anos${c.tipo==='casamento'?' de casados':''}</td>
-          <td>${c.dias===0?'<b style="color:var(--amber)">Hoje!</b>':c.dias+' dias'}</td>
-          <td>${c.vinculo}</td>
-          <td>${c.tipo==='crianca' ? `<button class="sm" onclick="enviarMensagemAniversario('${c.id}')">Enviar mensagem</button>` : `<button class="sm" onclick="enviarMensagemCasamento('${c.id}')">Enviar mensagem</button>`}</td>
-        </tr>`).join("")}
-      </tbody></table>` : `<div class="empty-state">Nenhum aniversário nos próximos 60 dias.</div>`}
-    </div>
+    ${(()=>{
+      const criancas60 = aniversariosCriancas.filter(c=>c.dias<=60).sort((a,b)=>a.dias-b.dias);
+      const casamentos60 = aniversariosCasamentos.filter(c=>c.dias<=60).sort((a,b)=>a.dias-b.dias);
+      if(!criancas60.length && !casamentos60.length) return `
+        <div class="section-title">Próximos (60 dias)</div>
+        <div class="card"><div class="empty-state">Nenhum aniversário ou bodas nos próximos 60 dias.</div></div>`;
+
+      const tabelaCriancas = criancas60.length ? `
+        <div class="section-title">🎂 Aniversários (60 dias)</div>
+        <div class="card">
+          <table><thead><tr><th>Criança</th><th>Vai completar</th><th>Em</th><th>Responsável</th><th></th></tr></thead><tbody>
+            ${criancas60.map(c=>`<tr>
+              <td><a href="#" onclick="openView('criancas','${c.id}');return false;">${c.nome}</a></td>
+              <td>${c.idade+1} anos</td>
+              <td>${c.dias===0?'<b style="color:#22c55e">Hoje!</b>':c.dias+' dias'}</td>
+              <td>${c.vinculo}</td>
+              <td><button class="sm" onclick="enviarMensagemAniversario('${c.id}')">Enviar</button></td>
+            </tr>`).join("")}
+          </tbody></table>
+        </div>` : "";
+
+      const tabelaCasamentos = casamentos60.length ? `
+        <div class="section-title">💍 Bodas (60 dias)</div>
+        <div class="card">
+          <table><thead><tr><th>Casal</th><th>Vai completar</th><th>Em</th><th></th></tr></thead><tbody>
+            ${casamentos60.map(c=>`<tr>
+              <td><a href="#" onclick="openView('casamentos','${c.id}');return false;">${c.nome}</a></td>
+              <td>${c.idade+1} anos de casados</td>
+              <td>${c.dias===0?'<b style="color:#22c55e">Hoje!</b>':c.dias+' dias'}</td>
+              <td><button class="sm" onclick="enviarMensagemCasamento('${c.id}')">Enviar</button></td>
+            </tr>`).join("")}
+          </tbody></table>
+        </div>` : "";
+
+      return tabelaCriancas + tabelaCasamentos;
+    })()}
   `;
 }
 
