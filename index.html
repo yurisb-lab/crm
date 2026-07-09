@@ -3363,6 +3363,86 @@ async function callGemini(prompt, tentativa=0){
 }
 function temIA(){ return !!(state.config?.geminiKey); }
 
+async function gerarBriefingCliente(clienteId){
+  const btn = document.getElementById(`btn-briefing-${clienteId}`);
+  const box = document.getElementById(`ai-briefing-${clienteId}`);
+  if(!btn || !box) return;
+  if(!temIA()){ toast("Configure a chave Gemini em Configurações para usar a IA."); return; }
+  btn.disabled = true; btn.textContent = "Gerando briefing...";
+  box.style.display = "block"; box.innerHTML = `<div class="ai-label">Analisando histórico do cliente...</div>`;
+
+  const cli = state.clientes.find(c=>c.id===clienteId);
+  if(!cli){ btn.disabled=false; return; }
+
+  const evs = state.eventos.filter(e=>e.clienteId===clienteId).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+  const filhos = state.criancas.filter(c=>c.clientePaiId===clienteId||c.clienteMaeId===clienteId);
+  const casamento = state.casamentos.find(c=>c.clienteId===clienteId);
+  const comentarios = (cli.comentarios||[]).sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||"")).map(x=>`[${formatarDataHora(x.criadoEm)}] ${x.texto}`).join("\n");
+  const hoje = new Date().toISOString().slice(0,10);
+
+  const historicoStr = evs.map(e=>{
+    const saldo = (Number(e.valorContratado)||0)-totalPago(e.id);
+    return `- ${capitalize((e.tipo||"").replace("_"," "))} em ${formatDate(e.data)} | valor: ${money(e.valorContratado)} | ${saldo>0?`saldo pendente: ${money(saldo)}`:"pago"} | status: ${statusLabel(e.status||"orcamento")}`;
+  }).join("\n");
+
+  const filhosStr = filhos.map(f=>{
+    const dias = diasParaAniversario(f.dataNascimento);
+    const idadeProx = idadeAtual(f.dataNascimento)+1;
+    return `- ${f.nome}: faz ${idadeProx} anos em ${dias} dias`;
+  }).join("\n");
+
+  const casamentoStr = casamento ? `Casados em ${formatDate(casamento.dataCasamento)} (${idadeAtual(casamento.dataCasamento)} anos). Próximas bodas em ${diasParaAniversario(casamento.dataCasamento)} dias.` : "";
+
+  const prompt = `Você é um assistente do fotógrafo Yuri Silva (Pacatuba/CE). Gere um BRIEFING DE RELACIONAMENTO completo sobre o cliente abaixo para Yuri usar antes de entrar em contato.
+
+DADOS DO CLIENTE:
+Nome: ${cli.nome}${cli.nomeConjuge?" & "+cli.nomeConjuge:""}
+Cidade: ${cli.cidade||"?"}
+Origem: ${cli.origem||"?"}${cli.indicadoPor?" (indicado por: "+cli.indicadoPor+")":""}
+Observações cadastradas: ${cli.observacoes||"nenhuma"}
+
+HISTÓRICO DE EVENTOS (${evs.length} total):
+${historicoStr||"Nenhum evento cadastrado."}
+
+FILHOS CADASTRADOS:
+${filhosStr||"Nenhum filho cadastrado."}
+
+${casamentoStr?"CASAMENTO:\n"+casamentoStr:""}
+
+TODAS AS ANOTAÇÕES/COMENTÁRIOS:
+${comentarios||"Nenhum comentário registrado."}
+
+Data de hoje: ${hoje}
+
+Gere o briefing com EXATAMENTE estas seções, em português informal:
+
+**1. Quem é esse cliente**
+(perfil resumido em 2-3 linhas: de onde veio, quantas vezes contratou, quanto já gerou de receita)
+
+**2. Histórico de trabalhos**
+(o que foi fotografado, quando, observações relevantes de cada evento)
+
+**3. Como esse cliente se comporta**
+(baseado nas anotações: é fácil de lidar? exigente? demora a responder? negocia preço? seja específico com base nas anotações reais)
+
+**4. Oportunidades próximas**
+(aniversários de filhos, bodas, ou qualquer evento futuro detectado — com prazo exato em dias)
+
+**5. O que fazer agora**
+(recomendação prática e direta: ligar? mandar mensagem? esperar? qual abordagem usar com esse cliente específico? sugira uma frase de abertura se for o caso)
+
+Se não houver anotações suficientes para alguma seção, diga "Sem dados suficientes" e não invente informações.`;
+
+  const resultado = await callGemini(prompt);
+  btn.disabled = false; btn.textContent = "📋 Briefing de relacionamento";
+
+  if(resultado.texto){
+    box.innerHTML = `<div class="ai-label">📋 Briefing de relacionamento</div>${escapeHtml(resultado.texto).replace(/\n/g,"<br>").replace(/\*\*(.*?)\*\*/g,"<b>$1</b>")}`;
+  } else {
+    box.innerHTML = `<div class="ai-label">Erro</div>${resultado.erro||"Não foi possível gerar o briefing."}`;
+  }
+}
+
 async function gerarResumoCliente(col, id){
   const btn = document.getElementById(`btn-resumo-${col}-${id}`);
   const box = document.getElementById(`ai-resumo-${col}-${id}`);
@@ -3589,6 +3669,8 @@ function renderViewCliente(cli){
     ${renderComentarios("clientes", cli.id)}
     ${temIA() ? `<button class="ghost sm" id="btn-resumo-clientes-${cli.id}" onclick="gerarResumoCliente('clientes','${cli.id}')" style="margin-top:10px; width:100%;">✦ Resumo IA</button>` : ""}
     <div class="ai-box" id="ai-resumo-clientes-${cli.id}" style="display:none;"></div>
+    ${temIA() ? `<button class="ghost sm" id="btn-briefing-${cli.id}" onclick="gerarBriefingCliente('${cli.id}')" style="margin-top:8px; width:100%;">📋 Briefing de relacionamento</button>` : ""}
+    <div class="ai-box" id="ai-briefing-${cli.id}" style="display:none;"></div>
     ${viewActions("clientes", cli.id)}`;}
 async function vincularCriancaExistente(clienteId){
   const select = document.getElementById(`select-vincular-crianca-${clienteId}`);
