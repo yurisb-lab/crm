@@ -1068,6 +1068,19 @@ function renderConfiguracoes(main){
   `;
 }
 function salvarConfiguracoes(){
+  // lê os campos diretamente do DOM para garantir que nada se perca por re-render
+  const metaEl = document.getElementById("meta-mensal");
+  if(metaEl && metaEl.value!=="") configDraft.metaMensal = Number(metaEl.value)||0;
+
+  const geminiEl = document.getElementById("gemini-key");
+  if(geminiEl && geminiEl.value!=="") configDraft.geminiKey = geminiEl.value.trim();
+
+  const msgAnivEl = document.getElementById("msg-aniversario");
+  if(msgAnivEl) configDraft.mensagemAniversario = msgAnivEl.value;
+
+  const msgCasEl = document.getElementById("msg-casamento");
+  if(msgCasEl) configDraft.mensagemCasamento = msgCasEl.value;
+
   db.collection("config").doc("settings").set(configDraft, {merge:true})
     .then(()=> toast("Configurações salvas."))
     .catch(err=>{ console.error(err); toast("Erro ao salvar. Veja o console."); });
