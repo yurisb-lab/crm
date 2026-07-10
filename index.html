@@ -1831,46 +1831,89 @@ function openFormComData(iso){
   openForm("eventos");
   setTimeout(()=>{ formState.data=iso; refreshFormFields(); },100);
 }
-function abrirBloquearDataEditar(id, dataAtual, motivoAtual){
-  document.getElementById("modal-content").innerHTML = `
-    <h3>Editar bloqueio</h3>
-    <div class="field"><label>Data</label><input id="bloq-data" type="date" value="${dataAtual||""}"></div>
-    <div class="field"><label>Motivo (opcional)</label><input id="bloq-motivo" type="text" value="${motivoAtual||""}" placeholder="Ex: Férias, Igreja, Compromisso pessoal"></div>
+function modalBloqueioHtml(titulo, dataVal, motivoVal, horarioVal, apenasHorarioVal, btnFn){
+  return `
+    <h3>${titulo}</h3>
+    <div class="field"><label>Data</label><input id="bloq-data" type="date" value="${dataVal||""}"></div>
+    <div class="field"><label>Motivo (opcional)</label><input id="bloq-motivo" type="text" value="${motivoVal||""}" placeholder="Ex: Férias, Igreja, Compromisso pessoal"></div>
+    <div class="field" style="display:flex; align-items:center; gap:10px;">
+      <input type="checkbox" id="bloq-apenas-horario" ${apenasHorarioVal?"checked":""} onchange="document.getElementById('bloq-horario-wrap').style.display=this.checked?'block':'none'" style="width:18px;height:18px;">
+      <label for="bloq-apenas-horario" style="margin:0;">Bloquear apenas um horário específico</label>
+    </div>
+    <div id="bloq-horario-wrap" style="display:${apenasHorarioVal?"block":"none"};">
+      <div class="field-row">
+        <div class="field"><label>Início</label><input id="bloq-hora-inicio" type="time" value="${horarioVal?.inicio||""}"></div>
+        <div class="field"><label>Fim</label><input id="bloq-hora-fim" type="time" value="${horarioVal?.fim||""}"></div>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">Cancelar</button>
-      <button class="primary" onclick="atualizarBloqueio('${id}')">Salvar</button>
+      <button class="ghost" onclick="${btnFn}; setTimeout(()=>exportarBloqueioGCal(),400)">💾 Salvar + Google Agenda</button>
+      <button class="primary" onclick="${btnFn}">Salvar</button>
     </div>
   `;
+}
+function exportarBloqueioGCal(){
+  const data = document.getElementById("bloq-data")?.value;
+  const motivo = document.getElementById("bloq-motivo")?.value||"Bloqueio";
+  const apenasHorario = document.getElementById("bloq-apenas-horario")?.checked;
+  const horaInicio = document.getElementById("bloq-hora-inicio")?.value;
+  const horaFim = document.getElementById("bloq-hora-fim")?.value;
+  if(!data) return;
+  const dataBase = data.replace(/-/g,"");
+  let datas;
+  if(apenasHorario && horaInicio && horaFim){
+    datas = dataBase+"T"+horaInicio.replace(":","")+"00/"+dataBase+"T"+horaFim.replace(":","")+"00";
+  } else {
+    datas = dataBase+"/"+dataBase;
+  }
+  const params = new URLSearchParams({ action:"TEMPLATE", text:motivo, dates:datas, details:"Bloqueado no CRM Yuri Silva Fotografias" });
+  window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, "_blank");
+}
+
+function abrirBloquearDataEditar(id, dataAtual, motivoAtual){
+  const bloq = state.bloqueios.find(b=>b.id===id);
+  document.getElementById("modal-content").innerHTML = modalBloqueioHtml(
+    "Editar bloqueio", dataAtual, motivoAtual,
+    bloq?.horario||null, !!(bloq?.apenasHorario),
+    `atualizarBloqueio('${id}')`
+  );
   document.getElementById("modal-backdrop").classList.add("active");
 }
 async function atualizarBloqueio(id){
   const data = document.getElementById("bloq-data")?.value;
   const motivo = document.getElementById("bloq-motivo")?.value.trim();
+  const apenasHorario = document.getElementById("bloq-apenas-horario")?.checked;
+  const horaInicio = document.getElementById("bloq-hora-inicio")?.value;
+  const horaFim = document.getElementById("bloq-hora-fim")?.value;
   if(!data){ toast("Informe a data."); return; }
   try{
-    await db.collection("bloqueios").doc(id).update({ data, motivo: motivo||"" });
-    toast("Bloqueio atualizado.");
-    closeModal();
+    await db.collection("bloqueios").doc(id).update({
+      data, motivo:motivo||"", apenasHorario:apenasHorario||false,
+      horario: apenasHorario ? {inicio:horaInicio||"",fim:horaFim||""} : null
+    });
+    toast("Bloqueio atualizado."); closeModal();
   }catch(err){ console.error(err); toast("Erro ao atualizar bloqueio."); }
 }
 
 function abrirBloquearData(dataPreenchida){
-  document.getElementById("modal-content").innerHTML = `
-    <h3>Bloquear data</h3>
-    <div class="field"><label>Data</label><input id="bloq-data" type="date" value="${dataPreenchida||""}"></div>
-    <div class="field"><label>Motivo (opcional)</label><input id="bloq-motivo" type="text" placeholder="Ex: Férias, Igreja, Compromisso pessoal"></div>
-    <div class="modal-actions">
-      <button class="ghost" onclick="closeModal()">Cancelar</button>
-      <button class="primary" onclick="salvarBloqueio()">Bloquear</button>
-    </div>
-  `;
+  document.getElementById("modal-content").innerHTML = modalBloqueioHtml(
+    "Bloquear data", dataPreenchida, "", null, false, "salvarBloqueio()"
+  );
   document.getElementById("modal-backdrop").classList.add("active");
 }
 async function salvarBloqueio(){
   const data = document.getElementById("bloq-data")?.value;
   const motivo = document.getElementById("bloq-motivo")?.value.trim();
-  if(!data){toast("Informe a data.");return;}
-  await db.collection("bloqueios").add({data,motivo:motivo||"",criadoEm:new Date().toISOString()});
+  const apenasHorario = document.getElementById("bloq-apenas-horario")?.checked;
+  const horaInicio = document.getElementById("bloq-hora-inicio")?.value;
+  const horaFim = document.getElementById("bloq-hora-fim")?.value;
+  if(!data){ toast("Informe a data."); return; }
+  await db.collection("bloqueios").add({
+    data, motivo:motivo||"", apenasHorario:apenasHorario||false,
+    horario: apenasHorario ? {inicio:horaInicio||"",fim:horaFim||""} : null,
+    criadoEm: new Date().toISOString()
+  });
   toast("Data bloqueada."); closeModal();
 }
 async function desbloquearData(id){
