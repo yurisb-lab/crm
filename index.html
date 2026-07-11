@@ -3797,7 +3797,7 @@ function renderViewCrianca(c){
     ${viewRow("Data de nascimento", formatDate(c.dataNascimento))}
     ${viewRow("Idade atual", idadeAtual(c.dataNascimento)+" anos")}
     ${viewRow("Próximo aniversário em", diasParaAniversario(c.dataNascimento)+" dias")}
-    ${ultimo ? viewRow("Último trabalho", `<a href="#" onclick="openView('eventos','${ultimo.id}');return false;">${capitalize((ultimo.tipo||"").replace("_"," "))} · ${formatDate(ultimo.data)}</a><br><span style="font-size:12px; color:var(--muted);">ela tinha ${idadeNaData(c.dataNascimento, ultimo.data)} anos · faz ${tempoDesde(ultimo.data)}</span>`) : ""}
+    ${ultimo ? viewRow("Último trabalho", `<a href="#" onclick="openView('eventos','${ultimo.id}');return false;">${capitalize((ultimo.tipo||"").replace("_"," "))} · ${formatDate(ultimo.data)}</a><br><span style="font-size:12px; color:var(--muted);">Na época ela tinha ${idadeNaData(c.dataNascimento, ultimo.data)} ${idadeNaData(c.dataNascimento, ultimo.data)===1?"ano":"anos"} · já se passaram ${tempoDesde(ultimo.data)} desde essa festinha · vai completar ${idadeAtual(c.dataNascimento)+1} anos no próximo aniversário</span>`) : ""}
     ${c.clientePaiId ? viewRow("Responsável 1", `<a href="#" onclick="openView('clientes','${c.clientePaiId}');return false;">${nomeRef("clientes",c.clientePaiId)}</a>`) : ""}
     ${c.clienteMaeId ? viewRow("Responsável 2", `<a href="#" onclick="openView('clientes','${c.clienteMaeId}');return false;">${nomeRef("clientes",c.clienteMaeId)}</a>`) : ""}
     ${c.observacoes ? viewRow("Observações", c.observacoes) : ""}
