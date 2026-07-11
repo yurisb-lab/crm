@@ -423,6 +423,11 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+// Persistência offline: garante que gravações pendentes (ex: salvar configurações)
+// não se percam se a página for fechada/recarregada antes da confirmação do servidor.
+db.enablePersistence({ synchronizeTabs: true }).catch(err=>{
+  console.warn("[firestore] persistência offline não habilitada:", err.code, err.message);
+});
 
 
 /* =========================================================
@@ -1065,11 +1070,13 @@ function renderConfiguracoes(main){
     </div>
 
     <div style="margin-top:14px; display:flex; justify-content:flex-end;">
-      <button class="primary" onclick="salvarConfiguracoes()">Salvar</button>
+      <button class="primary" id="btn-salvar-config" onclick="salvarConfiguracoes()">Salvar</button>
     </div>
   `;
 }
-function salvarConfiguracoes(){
+async function salvarConfiguracoes(){
+  const btn = document.getElementById("btn-salvar-config");
+
   // lê os campos diretamente do DOM para garantir que nada se perca por re-render
   const metaEl = document.getElementById("meta-mensal");
   if(metaEl && metaEl.value!=="") configDraft.metaMensal = Number(metaEl.value)||0;
@@ -1083,9 +1090,18 @@ function salvarConfiguracoes(){
   const msgCasEl = document.getElementById("msg-casamento");
   if(msgCasEl) configDraft.mensagemCasamento = msgCasEl.value;
 
-  db.collection("config").doc("settings").set(configDraft, {merge:true})
-    .then(()=> toast("Configurações salvas."))
-    .catch(err=>{ console.error(err); toast("Erro ao salvar. Veja o console."); });
+  if(btn){ btn.disabled = true; btn.textContent = "Salvando..."; }
+  try{
+    // aguarda a confirmação real do servidor antes de avisar que salvou —
+    // evita que um refresh prematuro descarte uma gravação ainda em andamento
+    await db.collection("config").doc("settings").set(configDraft, {merge:true});
+    toast("Configurações salvas. Pode atualizar a página com segurança.");
+  }catch(err){
+    console.error(err);
+    toast("Erro ao salvar. Veja o console.");
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = "Salvar"; }
+  }
 }
 function proximaDataAniversario(dataNasc){
   const hoje = new Date(); hoje.setHours(0,0,0,0);
@@ -4223,19 +4239,35 @@ function renderField(f, value){
   return `<div class="field"><label>${f.label}</label><input id="${id}" type="${f.type}" value="${value||""}" oninput="formState['${f.key}']=this.value"></div>`;
 }
 
+function autoSelecionarCriancaVinculada(clienteId){
+  // ao escolher o responsável num evento, se ele já tiver uma única criança vinculada,
+  // seleciona ela automaticamente no campo "Criança" (evita repetir o trabalho manual)
+  if(!clienteId || clienteId === "__new__") return;
+  const filhos = state.criancas.filter(c=>c.clientePaiId===clienteId || c.clienteMaeId===clienteId);
+  if(filhos.length === 1){
+    formState.criancaId = filhos[0].id;
+  } else if(filhos.length > 1){
+    // mais de uma criança vinculada: não escolhe sozinho pra evitar erro, deixa o usuário decidir
+    formState.criancaId = "";
+  }
+}
 function onRefChange(fKey, ref, val){
   formState[fKey] = val;
+  if(val === "__new__"){
+    if(!formState[`_quickNew_${fKey}`]) formState[`_quickNew_${fKey}`] = {};
+  } else {
+    delete formState[`_quickNew_${fKey}`];
+  }
   if(fKey==="clienteId"){
+    if(formState._col === "eventos") autoSelecionarCriancaVinculada(val);
     refreshFormFields();
     return;
   }
   const container = document.getElementById(`quick-new-${fKey}`);
   if(val === "__new__"){
-    if(!formState[`_quickNew_${fKey}`]) formState[`_quickNew_${fKey}`] = {};
     container.innerHTML = renderQuickNew(fKey, ref);
   } else {
     container.innerHTML = "";
-    delete formState[`_quickNew_${fKey}`];
   }
 }
 function renderQuickNew(fKey, ref){
