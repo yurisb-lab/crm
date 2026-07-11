@@ -874,6 +874,7 @@ function renderEventosPage(main){
           <option value="">Todos os tipos</option>
           ${todosOsTipos.map(t=>`<option value="${t}" ${eventosFiltroTipo===t?"selected":""}>${capitalize(t.replace("_"," "))}</option>`).join("")}
         </select>
+        ${temIA() ? `<button class="ghost" onclick="criarEventoPorFoto()">📸 Criar por foto (IA)</button>` : ""}
         <button class="primary" onclick="openForm('eventos')">+ Novo Evento</button>
       </div>
     </div>
@@ -2994,6 +2995,121 @@ function triggerFotoFesta(eventoId){
   input.click();
 }
 
+/* ---------- CRIAR EVENTO A PARTIR DE FOTO (IA) ---------- */
+function criarEventoPorFoto(){
+  if(!temIA()){ toast("Configure a chave Gemini em Configurações para usar a IA."); return; }
+  openForm("eventos");
+  setTimeout(()=> triggerFotoFestaUpload(), 150);
+}
+
+function triggerFotoFestaUpload(){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = (e)=> processarFotoFestaNovoEvento(e.target.files[0]);
+  input.click();
+}
+
+async function processarFotoFestaNovoEvento(file){
+  if(!file) return;
+  const t = document.getElementById("toast");
+  if(t){ t.textContent = "📸 Analisando a foto..."; t.style.display="block"; }
+
+  const reader = new FileReader();
+  reader.onerror = ()=> toast("Erro ao ler a imagem.");
+  reader.onload = async ()=>{
+    const base64 = reader.result.split(",")[1];
+    const mimeType = file.type || "image/jpeg";
+    const hoje = new Date().toISOString().slice(0,10);
+
+    const prompt = `Você é um assistente de um fotógrafo brasileiro que está CADASTRANDO UM NOVO EVENTO a partir de uma foto de uma festa ou sessão já fotografada. A data de hoje é ${hoje}. Analise a imagem e extraia todas as informações visíveis. Retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
+{
+  "tipo": "aniversario|batizado|casamento_civil|casamento_religioso|ensaio|outro",
+  "dataCapturaExif": "",
+  "nomeHomenageado": "",
+  "idadeCrianca": null,
+  "temaFesta": "",
+  "tags": [],
+  "observacoes": ""
+}
+
+Instruções por campo:
+- "tipo": tipo de evento sugerido pelo contexto visual da foto (bolo/decoração infantil = aniversario; roupa/cerimônia de batismo = batizado; noivos, aliança ou cerimônia de casamento = casamento_civil ou casamento_religioso; ensaio fotográfico solo/casal/gestante sem festa = ensaio; se não conseguir identificar, use "outro").
+- "dataCapturaExif": se a foto tiver metadados de data visíveis ou você conseguir inferir a data por qualquer pista (qualidade da câmera, decoração sazonal etc.), informe no formato AAAA-MM-DD. Caso contrário deixe vazio.
+- "nomeHomenageado": nome da criança, aniversariante, noivos ou pessoa homenageada, se aparecer escrito em bolo, topper, faixa, convite, balão ou decoração. Deixe vazio se não aparecer.
+- "idadeCrianca": número inteiro da idade que a criança completou (somente se for aniversário infantil), lendo velas, número em balões, topper ou texto da decoração ("2 aninhos" = 2). Null se não for possível identificar ou não se aplicar.
+- "temaFesta": tema decorativo identificado (ex: "Dinossauro", "Princesa", "Safari", "Homem-Aranha", "Fazendinha"). Deixe vazio se não identificar.
+- "tags": array de strings com características visuais úteis para busca futura (ex: ["azul","balões","mesa de doces"]). Máximo 6 tags.
+- "observacoes": qualquer outra informação relevante visível na foto (nome do buffet/local se aparecer, decoração especial, etc).`;
+
+    const resultado = await callGeminiVision(base64, mimeType, prompt);
+    if(!resultado.texto){
+      toast(`Erro ao analisar foto: ${resultado.erro||"tente novamente."}`);
+      return;
+    }
+    let dados;
+    try{
+      const limpo = resultado.texto.replace(/```json|```/g,"").trim();
+      dados = JSON.parse(limpo);
+    }catch(err){
+      console.error("[foto-festa-novo-evento] parse error:", err, resultado.texto);
+      toast("Não consegui interpretar os dados da foto. Veja o console.");
+      return;
+    }
+
+    // só preenche se o formulário de "novo evento" ainda estiver aberto
+    if(formState._col !== "eventos" || formState._id){
+      toast("Abra o formulário de novo evento antes de enviar a foto.");
+      return;
+    }
+
+    if(dados.tipo) formState.tipo = dados.tipo;
+    if(dados.dataCapturaExif) formState.data = dados.dataCapturaExif;
+
+    const tagsDetectadas = [...(dados.tags||[])];
+    if(dados.temaFesta && !tagsDetectadas.includes(dados.temaFesta)) tagsDetectadas.push(dados.temaFesta);
+    if(tagsDetectadas.length){
+      const tagsAtuais = Array.isArray(formState.tags) ? formState.tags : [];
+      formState.tags = [...new Set([...tagsAtuais, ...tagsDetectadas])];
+    }
+    if(dados.observacoes && !formState.nomeEvento) formState.nomeEvento = dados.observacoes;
+
+    // tenta casar o nome homenageado com uma criança ou cliente já cadastrado
+    if(dados.nomeHomenageado){
+      const ehCasamento = ["casamento_civil","casamento_religioso"].includes(dados.tipo);
+      if(!ehCasamento){
+        const criancaExistente = state.criancas.find(c=> similaridadeNome(c.nome, dados.nomeHomenageado) >= 0.82);
+        if(criancaExistente){
+          formState.criancaId = criancaExistente.id;
+          const respId = criancaExistente.clientePaiId || criancaExistente.clienteMaeId;
+          if(respId) formState.clienteId = respId;
+        } else {
+          formState.criancaId = "__new__";
+          formState._quickNew_criancaId = { nome: dados.nomeHomenageado };
+          if(dados.idadeCrianca!==null && dados.idadeCrianca!==undefined && formState.data){
+            const dataEv = new Date(formState.data+"T00:00:00");
+            const anoNasc = dataEv.getFullYear() - dados.idadeCrianca;
+            formState._quickNew_criancaId.dataNascimento = `${anoNasc}-${String(dataEv.getMonth()+1).padStart(2,"0")}-${String(dataEv.getDate()).padStart(2,"0")}`;
+          }
+        }
+      }
+      if(!formState.clienteId){
+        const clienteExistente = state.clientes.find(c=>
+          similaridadeNome(c.nome, dados.nomeHomenageado) >= 0.82 ||
+          (c.nomeConjuge && similaridadeNome(c.nomeConjuge, dados.nomeHomenageado) >= 0.82)
+        );
+        if(clienteExistente) formState.clienteId = clienteExistente.id;
+      }
+    }
+
+    formState.iaVerificado = true;
+    formState.fotoLida = true;
+    refreshFormFields();
+    toast("Campos preenchidos a partir da foto. Confira cliente/criança e complete o que faltar antes de salvar.");
+  };
+  reader.readAsDataURL(file);
+}
+
 async function processarFotoFesta(eventoId, file){
   if(!file) return;
   const t = document.getElementById("toast");
@@ -4083,7 +4199,10 @@ function openForm(col, id){
 
   document.getElementById("modal-content").innerHTML = `
     <h3>${existing ? "Editar" : "Novo"} ${schema.singular}</h3>
-    ${podeUsarPrint ? `<button class="ghost" style="margin-bottom:14px;" onclick="triggerPrintUpload('${col}')">📷 Preencher com print (IA)</button>` : ""}
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:${podeUsarPrint?"14px":"0"};">
+      ${podeUsarPrint ? `<button class="ghost" onclick="triggerPrintUpload('${col}')">📷 Preencher com print de conversa (IA)</button>` : ""}
+      ${(col==="eventos" && !existing && temIA()) ? `<button class="ghost" onclick="triggerFotoFestaUpload()">📸 Preencher com foto da festa (IA)</button>` : ""}
+    </div>
     <div id="form-fields">${camposVisiveis(schema).map(f=>renderField(f, formState[f.key])).join("")}</div>
     ${showMarkPaid ? `
       <div class="card" style="margin-top:4px; padding:12px 14px;">
