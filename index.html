@@ -532,7 +532,9 @@ function startListeners(){
   const unsubConfig = db.collection("config").doc("settings").onSnapshot(
     doc=>{
       state.config = doc.exists ? doc.data() : {};
-      if(state.currentPage==="configuracoes") renderPage("configuracoes");
+      // re-renderiza qualquer página que use dados de config
+      const paginasConfig = ["configuracoes","dashboard","pagamentos","relatorios"];
+      if(paginasConfig.includes(state.currentPage)) renderPage(state.currentPage);
     },
     err=>{
       console.error("[firestore] erro em \"config\":", err.code, err.message);
@@ -2218,8 +2220,16 @@ function renderRelatorios(main){
 }
 
 /* ---------- DASHBOARD ---------- */
+function parseValorConfig(raw){
+  // aceita número puro (3000) ou string formatada BR ("3.000,00" / "3000,00")
+  if(raw===undefined || raw===null || raw==="") return 0;
+  if(typeof raw === "number") return raw;
+  const limpo = String(raw).trim().replace(/\./g,"").replace(",",".");
+  const n = parseFloat(limpo);
+  return isNaN(n) ? 0 : n;
+}
 function renderCardMeta(){
-  const meta = Number(state.config?.metaMensal)||0;
+  const meta = parseValorConfig(state.config?.metaMensal);
   if(!meta) return `
     <div class="card stat-card">
       <div class="label">🎯 Meta do mês</div>
