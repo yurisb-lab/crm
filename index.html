@@ -531,6 +531,7 @@ function startListeners(){
     const unsub = db.collection(col).onSnapshot(
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+        invalidarCrmContextCache();
         renderPage(state.currentPage);
       },
       err=>{
@@ -1170,8 +1171,26 @@ function enviarMensagemCasamento(casamentoId){
    ========================================================= */
 let chatHistory = [];
 
+// ---- cache do contexto enviado à IA no chat "Conversar" ----
+// evita remontar o texto (clientes, eventos, leads etc.) a cada pergunta;
+// só reconstrói quando algum dado relevante muda no Firestore.
+let _crmContextCache = null;
+let _crmContextDirty = true;
+function invalidarCrmContextCache(){ _crmContextDirty = true; }
+function getCrmContext(){
+  if(_crmContextDirty || !_crmContextCache){
+    _crmContextCache = buildCrmContext();
+    _crmContextDirty = false;
+  }
+  return _crmContextCache;
+}
+
 function buildCrmContext(){
   const hoje = new Date().toISOString().slice(0,10);
+  // limita o histórico de eventos considerado pela IA aos últimos 5 anos,
+  // pra manter o contexto mais enxuto e a resposta mais rápida
+  const anoLimiteContexto = new Date().getFullYear() - 5;
+  const dataLimiteContexto = `${anoLimiteContexto}-01-01`;
 
   // Resumo financeiro
   const totalContratado = state.eventos.reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
@@ -1201,8 +1220,8 @@ function buildCrmContext(){
     // todos os comentários (sem limite)
     const comentarios = (c.comentarios||[]).sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||"")).map(x=>`[${formatarDataHora(x.criadoEm)}] ${x.texto}`).join(" | ");
 
-    // histórico resumido de eventos
-    const historicoEvs = evs.slice(0,8).map(e=>`${capitalize((e.tipo||"").replace("_"," "))} ${formatDate(e.data)} (${statusLabel(e.status||"orcamento")})`).join(", ");
+    // histórico resumido de eventos (últimos 5 anos, no máximo 8 mais recentes)
+    const historicoEvs = evs.filter(e=>(e.data||"")>=dataLimiteContexto).slice(0,8).map(e=>`${capitalize((e.tipo||"").replace("_"," "))} ${formatDate(e.data)} (${statusLabel(e.status||"orcamento")})`).join(", ");
 
     const partes = [
       `${c.nome}${c.nomeConjuge?" & "+c.nomeConjuge:""}`,
@@ -1220,8 +1239,8 @@ function buildCrmContext(){
     return partes.join(" | ");
   }).join("\n");
 
-  // Eventos — incluindo data de entrega e bloqueio
-  const eventosCtx = state.eventos.map(e=>{
+  // Eventos — incluindo data de entrega e bloqueio (limitado aos últimos 5 anos)
+  const eventosCtx = state.eventos.filter(e=>(e.data||"")>=dataLimiteContexto).map(e=>{
     const saldo = (Number(e.valorContratado)||0)-totalPago(e.id);
     const crianca = e.criancaId ? state.criancas.find(c=>c.id===e.criancaId) : null;
     return [
@@ -1295,8 +1314,8 @@ ${alertas||"Nenhum alerta no momento."}
 (inclui histórico de eventos, filhos com próximos aniversários, casamentos e todas as anotações)
 ${clientesCtx||"Nenhum cliente cadastrado."}
 
-=== EVENTOS (${state.eventos.length}) ===
-${eventosCtx||"Nenhum evento cadastrado."}
+=== EVENTOS (últimos 5 anos, a partir de ${dataLimiteContexto}; total histórico: ${state.eventos.length}) ===
+${eventosCtx||"Nenhum evento cadastrado no período."}
 
 === LEADS (${state.leads.length}) ===
 ${leadsCtx||"Nenhum lead cadastrado."}
@@ -1308,7 +1327,27 @@ ${criancasCtx||"Nenhuma criança cadastrada."}
 ${casamentosCtx||"Nenhum casamento cadastrado."}`;
 }
 
+// carrega o histórico salvo (config.chatHistorico) na primeira vez que a página é aberta nesta sessão
+let _chatHistoricoCarregado = false;
+function carregarChatHistoricoSalvo(){
+  if(_chatHistoricoCarregado) return;
+  _chatHistoricoCarregado = true;
+  if(chatHistory.length===0 && Array.isArray(state.config?.chatHistorico) && state.config.chatHistorico.length){
+    chatHistory = [...state.config.chatHistorico];
+  }
+}
+async function salvarChatHistoricoRemoto(){
+  // guarda só as últimas 5 perguntas (5 pares pergunta+resposta = até 10 mensagens)
+  const ultimas = chatHistory.slice(-10);
+  try{
+    await db.collection("config").doc("settings").set({ chatHistorico: ultimas }, {merge:true});
+  }catch(err){
+    console.error("[chat] erro ao salvar histórico:", err);
+  }
+}
+
 function renderConversar(main){
+  carregarChatHistoricoSalvo();
   if(!temIA()){
     main.innerHTML = `
       <div class="page-header"><div><div class="eyebrow">Inteligência Artificial</div><h2>Conversar com o CRM</h2></div></div>
@@ -1386,11 +1425,11 @@ async function enviarMensagemChat(){
     msgs.scrollTop = msgs.scrollHeight;
   }
 
-  const contexto = buildCrmContext();
+  const contexto = getCrmContext();
   const historico = chatHistory.slice(-6).map(m=>`${m.role==="user"?"Yuri":"Assistente"}: ${m.content}`).join("\n");
   const prompt = `${contexto}\n\n=== CONVERSA ===\n${historico}`;
 
-  const resultado = await callGemini(prompt);
+  const resultado = await callGemini(prompt, 0, GEMINI_MODEL_CHAT);
 
   if(resultado.texto){
     chatHistory.push({ role:"ai", content:resultado.texto });
@@ -1404,10 +1443,13 @@ async function enviarMensagemChat(){
   }
   const btn = document.querySelector(".chat-input-row button");
   if(btn) btn.disabled = false;
+
+  salvarChatHistoricoRemoto();
 }
 
 function limparChat(){
   chatHistory = [];
+  salvarChatHistoricoRemoto();
   renderPage("conversar");
 }
 
@@ -3379,11 +3421,14 @@ function mostrarErroGemini(erro, elementoId){
   return { rateLimited: false };
 }
 
-async function callGemini(prompt, tentativa=0){
+const GEMINI_MODEL_PADRAO = "gemini-2.5-flash";       // briefing, resumo, duplicados, leitura de fotos/prints
+const GEMINI_MODEL_CHAT = "gemini-2.5-flash-lite";     // chat "Conversar" — perguntas diretas de consulta, prioriza velocidade
+
+async function callGemini(prompt, tentativa=0, modelo=GEMINI_MODEL_PADRAO){
   const key = state.config?.geminiKey || "";
   if(!key) return { erro: "Nenhuma chave Gemini configurada." };
   try{
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`, {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ contents:[{ parts:[{ text: prompt }] }] })
@@ -3396,7 +3441,7 @@ async function callGemini(prompt, tentativa=0){
       if(segundos && tentativa===0){
         toast(`Limite de requisições atingido. Retentando em ${segundos}s automaticamente...`, (segundos+3)*1000);
         await new Promise(r=>setTimeout(r, segundos*1000));
-        return callGemini(prompt, 1);
+        return callGemini(prompt, 1, modelo);
       }
       return { erro: msg, segundosRetry: segundos };
     }
