@@ -191,13 +191,19 @@
 
   .card{
     background:var(--surface); border:1px solid var(--border-solid); border-radius:var(--radius);
-    padding:18px 20px;
+    padding:18px 20px; box-shadow:0 10px 24px -18px rgba(0,0,0,.55);
   }
-  .stat-card .label{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:8px; }
-  .stat-card .value{ font-family:'Fraunces',serif; font-size:28px; }
+  .stat-card .label{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:8px; font-weight:600; }
+  .stat-card .value{ font-family:'Fraunces',serif; font-size:28px; font-weight:600; letter-spacing:-.01em; }
   .stat-card .sub{ font-size:12px; color:var(--muted-2); margin-top:4px; }
+  .stat-card.stat-card-primary{ background:var(--surface-2); border-color:var(--border-solid); }
+  .stat-card.stat-card-primary .value{ font-size:32px; }
 
-  .section-title{ font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:28px 0 12px; }
+  .section-title{
+    font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:28px 0 12px;
+    font-weight:700; display:flex; align-items:center; gap:10px;
+  }
+  .section-title::after{ content:""; flex:1; height:1px; background:var(--border); }
 
   table{ width:100%; border-collapse:collapse; font-size:14px; }
   .card table{ min-width:320px; } /* garante scroll horizontal em vez de cortar */
@@ -1732,7 +1738,7 @@ function renderAgendaLista(){
                   </div>
                   <div style="text-align:right; font-size:13px; flex-shrink:0; margin-right:8px;">
                     ${e.valorContratado?money(e.valorContratado):"—"}
-                    ${saldo>0?`<div style="font-size:11px;color:#ef4444;">-${money(saldo)}</div>`:(e.valorContratado?`<div style="font-size:11px;color:#22c55e;">✓ pago</div>`:"")}
+                    ${saldo>0?`<div style="font-size:11px;font-weight:700;color:var(--text);">-${money(saldo)}</div>`:(e.valorContratado?`<div style="font-size:11px;color:var(--muted-2);">✓ pago</div>`:"")}
                   </div>
                   <div class="row-actions">
                     <button class="sm" onclick="openView('eventos','${e.id}')">Ver</button>
@@ -2268,7 +2274,7 @@ function renderRelatorios(main){
     <div class="grid grid-4">
       <div class="card stat-card"><div class="label">Eventos em ${anoAtual}</div><div class="value">${eventosAno.length}</div><div class="sub">${eventosFechadosAno} fechados · ${eventosEntreguesAno} entregues</div></div>
       <div class="card stat-card"><div class="label">Recebido em ${anoAtual}</div><div class="value" style="font-size:18px;">${money(recebidoAno)}</div><div class="sub">de ${money(contratadoAno)} contratados</div></div>
-      <div class="card stat-card"><div class="label">A receber (${anoAtual})</div><div class="value" style="font-size:18px;color:#ef4444;">${money(pendenteAno)}</div><div class="sub">saldo pendente nos eventos do ano</div></div>
+      <div class="card stat-card"><div class="label">A receber (${anoAtual})</div><div class="value" style="font-size:18px;">${money(pendenteAno)}</div><div class="sub">saldo pendente nos eventos do ano</div></div>
       <div class="card stat-card"><div class="label">Ticket médio (${anoAtual})</div><div class="value" style="font-size:18px;">${money(ticketMedioAno)}</div><div class="sub">tipo mais comum: ${tipoMaisComumAno}</div></div>
     </div>
     <div class="grid grid-3" style="margin-bottom:24px;">
@@ -2364,9 +2370,9 @@ function renderDashboard(main){
     </div>
 
     <div class="grid grid-3" style="margin-bottom:14px;">
-      <div class="card stat-card">
+      <div class="card stat-card stat-card-primary">
         <div class="label">Próximo evento</div>
-        <div class="value" style="font-size:18px">${proximo ? capitalize((proximo.tipo||"").replace("_"," ")) : "—"}</div>
+        <div class="value" style="font-size:20px">${proximo ? capitalize((proximo.tipo||"").replace("_"," ")) : "—"}</div>
         <div class="sub">${proximo ? formatDate(proximo.data) + (proximo.horario? " · "+proximo.horario:"") + " · " + nomeRef("clientes",proximo.clienteId) : "Nenhum evento futuro"}</div>
       </div>
       <div class="card stat-card">
@@ -2410,7 +2416,7 @@ function renderDashboard(main){
               </div>
               <div style="text-align:right; font-size:13px; flex-shrink:0;">
                 ${e.valorContratado ? money(e.valorContratado) : "—"}
-                ${saldo>0 ? `<div style="font-size:11px;color:#ef4444;">-${money(saldo)}</div>` : (e.valorContratado ? `<div style="font-size:11px;color:#22c55e;">✓</div>` : "")}
+                ${saldo>0 ? `<div style="font-size:11px;font-weight:700;color:var(--text);">-${money(saldo)}</div>` : (e.valorContratado ? `<div style="font-size:11px;color:var(--muted-2);">✓</div>` : "")}
               </div>
             </div>`;
           }).join("")}
@@ -2445,7 +2451,7 @@ function renderDashboard(main){
             ${criancas60.map(c=>`<tr>
               <td><a href="#" onclick="openView('criancas','${c.id}');return false;">${c.nome}</a></td>
               <td>${c.idade+1} anos</td>
-              <td>${c.dias===0?'<b style="color:#22c55e">Hoje!</b>':c.dias+' dias'}</td>
+              <td>${c.dias===0?'<b>🎉 Hoje!</b>':c.dias+' dias'}</td>
               <td>${c.vinculo}</td>
               <td><button class="sm" onclick="enviarMensagemAniversario('${c.id}')">Enviar</button></td>
             </tr>`).join("")}
@@ -2459,7 +2465,7 @@ function renderDashboard(main){
             ${casamentos60.map(c=>`<tr>
               <td><a href="#" onclick="openView('casamentos','${c.id}');return false;">${c.nome}</a></td>
               <td>${c.idade+1} anos de casados</td>
-              <td>${c.dias===0?'<b style="color:#22c55e">Hoje!</b>':c.dias+' dias'}</td>
+              <td>${c.dias===0?'<b>🎉 Hoje!</b>':c.dias+' dias'}</td>
               <td><button class="sm" onclick="enviarMensagemCasamento('${c.id}')">Enviar</button></td>
             </tr>`).join("")}
           </tbody></table>
@@ -2522,7 +2528,7 @@ function renderFinanceiroPage(main){
 
     <div class="grid grid-3" style="margin-bottom:20px;">
       <div class="card stat-card"><div class="label">Total recebido (geral)</div><div class="value" style="font-size:19px">${money(totalRecebido)}</div></div>
-      <div class="card stat-card"><div class="label">A receber (saldo pendente)</div><div class="value" style="font-size:19px;color:#ef4444;">${money(totalPendente)}</div></div>
+      <div class="card stat-card"><div class="label">A receber (saldo pendente)</div><div class="value" style="font-size:19px;">${money(totalPendente)}</div></div>
       <div class="card stat-card"><div class="label">Pagamentos registrados</div><div class="value">${state.pagamentos.length}</div></div>
     </div>
 
@@ -3364,7 +3370,7 @@ function renderViewEvento(ev){
       return viewRow("Valor contratado", money(final));
     })()}
     ${viewRow("Recebido", money(pago))}
-    ${viewRow("Saldo pendente", saldo>0 ? `<span style="color:#ef4444;font-weight:600;">${money(saldo)}</span>` : '<span style="color:#22c55e;">Pago ✓</span>')}
+    ${viewRow("Saldo pendente", saldo>0 ? `<span style="font-weight:700;">${money(saldo)}</span>` : '<span style="color:var(--muted-2);">Pago ✓</span>')}
     ${ev.tags && ev.tags.length ? viewRow("Tags", ev.tags.map(t=>`<span class="tag-chip">${t}</span>`).join("")) : ""}
     ${ev.dataEntregaPrevista ? viewRow("Entrega prevista", formatDate(ev.dataEntregaPrevista)) : ""}
     ${ev.dataEntregaReal ? viewRow("Entrega realizada", formatDate(ev.dataEntregaReal)) : ""}
