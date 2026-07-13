@@ -564,7 +564,8 @@ const QUICK_FIELDS = {
   ],
   criancas: [
     {key:"nome", label:"Nome da criança", type:"text", required:true},
-    {key:"dataNascimento", label:"Data de nascimento", type:"date", required:true}
+    {key:"dataNascimento", label:"Data de nascimento (se souber)", type:"date"},
+    {key:"idadeCompletada", label:"Ou: idade que completou nesta festa", type:"number"}
   ],
   casamentos: [
     {key:"nomeCasal", label:"Nome do casal", type:"text", required:true},
@@ -621,7 +622,9 @@ const SCHEMAS = {
     label: "Aniversariantes", singular:"Criança",
     fields: [
       {key:"nome", label:"Nome", type:"text", required:true},
-      {key:"dataNascimento", label:"Data de nascimento", type:"date", required:true},
+      {key:"dataNascimento", label:"Data de nascimento (se souber)", type:"date"},
+      {key:"idadeCompletada", label:"Ou: idade que completou (se não souber a data de nascimento)", type:"number"},
+      {key:"dataFesta", label:"Data da festa/foto em que completou essa idade", type:"date"},
       {key:"clientePaiId", label:"Responsável 1", type:"ref", ref:"clientes"},
       {key:"clienteMaeId", label:"Responsável 2", type:"ref", ref:"clientes"},
       {key:"observacoes", label:"Observações", type:"textarea"}
@@ -630,11 +633,13 @@ const SCHEMAS = {
       {key:"nome", label:"Nome"},
       {key:"_idadeAtual", label:"Idade atual", format:(v,row)=>{
         const idade = idadeAtual(row.dataNascimento);
-        return typeof idade === "number" ? `${idade} anos` : "—";
+        if(typeof idade !== "number") return "—";
+        return row.nascimentoAproximado ? `~${idade} anos` : `${idade} anos`;
       }},
       {key:"_proximaIdade", label:"Completará", format:(v,row)=>{
         const idade = idadeAtual(row.dataNascimento);
-        return typeof idade === "number" ? `${idade+1} anos` : "—";
+        if(typeof idade !== "number") return "—";
+        return row.nascimentoAproximado ? `~${idade+1} anos` : `${idade+1} anos`;
       }},
       {key:"_proximo", label:"Aniversário em", format:(v,row)=>{
         const dias = diasParaAniversario(row.dataNascimento);
@@ -1258,7 +1263,7 @@ function buildCrmContext(){
     const prox = diasParaAniversario(c.dataNascimento);
     const idadeProx = idadeAtual(c.dataNascimento)+1;
     const obsStr = c.observacoes ? ` | obs:${c.observacoes}` : "";
-    return `${c.nome} | nasc:${formatDate(c.dataNascimento)} | faz ${idadeProx} anos em ${prox} dias | responsável:${resp}${obsStr}`;
+    return `${c.nome} | nasc:${formatDate(c.dataNascimento)}${c.nascimentoAproximado?" (estimada)":""} | faz ${idadeProx} anos em ${prox} dias | responsável:${resp}${obsStr}`;
   }).join("\n");
 
   // Casamentos — com dias para bodas
@@ -2140,7 +2145,7 @@ function renderDashboard(main){
   const proximo = futuros[0];
   const doMes = state.eventos.filter(e=>isMesmoMes(e.data));
   const aReceber = state.eventos.reduce((sum,e)=> sum + Math.max((Number(e.valorContratado)||0) - totalPago(e.id), 0), 0);
-  const aniversariosCriancas = state.criancas.map(c=>({id:c.id, tipo:"crianca", nome:c.nome, data:c.dataNascimento, vinculo:nomeRef("clientes",c.clientePaiId), dias:diasParaAniversario(c.dataNascimento), idade:idadeAtual(c.dataNascimento)}));
+  const aniversariosCriancas = state.criancas.map(c=>({id:c.id, tipo:"crianca", nome:c.nome, data:c.dataNascimento, vinculo:nomeRef("clientes",c.clientePaiId), dias:diasParaAniversario(c.dataNascimento), idade:idadeAtual(c.dataNascimento), aprox:!!c.nascimentoAproximado}));
   const aniversariosCasamentos = state.casamentos.map(c=>({id:c.id, tipo:"casamento", nome:c.nomeCasal, data:c.dataCasamento, vinculo:nomeRef("clientes",c.clienteId), dias:diasParaAniversario(c.dataCasamento), idade:idadeAtual(c.dataCasamento)}));
   const aniversarios = [...aniversariosCriancas, ...aniversariosCasamentos].filter(c=>c.dias<=60).sort((a,b)=>a.dias-b.dias);
   const pendentesEntrega = state.eventos.filter(e=>e.status==="realizado");
@@ -2232,7 +2237,7 @@ function renderDashboard(main){
           <table><thead><tr><th>Criança</th><th>Vai completar</th><th>Em</th><th>Responsável</th><th></th></tr></thead><tbody>
             ${criancas60.map(c=>`<tr>
               <td><a href="#" onclick="openView('criancas','${c.id}');return false;">${c.nome}</a></td>
-              <td>${c.idade+1} anos</td>
+              <td>${c.aprox?"~":""}${c.idade+1} anos</td>
               <td>${c.dias===0?'<b>🎉 Hoje!</b>':c.dias+' dias'}</td>
               <td>${c.vinculo}</td>
               <td><button class="sm" onclick="enviarMensagemAniversario('${c.id}')">Enviar</button></td>
@@ -2933,6 +2938,7 @@ Instruções por campo:
             const dataEv = new Date(formState.data+"T00:00:00");
             const anoNasc = dataEv.getFullYear() - dados.idadeCrianca;
             formState._quickNew_criancaId.dataNascimento = `${anoNasc}-${String(dataEv.getMonth()+1).padStart(2,"0")}-${String(dataEv.getDate()).padStart(2,"0")}`;
+            formState._quickNew_criancaId.nascimentoAproximado = true;
           }
         }
       }
@@ -3090,7 +3096,10 @@ async function confirmarFotoFesta(eventoId){
       const nome = document.getElementById("ff-nome")?.value;
       if(nome && nome !== crianca.nome) criancaUpdates.nome = nome;
       const nasc = document.getElementById("ff-nasc")?.value;
-      if(nasc && nasc !== crianca.dataNascimento) criancaUpdates.dataNascimento = nasc;
+      if(nasc && nasc !== crianca.dataNascimento){
+        criancaUpdates.dataNascimento = nasc;
+        criancaUpdates.nascimentoAproximado = true;
+      }
       if(Object.keys(criancaUpdates).length) await db.collection("criancas").doc(crianca.id).update(criancaUpdates);
     }
 
@@ -3751,10 +3760,11 @@ function renderViewCrianca(c){
   const ultimo = state.eventos
     .filter(e=>e.criancaId===c.id && e.data && e.data<=hoje)
     .sort((a,b)=>b.data.localeCompare(a.data))[0];
+  const aprox = !!c.nascimentoAproximado;
 
   return `<h3>${c.nome}</h3>
-    ${viewRow("Data de nascimento", formatDate(c.dataNascimento))}
-    ${viewRow("Idade atual", idadeAtual(c.dataNascimento)+" anos")}
+    ${viewRow("Data de nascimento", formatDate(c.dataNascimento) + (aprox ? ` <span style="color:var(--muted-2);font-size:12px;">(estimada${c.dataFesta?" a partir da festa de "+formatDate(c.dataFesta):""})</span>` : ""))}
+    ${viewRow("Idade atual", (aprox?"~":"")+idadeAtual(c.dataNascimento)+" anos")}
     ${viewRow("Próximo aniversário em", diasParaAniversario(c.dataNascimento)+" dias")}
     ${ultimo ? viewRow("Último trabalho", `<a href="#" onclick="openView('eventos','${ultimo.id}');return false;">${capitalize((ultimo.tipo||"").replace("_"," "))} · ${formatDate(ultimo.data)}</a><br><span style="font-size:12px; color:var(--muted);">Na época ela tinha ${idadeNaData(c.dataNascimento, ultimo.data)} ${idadeNaData(c.dataNascimento, ultimo.data)===1?"ano":"anos"} · já se passaram ${tempoDesde(ultimo.data)} desde essa festinha · vai completar ${idadeAtual(c.dataNascimento)+1} anos no próximo aniversário</span>`) : ""}
     ${c.clientePaiId ? viewRow("Responsável 1", `<a href="#" onclick="openView('clientes','${c.clientePaiId}');return false;">${nomeRef("clientes",c.clientePaiId)}</a>`) : ""}
@@ -4263,6 +4273,21 @@ async function saveDoc(){
       }
       const quickData = {};
       qFields.forEach(q=> quickData[q.key] = quick[q.key] || "");
+      if(quick.nascimentoAproximado) quickData.nascimentoAproximado = true;
+
+      if(ref === "criancas"){
+        if(!quickData.dataNascimento && quickData.idadeCompletada && data.data){
+          const dataFestaObj = new Date(data.data+"T00:00:00");
+          const anoNasc = dataFestaObj.getFullYear() - Number(quickData.idadeCompletada);
+          quickData.dataNascimento = `${anoNasc}-${String(dataFestaObj.getMonth()+1).padStart(2,"0")}-${String(dataFestaObj.getDate()).padStart(2,"0")}`;
+          quickData.nascimentoAproximado = true;
+        }
+        if(!quickData.dataNascimento){
+          toast("Informe a data de nascimento da criança ou a idade que ela completou nesta festa.");
+          return;
+        }
+      }
+
       if(ref === "criancas" && data.clienteId){
         quickData.clientePaiId = data.clienteId; // já vincula a criança ao cliente do evento
       }
@@ -4309,6 +4334,21 @@ async function saveDoc(){
         console.error("[casamentos] erro ao criar automaticamente:", err);
         // não bloqueia o salvamento do evento por causa disso
       }
+    }
+  }
+
+  if(col === "criancas"){
+    if(!data.dataNascimento && data.idadeCompletada && data.dataFesta){
+      const dataFestaObj = new Date(data.dataFesta+"T00:00:00");
+      const anoNasc = dataFestaObj.getFullYear() - Number(data.idadeCompletada);
+      data.dataNascimento = `${anoNasc}-${String(dataFestaObj.getMonth()+1).padStart(2,"0")}-${String(dataFestaObj.getDate()).padStart(2,"0")}`;
+      data.nascimentoAproximado = true;
+    } else if(data.dataNascimento){
+      data.nascimentoAproximado = false;
+    }
+    if(!data.dataNascimento){
+      toast("Informe a data de nascimento, ou a idade que ela completou + a data da festa.");
+      return;
     }
   }
 
