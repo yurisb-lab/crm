@@ -1942,8 +1942,6 @@ async function desbloquearData(id){
 }
 
 const leadsExpandidos = new Set(["ativos"]);
-const MOTIVOS_PERDA_LABELS = {outro_fotografo:"Fechou com outro fotógrafo", achou_caro:"Achou caro", cancelou_festa:"Cancelou a festa", nao_respondeu:"Não respondeu", outro:"Outro motivo"};
-let funilLeadsAbertoLeads = false;
 
 function renderLeadsPage(main){
   const ativos = state.leads.filter(l=>!["convertido","perdido"].includes(l.status||"novo"))
@@ -1960,74 +1958,10 @@ function renderLeadsPage(main){
         <button class="primary" onclick="openForm('leads')">+ Novo Lead</button>
       </div>
     </div>
-    ${renderFunilLeadsAno()}
     ${renderPilhaLeads("ativos", "Leads ativos", ativos)}
     ${renderPilhaLeads("convertidos", "Convertidos em cliente", convertidos)}
     ${renderPilhaLeads("perdidos", "Perdidos", perdidos)}
   `;
-}
-
-/* ---------- Funil de vendas do ano corrente (só leads cadastrados este ano) ---------- */
-function renderFunilLeadsAno(){
-  const anoAtual = new Date().getFullYear();
-  const leadsAno = state.leads.filter(l=>(l.criadoEm||"").startsWith(String(anoAtual)));
-
-  const etapas = [
-    {key:"novo", label:"○ Novo"},
-    {key:"negociando", label:"◑ Negociando"},
-    {key:"convertido", label:"✓ Convertido"},
-    {key:"perdido", label:"✕ Perdido"}
-  ];
-  const contagem = etapas.map(et=>({ ...et, n: leadsAno.filter(l=>(l.status||"novo")===et.key).length }));
-  const total = leadsAno.length;
-  const convertidosN = contagem.find(e=>e.key==="convertido").n;
-  const taxaConversao = total ? (convertidosN/total*100) : 0;
-
-  const motivosPerda = ["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"];
-  const porMotivo = motivosPerda.map(m=>({
-    motivo:m,
-    n: leadsAno.filter(l=>l.status==="perdido" && l.motivoPerda===m).length
-  })).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
-  const perdidosSemMotivo = leadsAno.filter(l=>l.status==="perdido" && !l.motivoPerda).length;
-
-  const isOpen = funilLeadsAbertoLeads;
-
-  return `
-    <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
-      <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;" onclick="toggleFunilLeadsAno()">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-family:'Fraunces',serif; font-size:18px;">${isOpen?'▾':'▸'} Funil de vendas · ${anoAtual}</span>
-          <span style="font-size:12px; color:var(--muted);">${total} lead${total===1?"":"s"} cadastrado${total===1?"":"s"} este ano</span>
-        </div>
-        <span style="font-size:12px; color:var(--muted-2);">${isOpen?'recolher':'expandir'}</span>
-      </div>
-      ${isOpen ? `
-        <div style="border-top:1px solid var(--border-solid); padding:16px 18px;">
-          ${total ? `
-            <table><thead><tr><th>Etapa</th><th>Quantidade</th></tr></thead><tbody>
-              ${contagem.map(e=>`<tr><td>${e.label}</td><td>${e.n}</td></tr>`).join("")}
-            </tbody></table>
-            <div class="grid grid-3" style="margin-top:14px;">
-              <div class="card stat-card"><div class="label">Leads recebidos</div><div class="value">${total}</div></div>
-              <div class="card stat-card"><div class="label">Convertidos</div><div class="value">${convertidosN}</div></div>
-              <div class="card stat-card"><div class="label">Taxa de conversão</div><div class="value">${taxaConversao.toFixed(1)}%</div></div>
-            </div>
-            ${(porMotivo.length || perdidosSemMotivo) ? `
-              <div class="section-title" style="margin-top:22px;">Motivos de perda</div>
-              <table><thead><tr><th>Motivo</th><th>Quantidade</th></tr></thead><tbody>
-                ${porMotivo.map(x=>`<tr><td>${MOTIVOS_PERDA_LABELS[x.motivo]}</td><td>${x.n}</td></tr>`).join("")}
-                ${perdidosSemMotivo ? `<tr><td>Sem motivo informado</td><td>${perdidosSemMotivo}</td></tr>` : ""}
-              </tbody></table>
-            ` : ""}
-          ` : `<div class="empty-state" style="padding:12px 0;">Nenhum lead cadastrado em ${anoAtual} ainda.</div>`}
-        </div>
-      ` : ""}
-    </div>
-  `;
-}
-function toggleFunilLeadsAno(){
-  funilLeadsAbertoLeads = !funilLeadsAbertoLeads;
-  renderPage("leads");
 }
 
 function renderPilhaLeads(chave, titulo, itens){
@@ -2072,6 +2006,29 @@ function togglePilhaLead(chave){
   if(leadsExpandidos.has(chave)) leadsExpandidos.delete(chave);
   else leadsExpandidos.add(chave);
   renderPage("leads");
+}
+
+/* ---------- RELATÓRIOS: seções em pilhas por tema ---------- */
+const relatoriosExpandido = new Set(["financeiro","clientes","vendas"]); // abrem automaticamente
+function toggleRelatorioSecao(chave){
+  if(relatoriosExpandido.has(chave)) relatoriosExpandido.delete(chave);
+  else relatoriosExpandido.add(chave);
+  renderPage("relatorios");
+}
+function renderSecaoRelatorio(chave, icone, titulo, resumo, conteudoHtml){
+  const isOpen = relatoriosExpandido.has(chave);
+  return `
+    <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;" onclick="toggleRelatorioSecao('${chave}')">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="font-family:'Fraunces',serif; font-size:18px;">${isOpen?'▾':'▸'} ${icone} ${titulo}</span>
+          <span style="font-size:12px; color:var(--muted);">${resumo}</span>
+        </div>
+        <span style="font-size:12px; color:var(--muted-2);">${isOpen?'recolher':'expandir'}</span>
+      </div>
+      ${isOpen ? `<div style="padding:18px; border-top:1px solid var(--border-solid);">${conteudoHtml}</div>` : ""}
+    </div>
+  `;
 }
 
 function renderRelatorios(main){
@@ -2189,27 +2146,18 @@ function renderRelatorios(main){
     });
   }
 
-  main.innerHTML = `
-    <div class="page-header"><div><div class="eyebrow">Visão de negócio</div><h2>Relatórios</h2></div></div>
-
-    <div class="section-title" style="margin-top:0;">Ano de ${anoAtual}</div>
-    <div class="grid grid-4">
-      <div class="card stat-card"><div class="label">Eventos em ${anoAtual}</div><div class="value">${eventosAno.length}</div><div class="sub">${eventosFechadosAno} fechados · ${eventosEntreguesAno} entregues</div></div>
-      <div class="card stat-card"><div class="label">Recebido em ${anoAtual}</div><div class="value" style="font-size:18px;">${money(recebidoAno)}</div><div class="sub">de ${money(contratadoAno)} contratados</div></div>
-      <div class="card stat-card"><div class="label">A receber (${anoAtual})</div><div class="value" style="font-size:18px;color:#ef4444;">${money(pendenteAno)}</div><div class="sub">saldo pendente nos eventos do ano</div></div>
-      <div class="card stat-card"><div class="label">Ticket médio (${anoAtual})</div><div class="value" style="font-size:18px;">${money(ticketMedioAno)}</div><div class="sub">tipo mais comum: ${tipoMaisComumAno}</div></div>
+  // ---------- Conteúdo da pilha Financeiro ----------
+  const conteudoFinanceiro = `
+    <div class="section-title" style="margin-top:0;">Resumo histórico</div>
+    <div class="card" style="padding:0;">
+      <table><tbody>
+        <tr><td>Total de eventos</td><td style="text-align:right;"><b>${state.eventos.length}</b></td></tr>
+        <tr><td>Valor contratado (total)</td><td style="text-align:right;"><b>${money(totalContratado)}</b></td></tr>
+        <tr><td>Total recebido (histórico)</td><td style="text-align:right;"><b>${money(totalRecebido)}</b></td></tr>
+      </tbody></table>
     </div>
-    <div class="grid grid-3" style="margin-bottom:4px;">
-      <div class="card stat-card"><div class="label">Clientes novos (${anoAtual})</div><div class="value">${clientesNovosAno}</div></div>
-      <div class="card stat-card"><div class="label">Pagamentos registrados (${anoAtual})</div><div class="value">${pagamentosAno.length}</div></div>
-      <div class="card stat-card"><div class="label">Taxa de entrega (${anoAtual})</div><div class="value">${eventosAno.length ? Math.round(eventosEntreguesAno/eventosAno.length*100) : 0}%</div><div class="sub">${eventosEntreguesAno} de ${eventosAno.length} entregues</div></div>
-    </div>
-
-    <div class="section-title">Histórico geral</div>
-      <div class="card stat-card"><div class="label">Total de eventos</div><div class="value">${state.eventos.length}</div></div>
-      <div class="card stat-card"><div class="label">Valor contratado (total)</div><div class="value" style="font-size:19px">${money(totalContratado)}</div></div>
-      <div class="card stat-card"><div class="label">Total recebido</div><div class="value" style="font-size:19px">${money(totalRecebido)}</div></div>
-      <div class="card stat-card"><div class="label">Clientes cadastrados</div><div class="value">${totalClientes}</div></div>
+    <div style="font-size:12px; color:var(--muted-2); margin:8px 2px 18px;">
+      💡 Recebido e a receber do mês/ano corrente ficam na página Financeiro — aqui é só o total acumulado.
     </div>
 
     <div class="section-title">Ticket médio por tipo de evento</div>
@@ -2220,10 +2168,12 @@ function renderRelatorios(main){
     </div>
 
     <div class="section-title">Descontos concedidos</div>
-    <div class="grid grid-3">
-      <div class="card stat-card"><div class="label">Total de desconto dado</div><div class="value" style="font-size:19px">${money(totalDescontoDado)}</div></div>
-      <div class="card stat-card"><div class="label">Eventos com desconto</div><div class="value">${eventosComDesconto.length}</div></div>
-      <div class="card stat-card"><div class="label">Desconto médio (quando há)</div><div class="value" style="font-size:19px">${money(eventosComDesconto.length ? totalDescontoDado/eventosComDesconto.length : 0)}</div></div>
+    <div class="card" style="padding:0;">
+      <table><tbody>
+        <tr><td>Total de desconto dado</td><td style="text-align:right;"><b>${money(totalDescontoDado)}</b></td></tr>
+        <tr><td>Eventos com desconto</td><td style="text-align:right;"><b>${eventosComDesconto.length}</b></td></tr>
+        <tr><td>Desconto médio (quando há)</td><td style="text-align:right;"><b>${money(eventosComDesconto.length ? totalDescontoDado/eventosComDesconto.length : 0)}</b></td></tr>
+      </tbody></table>
     </div>
     <div class="card" style="padding:0; margin-top:14px; overflow-x:auto;">
       ${descontoPorTipo.length ? `<table><thead><tr><th>Tipo</th><th>Eventos com desconto</th><th>Total descontado</th><th>Desconto médio</th></tr></thead><tbody>
@@ -2242,8 +2192,11 @@ function renderRelatorios(main){
         </tbody></table>
       </div>
     ` : ""}
+  `;
 
-    <div class="section-title">Ranking de origem dos clientes</div>
+  // ---------- Conteúdo da pilha Clientes ----------
+  const conteudoClientes = `
+    <div class="section-title" style="margin-top:0;">Ranking de origem dos clientes</div>
     <div class="card" style="padding:0;">
       ${porOrigem.length || semOrigem ? `<table><thead><tr><th>#</th><th>Origem</th><th>Clientes</th><th>%</th></tr></thead><tbody>
         ${porOrigem.map((x,i)=>`<tr><td>${i+1}</td><td>${capitalize(x.origem)}</td><td>${x.n}</td><td>${x.pct}%</td></tr>`).join("")}
@@ -2252,11 +2205,13 @@ function renderRelatorios(main){
     </div>
 
     <div class="section-title">Taxa de retorno de clientes</div>
-    <div class="grid grid-4">
-      <div class="card stat-card"><div class="label">Clientes com evento</div><div class="value">${clientesComEvento.length}</div></div>
-      <div class="card stat-card"><div class="label">Clientes recorrentes</div><div class="value">${clientesRecorrentes.length}</div></div>
-      <div class="card stat-card"><div class="label">Taxa de retorno</div><div class="value">${taxaRetorno.toFixed(1)}%</div></div>
-      <div class="card stat-card"><div class="label">Eventos por cliente (média)</div><div class="value">${mediaEventosPorCliente.toFixed(1)}</div></div>
+    <div class="card" style="padding:0;">
+      <table><tbody>
+        <tr><td>Clientes com evento</td><td style="text-align:right;"><b>${clientesComEvento.length}</b></td></tr>
+        <tr><td>Clientes recorrentes</td><td style="text-align:right;"><b>${clientesRecorrentes.length}</b></td></tr>
+        <tr><td>Taxa de retorno</td><td style="text-align:right;"><b>${taxaRetorno.toFixed(1)}%</b></td></tr>
+        <tr><td>Eventos por cliente (média)</td><td style="text-align:right;"><b>${mediaEventosPorCliente.toFixed(1)}</b></td></tr>
+      </tbody></table>
     </div>
 
     <div class="section-title">🌟 Clientes VIP</div>
@@ -2273,8 +2228,11 @@ function renderRelatorios(main){
         </tbody></table>
       </div>
     ` : ""}
+  `;
 
-    <div class="section-title">Funil de vendas</div>
+  // ---------- Conteúdo da pilha Vendas / Funil ----------
+  const conteudoVendas = `
+    <div class="section-title" style="margin-top:0;">Funil de vendas</div>
     <div class="card" style="padding:0;">
       <table><thead><tr><th>Etapa</th><th>Quantidade</th></tr></thead><tbody>
         <tr><td>Leads recebidos</td><td>${totalLeads}</td></tr>
@@ -2282,10 +2240,12 @@ function renderRelatorios(main){
         <tr><td>Leads convertidos em cliente</td><td>${leadsConvertidos}</td></tr>
       </tbody></table>
     </div>
-    <div class="grid grid-3" style="margin-top:14px;">
-      <div class="card stat-card"><div class="label">Taxa de conversão</div><div class="value">${taxaConversao.toFixed(1)}%</div><div class="sub">eventos fechados ÷ leads recebidos</div></div>
-      <div class="card stat-card"><div class="label">Fechados</div><div class="value">${totalFechados}</div></div>
-      <div class="card stat-card"><div class="label">Perdidos</div><div class="value">${totalPerdidos}</div></div>
+    <div class="card" style="padding:0; margin-top:14px;">
+      <table><tbody>
+        <tr><td>Taxa de conversão (fechados ÷ leads)</td><td style="text-align:right;"><b>${taxaConversao.toFixed(1)}%</b></td></tr>
+        <tr><td>Fechados</td><td style="text-align:right;"><b>${totalFechados}</b></td></tr>
+        <tr><td>Perdidos</td><td style="text-align:right;"><b>${totalPerdidos}</b></td></tr>
+      </tbody></table>
     </div>
     <div style="font-size:12px; color:var(--muted-2); margin:10px 2px 0;">
       💡 Como o sistema não guarda histórico de mudança de etapa, estes números são uma fotografia do status atual de cada evento — não um funil cumulativo ao longo do tempo.
@@ -2299,6 +2259,35 @@ function renderRelatorios(main){
         </tbody></table>
       </div>
     ` : ""}
+  `;
+
+  main.innerHTML = `
+    <div class="page-header"><div><div class="eyebrow">Visão de negócio</div><h2>Relatórios</h2></div></div>
+
+    <div class="section-title" style="margin-top:0;">Ano de ${anoAtual}</div>
+    <div class="grid grid-4">
+      <div class="card stat-card"><div class="label">Eventos em ${anoAtual}</div><div class="value">${eventosAno.length}</div><div class="sub">${eventosFechadosAno} fechados · ${eventosEntreguesAno} entregues</div></div>
+      <div class="card stat-card"><div class="label">Recebido em ${anoAtual}</div><div class="value" style="font-size:18px;">${money(recebidoAno)}</div><div class="sub">de ${money(contratadoAno)} contratados</div></div>
+      <div class="card stat-card"><div class="label">A receber (${anoAtual})</div><div class="value" style="font-size:18px;color:#ef4444;">${money(pendenteAno)}</div><div class="sub">saldo pendente nos eventos do ano</div></div>
+      <div class="card stat-card"><div class="label">Ticket médio (${anoAtual})</div><div class="value" style="font-size:18px;">${money(ticketMedioAno)}</div><div class="sub">tipo mais comum: ${tipoMaisComumAno}</div></div>
+    </div>
+    <div class="grid grid-3" style="margin-bottom:24px;">
+      <div class="card stat-card"><div class="label">Clientes novos (${anoAtual})</div><div class="value">${clientesNovosAno}</div></div>
+      <div class="card stat-card"><div class="label">Pagamentos registrados (${anoAtual})</div><div class="value">${pagamentosAno.length}</div></div>
+      <div class="card stat-card"><div class="label">Taxa de entrega (${anoAtual})</div><div class="value">${eventosAno.length ? Math.round(eventosEntreguesAno/eventosAno.length*100) : 0}%</div><div class="sub">${eventosEntreguesAno} de ${eventosAno.length} entregues</div></div>
+    </div>
+
+    ${renderSecaoRelatorio("financeiro", "💰", "Financeiro",
+      `${state.eventos.length} eventos no histórico · ${money(totalContratado)} contratados · ${eventosComDesconto.length} desconto${eventosComDesconto.length===1?"":"s"}`,
+      conteudoFinanceiro)}
+
+    ${renderSecaoRelatorio("clientes", "👥", "Clientes",
+      `${totalClientes} clientes · ${clientesRecorrentes.length} recorrentes · ${clientesVip.length} VIP`,
+      conteudoClientes)}
+
+    ${renderSecaoRelatorio("vendas", "📊", "Vendas / Funil",
+      `${totalLeads} leads · ${totalFechados} fechados · ${totalPerdidos} perdidos`,
+      conteudoVendas)}
   `;
 }
 
