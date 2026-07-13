@@ -3421,8 +3421,8 @@ function mostrarErroGemini(erro, elementoId){
   return { rateLimited: false };
 }
 
-const GEMINI_MODEL_PADRAO = "gemini-2.5-flash";       // briefing, resumo, duplicados, leitura de fotos/prints
-const GEMINI_MODEL_CHAT = "gemini-2.5-flash-lite";     // chat "Conversar" — perguntas diretas de consulta, prioriza velocidade
+const GEMINI_MODEL_PADRAO = "gemini-3.5-flash";        // briefing, resumo, duplicados, leitura de fotos/prints
+const GEMINI_MODEL_CHAT = "gemini-3.1-flash-lite";     // chat "Conversar" — perguntas diretas de consulta, prioriza velocidade
 
 async function callGemini(prompt, tentativa=0, modelo=GEMINI_MODEL_PADRAO){
   const key = state.config?.geminiKey || "";
@@ -3832,7 +3832,7 @@ async function callGeminiVision(base64Data, mimeType, prompt, tentativa=0){
   const key = state.config?.geminiKey || "";
   if(!key) return { erro: "Nenhuma chave Gemini configurada." };
   try{
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL_PADRAO}:generateContent?key=${key}`, {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ contents:[{ parts:[
