@@ -1419,6 +1419,276 @@ async function salvarChatHistoricoRemoto(){
   }
 }
 
+/* =========================================================
+   ENTRADA DE DADOS VIA IA — v1 (clientes + eventos)
+   O chat "Conversar" também interpreta a mensagem em busca de
+   informações estruturadas (dados de cliente/evento, preferências),
+   agrupa tudo o que se refere ao mesmo cliente/evento numa única
+   confirmação, e só grava no Firestore depois de clique explícito.
+   Pagamentos NUNCA são tratados por aqui — só pelo formulário normal.
+   ========================================================= */
+const CAMPOS_IA_CLIENTES = ["nome","telefone","cidade","origem","indicadoPor","nomeConjuge"];
+const CAMPOS_IA_EVENTOS = ["tipo","data","horario","endereco","valorContratado","valorTabela","status","nomeEvento","tags","dataEntregaPrevista","dataEntregaReal"];
+
+let iaGruposPendentes = [];
+let _iaGrupoIdSeq = 1;
+
+function normalizarChaveEntidade(colecao, nomeMencionado){
+  return `${colecao}::${normalizarTexto(nomeMencionado||"")}`;
+}
+
+function buscarCandidatosCliente(nome){
+  return state.clientes
+    .map(c=>({
+      id: c.id,
+      nome: c.nomeConjuge ? `${c.nome} & ${c.nomeConjuge}` : c.nome,
+      score: Math.max(similaridadeNome(c.nome, nome), c.nomeConjuge ? similaridadeNome(c.nomeConjuge, nome) : 0)
+    }))
+    .filter(c=>c.score>=0.5)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,6);
+}
+
+function eventosDoClienteParaSelect(clienteId){
+  return state.eventos
+    .filter(e=>e.clienteId===clienteId)
+    .sort((a,b)=>(b.data||"").localeCompare(a.data||""))
+    .map(e=>({ id:e.id, label: `${capitalize((e.tipo||"outro").replace("_"," "))} · ${formatDate(e.data)} · ${statusLabel(e.status||"orcamento")}` }));
+}
+
+function labelCampoIA(colecao, campo){
+  const f = SCHEMAS[colecao]?.fields?.find(x=>x.key===campo);
+  return f ? f.label : capitalize(campo);
+}
+function tipoCampoIA(colecao, campo){
+  return SCHEMAS[colecao]?.fields?.find(x=>x.key===campo)?.type || "text";
+}
+function converterValorCampoIA(colecao, campo, valor){
+  const tipo = tipoCampoIA(colecao, campo);
+  if(tipo==="tags") return Array.isArray(valor) ? valor : String(valor||"").split(",").map(s=>s.trim()).filter(Boolean);
+  if(tipo==="number") return Number(valor)||0;
+  if(tipo==="checkbox") return !!valor;
+  return valor;
+}
+
+// agrupa as ações "cruas" que vieram do JSON da IA por entidade-alvo,
+// pra apresentar UMA confirmação por cliente/evento mesmo que a mensagem
+// tenha citado várias informações diferentes sobre ele
+function processarAcoesDetectadas(acoesBrutas){
+  if(!Array.isArray(acoesBrutas) || !acoesBrutas.length) return;
+  const gruposDoLote = {};
+
+  acoesBrutas.forEach(a=>{
+    if(!a || (a.colecao!=="clientes" && a.colecao!=="eventos")) return; // v1: só clientes e eventos
+    const nomeAlvo = a.colecao==="eventos" ? (a.clienteMencionado || a.nomeMencionado) : a.nomeMencionado;
+    if(!nomeAlvo) return;
+    const operacao = a.operacao==="criar" ? "criar" : "atualizar";
+    const chave = normalizarChaveEntidade(a.colecao, nomeAlvo) + "::" + operacao;
+
+    if(!gruposDoLote[chave]){
+      const grupo = {
+        id: "iaGrupo" + (_iaGrupoIdSeq++),
+        colecao: a.colecao,
+        operacao,
+        nomeMencionado: nomeAlvo,
+        itens: [],
+        entidadeId: "",
+        candidatos: buscarCandidatosCliente(nomeAlvo),
+        eventoId: "",
+        eventosDoCliente: []
+      };
+      // pré-seleciona o cliente só quando o melhor candidato é claramente o melhor
+      if(grupo.candidatos.length){
+        const [top, segundo] = grupo.candidatos;
+        if(top.score>=0.85 && (!segundo || top.score-segundo.score>0.1)) grupo.entidadeId = top.id;
+      }
+      if(grupo.colecao==="eventos" && grupo.operacao==="atualizar" && grupo.entidadeId){
+        grupo.eventosDoCliente = eventosDoClienteParaSelect(grupo.entidadeId);
+        if(grupo.eventosDoCliente.length===1) grupo.eventoId = grupo.eventosDoCliente[0].id;
+      }
+      gruposDoLote[chave] = grupo;
+    }
+
+    const grupo = gruposDoLote[chave];
+    const tipoItem = a.tipo==="comentario" ? "comentario" : "campo";
+    let campo = tipoItem==="campo" ? a.campo : null;
+    if(tipoItem==="campo"){
+      const listaPermitida = a.colecao==="clientes" ? CAMPOS_IA_CLIENTES : CAMPOS_IA_EVENTOS;
+      if(!listaPermitida.includes(campo)) return; // ignora campo fora do que o CRM sabe editar
+    }
+    grupo.itens.push({ id: grupo.id+"_"+grupo.itens.length, tipo:tipoItem, campo, valorNovo: a.valorNovo ?? "", resumoHumano: a.resumoHumano||"" });
+  });
+
+  const novosGrupos = Object.values(gruposDoLote).filter(g=>g.itens.length);
+  iaGruposPendentes = [...iaGruposPendentes, ...novosGrupos];
+}
+
+function renderGruposPendentesIA(){
+  if(!iaGruposPendentes.length) return "";
+  return `<div style="margin:14px 0;">${iaGruposPendentes.map(renderGrupoIA).join("")}</div>`;
+}
+
+function renderGrupoIA(grupo){
+  const isCliente = grupo.colecao==="clientes";
+  const resumos = grupo.itens.map(i=>i.resumoHumano).filter(Boolean);
+
+  const selectCliente = `
+    <div class="field">
+      <label>${isCliente ? "Cliente" : "Cliente do evento"}</label>
+      <select onchange="onGrupoIASelecionarCliente('${grupo.id}', this.value)">
+        <option value="">— selecione —</option>
+        <option value="__new__" ${grupo.entidadeId==="__new__"?"selected":""}>+ Cadastrar novo cliente: "${escapeHtml(grupo.nomeMencionado)}"</option>
+        ${grupo.candidatos.map(c=>`<option value="${c.id}" ${grupo.entidadeId===c.id?"selected":""}>${escapeHtml(c.nome)} (${Math.round(c.score*100)}% parecido)</option>`).join("")}
+      </select>
+    </div>
+  `;
+
+  const podeEscolherEvento = !isCliente && grupo.operacao==="atualizar" && grupo.entidadeId && grupo.entidadeId!=="__new__";
+  const selectEvento = podeEscolherEvento ? `
+    <div class="field">
+      <label>Qual evento</label>
+      ${grupo.eventosDoCliente.length ? `
+        <select onchange="onGrupoIASelecionarEvento('${grupo.id}', this.value)">
+          <option value="">— selecione o evento —</option>
+          ${grupo.eventosDoCliente.map(e=>`<option value="${e.id}" ${grupo.eventoId===e.id?"selected":""}>${e.label}</option>`).join("")}
+        </select>` : `<div style="font-size:12px;color:var(--muted-2);">Este cliente não tem eventos cadastrados.</div>`}
+    </div>
+  ` : "";
+
+  const itensHtml = grupo.itens.map(item=>{
+    if(item.tipo==="comentario"){
+      return `<div class="field"><label>Observação / preferência</label>
+        <textarea oninput="onItemIAValorChange('${grupo.id}','${item.id}', this.value)">${escapeHtml(String(item.valorNovo))}</textarea></div>`;
+    }
+    const tipoCampo = tipoCampoIA(grupo.colecao, item.campo);
+    const label = labelCampoIA(grupo.colecao, item.campo);
+    if(tipoCampo==="select"){
+      const f = SCHEMAS[grupo.colecao].fields.find(x=>x.key===item.campo);
+      return `<div class="field"><label>${label}</label>
+        <select onchange="onItemIAValorChange('${grupo.id}','${item.id}', this.value)">
+          <option value="">—</option>
+          ${f.options.map(o=>`<option value="${o}" ${item.valorNovo===o?"selected":""}>${item.campo==="status"?statusLabel(o):capitalize(o.replace("_"," "))}</option>`).join("")}
+        </select></div>`;
+    }
+    const inputType = tipoCampo==="number" ? "number" : tipoCampo==="date" ? "date" : tipoCampo==="time" ? "time" : "text";
+    const valorExibicao = Array.isArray(item.valorNovo) ? item.valorNovo.join(", ") : item.valorNovo;
+    return `<div class="field"><label>${label}</label>
+      <input type="${inputType}" value="${valorExibicao??""}" oninput="onItemIAValorChange('${grupo.id}','${item.id}', this.value)"></div>`;
+  }).join("");
+
+  const bloqueado = !grupo.entidadeId || (!isCliente && grupo.operacao==="atualizar" && grupo.entidadeId!=="__new__" && !grupo.eventoId);
+
+  return `
+    <div class="card acao-ia-card" style="margin-bottom:10px; padding:16px 18px; border-color:var(--amber);">
+      <div style="font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--amber); margin-bottom:8px;">✦ Sugestão da IA — confirme antes de salvar</div>
+      ${resumos.length ? `<div style="font-size:13px; color:var(--muted); margin-bottom:10px;">${resumos.map(r=>`• ${escapeHtml(r)}`).join("<br>")}</div>` : ""}
+      ${selectCliente}
+      ${selectEvento}
+      ${itensHtml}
+      <div class="modal-actions" style="border-top:1px solid var(--border); margin-top:14px; padding-top:14px;">
+        <button class="ghost sm" onclick="cancelarGrupoIA('${grupo.id}')">Cancelar</button>
+        <button class="primary sm" onclick="confirmarGrupoIA('${grupo.id}')" ${bloqueado?"disabled":""}>Confirmar</button>
+      </div>
+    </div>
+  `;
+}
+
+function encontrarGrupoIA(id){ return iaGruposPendentes.find(g=>g.id===id); }
+function rerenderAcoesPendentesIA(){
+  const container = document.getElementById("acoes-pendentes-ia");
+  if(container) container.innerHTML = renderGruposPendentesIA();
+}
+function onGrupoIASelecionarCliente(grupoId, clienteId){
+  const grupo = encontrarGrupoIA(grupoId);
+  if(!grupo) return;
+  grupo.entidadeId = clienteId;
+  if(grupo.colecao==="eventos" && grupo.operacao==="atualizar" && clienteId && clienteId!=="__new__"){
+    grupo.eventosDoCliente = eventosDoClienteParaSelect(clienteId);
+    grupo.eventoId = grupo.eventosDoCliente.length===1 ? grupo.eventosDoCliente[0].id : "";
+  }
+  rerenderAcoesPendentesIA();
+}
+function onGrupoIASelecionarEvento(grupoId, eventoId){
+  const grupo = encontrarGrupoIA(grupoId);
+  if(grupo){ grupo.eventoId = eventoId; rerenderAcoesPendentesIA(); }
+}
+function onItemIAValorChange(grupoId, itemId, novoValor){
+  const grupo = encontrarGrupoIA(grupoId);
+  const item = grupo?.itens.find(i=>i.id===itemId);
+  if(item) item.valorNovo = novoValor;
+}
+function cancelarGrupoIA(grupoId){
+  iaGruposPendentes = iaGruposPendentes.filter(g=>g.id!==grupoId);
+  rerenderAcoesPendentesIA();
+}
+
+async function confirmarGrupoIA(grupoId){
+  const grupo = encontrarGrupoIA(grupoId);
+  if(!grupo) return;
+  if(!grupo.entidadeId){ toast("Selecione o cliente correto primeiro."); return; }
+  if(grupo.colecao==="eventos" && grupo.operacao==="atualizar" && !grupo.eventoId){ toast("Selecione o evento primeiro."); return; }
+  try{
+    const ok = grupo.colecao==="clientes" ? await confirmarGrupoClienteIA(grupo) : await confirmarGrupoEventoIA(grupo);
+    if(ok===false) return; // um toast específico já foi mostrado explicando o motivo
+    iaGruposPendentes = iaGruposPendentes.filter(g=>g.id!==grupoId);
+    rerenderAcoesPendentesIA();
+    toast("Informação salva no CRM.");
+  }catch(err){
+    console.error(err);
+    toast("Erro ao salvar. Veja o console.");
+  }
+}
+
+async function confirmarGrupoClienteIA(grupo){
+  const camposItens = grupo.itens.filter(i=>i.tipo==="campo");
+  const comentarioItens = grupo.itens.filter(i=>i.tipo==="comentario");
+  const dadosCampos = {};
+  camposItens.forEach(i=> dadosCampos[i.campo] = converterValorCampoIA("clientes", i.campo, i.valorNovo));
+
+  let clienteId = grupo.entidadeId;
+  if(clienteId==="__new__"){
+    const novo = { nome: grupo.nomeMencionado, ...dadosCampos, criadoEm: new Date().toISOString() };
+    const ref = await db.collection("clientes").add(novo);
+    clienteId = ref.id;
+  } else if(Object.keys(dadosCampos).length){
+    await db.collection("clientes").doc(clienteId).update(dadosCampos);
+  }
+  if(comentarioItens.length){
+    const cliente = state.clientes.find(c=>c.id===clienteId);
+    const novosComentarios = [...(cliente?.comentarios||[]), ...comentarioItens.map(i=>({ texto:i.valorNovo, criadoEm:new Date().toISOString() }))];
+    await db.collection("clientes").doc(clienteId).update({ comentarios: novosComentarios });
+  }
+}
+
+async function confirmarGrupoEventoIA(grupo){
+  const camposItens = grupo.itens.filter(i=>i.tipo==="campo");
+  const comentarioItens = grupo.itens.filter(i=>i.tipo==="comentario"); // regra: comentário sempre vai pro cliente, nunca pro evento
+
+  let clienteId = grupo.entidadeId;
+  if(clienteId==="__new__"){
+    const ref = await db.collection("clientes").add({ nome: grupo.nomeMencionado, criadoEm: new Date().toISOString() });
+    clienteId = ref.id;
+  }
+
+  if(comentarioItens.length){
+    const cliente = state.clientes.find(c=>c.id===clienteId);
+    const novosComentarios = [...(cliente?.comentarios||[]), ...comentarioItens.map(i=>({ texto:i.valorNovo, criadoEm:new Date().toISOString() }))];
+    await db.collection("clientes").doc(clienteId).update({ comentarios: novosComentarios });
+  }
+
+  if(grupo.operacao==="criar"){
+    const dados = { clienteId, status:"orcamento", criadoEm: new Date().toISOString() };
+    camposItens.forEach(i=> dados[i.campo] = converterValorCampoIA("eventos", i.campo, i.valorNovo));
+    if(!dados.tipo){ toast("Identifique o tipo do evento antes de confirmar (edite manualmente pelo formulário normal)."); return false; }
+    if(!dados.data){ toast("Identifique a data do evento antes de confirmar (edite manualmente pelo formulário normal)."); return false; }
+    await db.collection("eventos").add(dados);
+  } else {
+    const dados = {};
+    camposItens.forEach(i=> dados[i.campo] = converterValorCampoIA("eventos", i.campo, i.valorNovo));
+    if(Object.keys(dados).length) await db.collection("eventos").doc(grupo.eventoId).update(dados);
+  }
+}
+
 function renderConversar(main){
   carregarChatHistoricoSalvo();
   if(!temIA()){
@@ -1445,6 +1715,7 @@ function renderConversar(main){
 
   main.innerHTML = `
     <div class="page-header"><div><div class="eyebrow">Inteligência Artificial</div><h2>Conversar com o CRM</h2></div></div>
+    <div style="font-size:12px; color:var(--muted-2); margin:-10px 0 14px;">💡 Você também pode contar novidades aqui — ex: "o cliente João prefere fotos espontâneas" ou "o aniversário da Gleyciane foi adiado para 15/10". A IA sugere a alteração e só salva depois que você confirmar.</div>
     <div class="chat-suggestions">
       ${sugestoes.map(s=>`<span class="chat-suggestion" onclick="usarSugestao('${s.replace(/'/g,"\\'")}')">${s}</span>`).join("")}
     </div>
@@ -1459,6 +1730,7 @@ function renderConversar(main){
         </div>
       </div>
     </div>
+    <div id="acoes-pendentes-ia">${renderGruposPendentesIA()}</div>
     ${chatHistory.length>0 ? `<div style="text-align:right; margin-top:8px;"><button class="ghost sm" onclick="limparChat()">Limpar conversa</button></div>` : ""}
   `;
 
@@ -1501,20 +1773,58 @@ async function enviarMensagemChat(){
   const contexto = getCrmContext();
   // envia as últimas 15 perguntas (30 mensagens) pra IA ter o contexto completo da conversa salva
   const historico = chatHistory.slice(-30).map(m=>`${m.role==="user"?"Yuri":"Assistente"}: ${m.content}`).join("\n");
-  const prompt = `${contexto}\n\n=== CONVERSA ===\n${historico}`;
+  const prompt = `${contexto}
+
+=== CONVERSA ===
+${historico}
+
+Além de responder à última mensagem de Yuri, identifique se ela contém informações novas que deveriam ser salvas no CRM (dados de cliente, dados de evento, preferências/observações, mudanças de data/valor/status/endereço, etc). NUNCA identifique ações sobre pagamentos — pagamentos são sempre lançados manualmente no sistema, nunca pela IA.
+
+Responda APENAS um JSON válido, sem markdown, sem texto fora do JSON, exatamente neste formato:
+{
+  "resposta": "sua resposta em texto normal para a última mensagem de Yuri",
+  "acoes": [
+    {
+      "colecao": "clientes ou eventos",
+      "operacao": "criar ou atualizar",
+      "nomeMencionado": "nome do cliente mencionado (obrigatório quando colecao=clientes)",
+      "clienteMencionado": "nome do cliente responsável (obrigatório quando colecao=eventos, mesmo pra atualização de evento)",
+      "tipo": "campo ou comentario",
+      "campo": "obrigatório se tipo=campo. clientes: nome|telefone|cidade|origem|indicadoPor|nomeConjuge. eventos: tipo|data|horario|endereco|valorContratado|valorTabela|status|nomeEvento|tags|dataEntregaPrevista|dataEntregaReal",
+      "valorNovo": "valor sugerido (datas em AAAA-MM-DD, valores monetários apenas número, sem R$)",
+      "resumoHumano": "frase curta em português explicando a ação, pra Yuri confirmar"
+    }
+  ]
+}
+Regras importantes:
+- Se a mensagem for só uma pergunta ou não tiver informação nova a salvar, retorne "acoes": [].
+- Preferências, observações, elogios ou reclamações sobre alguém são sempre tipo:"comentario" na colecao "clientes" (nunca em "eventos").
+- Se a mensagem tiver várias informações distintas, retorne uma ação para cada uma — todas aparecerão juntas numa única confirmação por cliente/evento.
+- Nunca invente dados que não estejam explícitos na mensagem.`;
 
   const resultado = await callGemini(prompt, 0, GEMINI_MODEL_CHAT);
 
+  let respostaTexto;
   if(resultado.texto){
-    chatHistory.push({ role:"ai", content:resultado.texto });
+    try{
+      const limpo = resultado.texto.replace(/```json|```/g,"").trim();
+      const dados = JSON.parse(limpo);
+      respostaTexto = dados.resposta || "Certo.";
+      processarAcoesDetectadas(dados.acoes);
+    }catch(err){
+      console.error("[chat-ia] resposta não veio em JSON válido, mostrando texto cru:", err, resultado.texto);
+      respostaTexto = resultado.texto;
+    }
   } else {
-    chatHistory.push({ role:"ai", content:`Erro: ${resultado.erro || "não foi possível processar."}` });
+    respostaTexto = `Erro: ${resultado.erro || "não foi possível processar."}`;
   }
+  chatHistory.push({ role:"ai", content:respostaTexto });
 
   if(msgs){
     msgs.innerHTML = renderChatHistory();
     msgs.scrollTop = msgs.scrollHeight;
   }
+  rerenderAcoesPendentesIA();
   const btn = document.querySelector(".chat-input-row button");
   if(btn) btn.disabled = false;
 
@@ -1523,6 +1833,7 @@ async function enviarMensagemChat(){
 
 function limparChat(){
   chatHistory = [];
+  iaGruposPendentes = [];
   salvarChatHistoricoRemoto();
   renderPage("conversar");
 }
