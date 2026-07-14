@@ -414,6 +414,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<!-- exifr: leitura de metadados EXIF das fotos (data real da câmera) -->
+<script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
 
 <script>
 /* =========================================================
@@ -1337,8 +1339,8 @@ function carregarChatHistoricoSalvo(){
   }
 }
 async function salvarChatHistoricoRemoto(){
-  // guarda só as últimas 5 perguntas (5 pares pergunta+resposta = até 10 mensagens)
-  const ultimas = chatHistory.slice(-10);
+  // guarda só as últimas 15 perguntas (15 pares pergunta+resposta = até 30 mensagens)
+  const ultimas = chatHistory.slice(-30);
   try{
     await db.collection("config").doc("settings").set({ chatHistorico: ultimas }, {merge:true});
   }catch(err){
@@ -1426,7 +1428,8 @@ async function enviarMensagemChat(){
   }
 
   const contexto = getCrmContext();
-  const historico = chatHistory.slice(-6).map(m=>`${m.role==="user"?"Yuri":"Assistente"}: ${m.content}`).join("\n");
+  // envia as últimas 15 perguntas (30 mensagens) pra IA ter o contexto completo da conversa salva
+  const historico = chatHistory.slice(-30).map(m=>`${m.role==="user"?"Yuri":"Assistente"}: ${m.content}`).join("\n");
   const prompt = `${contexto}\n\n=== CONVERSA ===\n${historico}`;
 
   const resultado = await callGemini(prompt, 0, GEMINI_MODEL_CHAT);
@@ -2867,6 +2870,26 @@ function renderViewGeneric(item, col){
 /* =========================================================
    LEITURA DE FOTO DA FESTA (IA)
    ========================================================= */
+// lê a data real gravada pela câmera no momento da foto (metadado EXIF),
+// muito mais confiável do que pedir pra IA "adivinhar" a data olhando a imagem.
+// retorna "AAAA-MM-DD" ou null se a foto não tiver esse metadado (ex: print de tela, foto sem EXIF).
+async function extrairDataExif(file){
+  if(typeof exifr === "undefined"){
+    console.warn("[exif] lib exifr não carregou (CDN indisponível?). Seguindo sem data do EXIF.");
+    return null;
+  }
+  try{
+    const dados = await exifr.parse(file, { pick:["DateTimeOriginal","CreateDate"] });
+    const dt = dados?.DateTimeOriginal || dados?.CreateDate;
+    if(!dt) return null;
+    const y = dt.getFullYear(), m = String(dt.getMonth()+1).padStart(2,"0"), d = String(dt.getDate()).padStart(2,"0");
+    return `${y}-${m}-${d}`;
+  }catch(err){
+    console.warn("[exif] não foi possível ler metadados da foto:", err);
+    return null;
+  }
+}
+
 async function toggleBloqueioEvento(eventoId, atualmenteBloqueado){
   const acao = atualmenteBloqueado ? "desbloquear" : "bloquear";
   if(!confirm(`Deseja ${acao} este evento?`)) return;
@@ -2905,6 +2928,9 @@ async function processarFotoFestaNovoEvento(file){
   const t = document.getElementById("toast");
   if(t){ t.textContent = "📸 Analisando a foto..."; t.style.display="block"; }
 
+  // lê a data real da câmera (EXIF) antes de tudo — é mais confiável que a IA "chutando" pela imagem
+  const dataExif = await extrairDataExif(file);
+
   const reader = new FileReader();
   reader.onerror = ()=> toast("Erro ao ler a imagem.");
   reader.onload = async ()=>{
@@ -2925,7 +2951,7 @@ async function processarFotoFestaNovoEvento(file){
 
 Instruções por campo:
 - "tipo": tipo de evento sugerido pelo contexto visual da foto (bolo/decoração infantil = aniversario; roupa/cerimônia de batismo = batizado; noivos, aliança ou cerimônia de casamento = casamento_civil ou casamento_religioso; ensaio fotográfico solo/casal/gestante sem festa = ensaio; se não conseguir identificar, use "outro").
-- "dataCapturaExif": se a foto tiver metadados de data visíveis ou você conseguir inferir a data por qualquer pista (qualidade da câmera, decoração sazonal etc.), informe no formato AAAA-MM-DD. Caso contrário deixe vazio.
+- "dataCapturaExif": deixe vazio — a data já é obtida por outro meio, não é necessário estimar.
 - "nomeHomenageado": nome da criança, aniversariante, noivos ou pessoa homenageada, se aparecer escrito em bolo, topper, faixa, convite, balão ou decoração. Deixe vazio se não aparecer.
 - "idadeCrianca": número inteiro da idade que a criança completou (somente se for aniversário infantil), lendo velas, número em balões, topper ou texto da decoração ("2 aninhos" = 2). Null se não for possível identificar ou não se aplicar.
 - "temaFesta": tema decorativo identificado (ex: "Dinossauro", "Princesa", "Safari", "Homem-Aranha", "Fazendinha"). Deixe vazio se não identificar.
@@ -2934,7 +2960,7 @@ Instruções por campo:
 
     const resultado = await callGeminiVision(base64, mimeType, prompt);
     if(!resultado.texto){
-      toast(`Erro ao analisar foto: ${resultado.erro||"tente novamente."}`);
+      toast(mensagemErroIA(resultado, "analisar a foto"), resultado.sobrecarregado ? 7000 : undefined);
       return;
     }
     let dados;
@@ -2954,7 +2980,9 @@ Instruções por campo:
     }
 
     if(dados.tipo) formState.tipo = dados.tipo;
-    if(dados.dataCapturaExif) formState.data = dados.dataCapturaExif;
+    // a data do EXIF (metadado real da câmera) tem prioridade sobre qualquer estimativa da IA
+    const dataFinal = dataExif || dados.dataCapturaExif;
+    if(dataFinal) formState.data = dataFinal;
 
     const tagsDetectadas = [...(dados.tags||[])];
     if(dados.temaFesta && !tagsDetectadas.includes(dados.temaFesta)) tagsDetectadas.push(dados.temaFesta);
@@ -2996,7 +3024,9 @@ Instruções por campo:
     formState.iaVerificado = true;
     formState.fotoLida = true;
     refreshFormFields();
-    toast("Campos preenchidos a partir da foto. Confira cliente/criança e complete o que faltar antes de salvar.");
+    const avisoData = dataExif ? "Data confirmada pelo EXIF da câmera."
+      : (dados.dataCapturaExif ? "Data estimada pela IA (sem EXIF na foto) — confira!" : "Não foi possível identificar a data — confira!");
+    toast(`Campos preenchidos a partir da foto. ${avisoData} Confira cliente/criança e complete o que faltar antes de salvar.`, 5000);
   };
   reader.readAsDataURL(file);
 }
@@ -3005,6 +3035,9 @@ async function processarFotoFesta(eventoId, file){
   if(!file) return;
   const t = document.getElementById("toast");
   if(t){ t.textContent = "📸 Analisando a foto..."; t.style.display="block"; }
+
+  // lê a data real da câmera (EXIF) antes de tudo — é mais confiável que a IA "chutando" pela imagem
+  const dataExif = await extrairDataExif(file);
 
   const reader = new FileReader();
   reader.onerror = ()=> toast("Erro ao ler a imagem.");
@@ -3025,7 +3058,7 @@ async function processarFotoFesta(eventoId, file){
 }
 
 Instruções por campo:
-- "dataCapturaExif": se a foto tiver metadados de data visíveis ou você conseguir inferir a data por qualquer pista (qualidade da câmera, estilo de decoração, etc.), informe no formato AAAA-MM-DD. Caso contrário deixe vazio.
+- "dataCapturaExif": deixe vazio — a data já é obtida por outro meio, não é necessário estimar.
 - "nomeNaFoto": nome da criança ou pessoa homenageada, se aparecer escrito em bolo, topper, faixa, balão ou decoração. Deixe vazio se não aparecer.
 - "idadeCrianca": número inteiro da idade que a criança completou, lendo velas, número em balões, topper ou texto da decoração ("2 aninhos" = 2). Null se não for possível identificar.
 - "temaFesta": tema decorativo identificado (ex: "Dinossauro", "Princesa", "Safari", "Homem-Aranha", "Fazendinha"). Deixe vazio se não identificar.
@@ -3034,7 +3067,7 @@ Instruções por campo:
 
     const resultado = await callGeminiVision(base64, mimeType, prompt);
     if(!resultado.texto){
-      toast(`Erro ao analisar foto: ${resultado.erro||"tente novamente."}`);
+      toast(mensagemErroIA(resultado, "analisar a foto"), resultado.sobrecarregado ? 7000 : undefined);
       return;
     }
     let dados;
@@ -3046,6 +3079,9 @@ Instruções por campo:
       toast("Não consegui interpretar os dados da foto. Veja o console.");
       return;
     }
+    // a data do EXIF (metadado real da câmera) tem prioridade sobre qualquer estimativa da IA
+    if(dataExif) dados.dataCapturaExif = dataExif;
+    dados._dataFonte = dataExif ? "exif" : (dados.dataCapturaExif ? "ia" : null);
     abrirConfirmacaoFotoFesta(eventoId, dados);
   };
   reader.readAsDataURL(file);
@@ -3074,7 +3110,7 @@ function abrirConfirmacaoFotoFesta(eventoId, dados){
     <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">Confirme o que deseja atualizar — campos em branco não serão alterados.</div>
 
     <div style="font-weight:600; font-size:13px; margin-bottom:8px; color:var(--muted);">EVENTO</div>
-    <div class="field"><label>Data do evento${dados.dataCapturaExif?"  (extraída da foto)":""}</label>
+    <div class="field"><label>Data do evento${dados._dataFonte==="exif" ? "  (📷 data EXIF da câmera — confiável)" : dados._dataFonte==="ia" ? "  (⚠️ estimada pela IA, sem EXIF na foto — confira)" : ""}</label>
       <input id="ff-data" type="date" value="${dados.dataCapturaExif||ev.data||""}">
     </div>
     <div class="field"><label>Tags (atual + detectadas na foto)</label>
@@ -3391,6 +3427,18 @@ function parseRetryAfter(mensagemErro){
   const match = (mensagemErro||"").match(/retry in ([\d.]+)\s*s/i);
   return match ? Math.ceil(parseFloat(match[1])) : null;
 }
+function ehErroSobrecarga(mensagemErro){
+  // identifica o erro "modelo sobrecarregado" (503 / UNAVAILABLE), diferente do rate limit (429)
+  return /overloaded|high demand|unavailable|servidores?\s+sobrecarregados?/i.test(mensagemErro||"");
+}
+// tenta de novo automaticamente quando o Gemini está sobrecarregado, com espera crescente entre as tentativas
+const RETRY_SOBRECARGA_SEGUNDOS = [5, 12];
+function mensagemErroIA(resultado, acao="processar"){
+  if(resultado?.sobrecarregado){
+    return `Os servidores do Gemini estão com alta demanda no momento. Já tentei de novo automaticamente algumas vezes, mas ainda sem sucesso — espere alguns minutos e tente ${acao} de novo.`;
+  }
+  return `Erro ao ${acao}: ${resultado?.erro || "tente novamente."}`;
+}
 function mostrarErroGemini(erro, elementoId){
   const segundos = parseRetryAfter(erro);
   if(segundos){
@@ -3443,7 +3491,13 @@ async function callGemini(prompt, tentativa=0, modelo=GEMINI_MODEL_PADRAO){
         await new Promise(r=>setTimeout(r, segundos*1000));
         return callGemini(prompt, 1, modelo);
       }
-      return { erro: msg, segundosRetry: segundos };
+      if(ehErroSobrecarga(msg) && tentativa<RETRY_SOBRECARGA_SEGUNDOS.length){
+        const espera = RETRY_SOBRECARGA_SEGUNDOS[tentativa];
+        toast(`Os servidores do Gemini estão com alta demanda no momento. Tentando de novo em ${espera}s (tentativa ${tentativa+1}/${RETRY_SOBRECARGA_SEGUNDOS.length})...`, (espera+3)*1000);
+        await new Promise(r=>setTimeout(r, espera*1000));
+        return callGemini(prompt, tentativa+1, modelo);
+      }
+      return { erro: msg, segundosRetry: segundos, sobrecarregado: ehErroSobrecarga(msg) };
     }
     const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if(!texto){
@@ -3850,7 +3904,13 @@ async function callGeminiVision(base64Data, mimeType, prompt, tentativa=0){
         await new Promise(r=>setTimeout(r, segundos*1000));
         return callGeminiVision(base64Data, mimeType, prompt, 1);
       }
-      return { erro: msg, segundosRetry: segundos };
+      if(ehErroSobrecarga(msg) && tentativa<RETRY_SOBRECARGA_SEGUNDOS.length){
+        const espera = RETRY_SOBRECARGA_SEGUNDOS[tentativa];
+        toast(`Os servidores do Gemini estão com alta demanda no momento. Tentando ler a imagem de novo em ${espera}s (tentativa ${tentativa+1}/${RETRY_SOBRECARGA_SEGUNDOS.length})...`, (espera+3)*1000);
+        await new Promise(r=>setTimeout(r, espera*1000));
+        return callGeminiVision(base64Data, mimeType, prompt, tentativa+1);
+      }
+      return { erro: msg, segundosRetry: segundos, sobrecarregado: ehErroSobrecarga(msg) };
     }
     const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if(!texto){
@@ -3937,7 +3997,7 @@ Se não conseguir identificar um campo com confiança, deixe vazio (string vazia
 
     const resultado = await callGeminiVision(base64, mimeType, prompt);
     if(!resultado.texto){
-      toast(`Erro ao ler a imagem: ${resultado.erro||"tente novamente."}`);
+      toast(mensagemErroIA(resultado, "ler a imagem"), resultado.sobrecarregado ? 7000 : undefined);
       return;
     }
     let dados;
@@ -4028,7 +4088,7 @@ Se a data mencionada não tiver ano, assuma o próximo ano em que essa data aind
 
     const resultado = await callGeminiVision(base64, mimeType, prompt);
     if(!resultado.texto){
-      toast(`Erro ao ler a imagem: ${resultado.erro||"tente novamente."}`);
+      toast(mensagemErroIA(resultado, "ler a imagem"), resultado.sobrecarregado ? 7000 : undefined);
       return;
     }
     let dados;
