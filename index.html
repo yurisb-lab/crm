@@ -1039,7 +1039,7 @@ function renderPage(page){
 /* ---------- CONFIGURAÇÕES ---------- */
 let configDraft = {};
 function renderConfiguracoes(main){
-  configDraft = { ...state.config, precos: { ...(state.config.precos||{}) }, catalogoProdutos: (state.config.catalogoProdutos||[]).map(p=>({...p})) };
+  configDraft = { ...state.config, precos: { ...(state.config.precos||{}) } };
   const tiposEvento = [
     {key:"aniversario", label:"Aniversário"},
     {key:"batizado", label:"Batizado"},
@@ -1081,15 +1081,6 @@ function renderConfiguracoes(main){
     </div>
 
     <div class="card" style="margin-top:16px;">
-      <div class="section-title" style="margin-top:0;">📦 Catálogo de Produtos</div>
-      <div style="font-size:13px; color:var(--muted); margin-bottom:12px; line-height:1.5;">
-        Cadastre os tipos de produto que você vende (álbuns, quadros, pen drives...). Ao registrar um pedido em "Produtos", esses valores já vêm preenchidos — você só ajusta se for diferente dessa vez.
-      </div>
-      <div id="catalogo-produtos-container"></div>
-      <button class="ghost sm" style="margin-top:10px;" onclick="adicionarProdutoCatalogo()">+ Adicionar produto</button>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
       <div class="section-title" style="margin-top:0;">Mensagem de aniversário</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
         Escreva a mensagem que você manda quando a criança está perto de fazer aniversário. Use estes campos —
@@ -1126,22 +1117,43 @@ function renderConfiguracoes(main){
       <button class="primary" id="btn-salvar-config" onclick="salvarConfiguracoes()">Salvar</button>
     </div>
   `;
-  renderCatalogoProdutosLista();
+}
+
+/* =========================================================
+   CATÁLOGO DE PRODUTOS (vive na tela "Produtos", com salvamento próprio)
+   ========================================================= */
+let catalogoDraft = [];
+function renderCatalogoSecaoProdutos(){
+  catalogoDraft = (state.config.catalogoProdutos||[]).map(p=>({...p}));
+  return `
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-title" style="margin-top:0;">📦 Catálogo de Produtos</div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:12px; line-height:1.5;">
+        Cadastre os tipos de produto que você vende (álbuns, quadros, pen drives...). Ao registrar um pedido abaixo, esses valores já vêm preenchidos — você só ajusta se for diferente dessa vez.
+      </div>
+      <div id="catalogo-produtos-container"></div>
+      <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
+        <button class="ghost sm" onclick="adicionarProdutoCatalogo()">+ Adicionar produto</button>
+        <button class="primary sm" id="btn-salvar-catalogo" onclick="salvarCatalogoProdutos()">Salvar catálogo</button>
+      </div>
+    </div>
+  `;
 }
 function renderCatalogoProdutosLista(){
   const container = document.getElementById("catalogo-produtos-container");
   if(!container) return;
-  const itens = configDraft.catalogoProdutos || [];
+  const itens = catalogoDraft || [];
   container.innerHTML = itens.length ? `
     <div style="overflow-x:auto;">
-    <table><thead><tr><th>Nome</th><th>Custo (R$)</th><th>Venda (R$)</th><th>Fornecedor</th><th></th></tr></thead>
+    <table><thead><tr><th>Nome</th><th>Descrição</th><th>Custo (R$)</th><th>Venda (R$)</th><th>Fornecedor</th><th></th></tr></thead>
     <tbody>
       ${itens.map((p,i)=>`
         <tr>
-          <td><input type="text" value="${p.nome||""}" oninput="configDraft.catalogoProdutos[${i}].nome=this.value" style="width:100%;" placeholder="Ex: Álbum 20x20"></td>
-          <td><input type="number" value="${p.custo||""}" oninput="configDraft.catalogoProdutos[${i}].custo=this.value" style="width:100px;"></td>
-          <td><input type="number" value="${p.venda||""}" oninput="configDraft.catalogoProdutos[${i}].venda=this.value" style="width:100px;"></td>
-          <td><input type="text" value="${p.fornecedor||""}" oninput="configDraft.catalogoProdutos[${i}].fornecedor=this.value" style="width:100%;"></td>
+          <td><input type="text" value="${p.nome||""}" oninput="catalogoDraft[${i}].nome=this.value" style="width:100%;" placeholder="Ex: Álbum 20x20"></td>
+          <td><input type="text" value="${p.descricao||""}" oninput="catalogoDraft[${i}].descricao=this.value" style="width:100%;" placeholder="Ex: 20 páginas, capa dura"></td>
+          <td><input type="number" value="${p.custo||""}" oninput="catalogoDraft[${i}].custo=this.value" style="width:100px;"></td>
+          <td><input type="number" value="${p.venda||""}" oninput="catalogoDraft[${i}].venda=this.value" style="width:100px;"></td>
+          <td><input type="text" value="${p.fornecedor||""}" oninput="catalogoDraft[${i}].fornecedor=this.value" style="width:100%;"></td>
           <td><button class="sm danger" onclick="removerProdutoCatalogo(${i})">Excluir</button></td>
         </tr>
       `).join("")}
@@ -1150,13 +1162,26 @@ function renderCatalogoProdutosLista(){
   ` : `<div class="empty-state" style="padding:16px;">Nenhum produto cadastrado ainda.</div>`;
 }
 function adicionarProdutoCatalogo(){
-  if(!configDraft.catalogoProdutos) configDraft.catalogoProdutos = [];
-  configDraft.catalogoProdutos.push({ nome:"", custo:"", venda:"", fornecedor:"" });
+  if(!catalogoDraft) catalogoDraft = [];
+  catalogoDraft.push({ nome:"", descricao:"", custo:"", venda:"", fornecedor:"" });
   renderCatalogoProdutosLista();
 }
 function removerProdutoCatalogo(i){
-  configDraft.catalogoProdutos.splice(i,1);
+  catalogoDraft.splice(i,1);
   renderCatalogoProdutosLista();
+}
+async function salvarCatalogoProdutos(){
+  const btn = document.getElementById("btn-salvar-catalogo");
+  if(btn){ btn.disabled = true; btn.textContent = "Salvando..."; }
+  try{
+    await db.collection("config").doc("settings").set({ catalogoProdutos: catalogoDraft }, {merge:true});
+    toast("Catálogo de produtos salvo.");
+  }catch(err){
+    console.error(err);
+    toast("Erro ao salvar catálogo. Veja o console.");
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = "Salvar catálogo"; }
+  }
 }
 async function salvarConfiguracoes(){
   const btn = document.getElementById("btn-salvar-config");
@@ -2248,8 +2273,10 @@ function renderProdutosPage(main){
         <button class="primary" onclick="openForm('produtos')">+ Novo Pedido</button>
       </div>
     </div>
+    ${renderCatalogoSecaoProdutos()}
     ${ETAPAS_PRODUTO.map(et=>renderPilhaProdutos(et.key, et.label, state.produtos.filter(p=>(p.etapa||"encomendado")===et.key))).join("")}
   `;
+  renderCatalogoProdutosLista();
 }
 
 function renderPilhaProdutos(chave, titulo, itens){
@@ -4838,6 +4865,7 @@ function aplicarProdutoCatalogo(nome){
     formState.fornecedor = item.fornecedor || "";
     formState.valorCusto = item.custo || "";
     formState.valorVenda = item.venda || "";
+    if(item.descricao && !formState.observacoes) formState.observacoes = item.descricao;
     refreshFormFields();
   }
 }
