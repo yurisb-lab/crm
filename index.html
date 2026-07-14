@@ -443,7 +443,7 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err=>{
    STATE
    ========================================================= */
 const state = {
-  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], produtos: [], pagamentos: [], recibos: [], bloqueios: [],
+  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], produtos: [], pagamentos: [], recibos: [], bloqueios: [], negociacoes: [],
   config: {},
   currentPage: "dashboard"
 };
@@ -529,7 +529,7 @@ auth.onAuthStateChanged(user=>{
    FIRESTORE LIVE LISTENERS
    ========================================================= */
 function startListeners(){
-  ["leads","clientes","criancas","casamentos","eventos","produtos","pagamentos","recibos","bloqueios"].forEach(col=>{
+  ["leads","clientes","criancas","casamentos","eventos","produtos","pagamentos","recibos","bloqueios","negociacoes"].forEach(col=>{
     const unsub = db.collection(col).onSnapshot(
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
@@ -618,7 +618,34 @@ const SCHEMAS = {
       {key:"nome", label:"Nome"},
       {key:"telefone", label:"Telefone"},
       {key:"cidade", label:"Cidade"},
-      {key:"origem", label:"Origem", format:v=>v?capitalize(v):"—"}
+      {key:"origem", label:"Origem", format:v=>v?capitalize(v):"—"},
+      {key:"_relacionamento", label:"Relacionamento", format:(v,row)=>badgeRelacionamento(row.id)},
+      {key:"_negociacaoAtual", label:"Negociação atual", format:(v,row)=>{
+        const n = negociacaoAtualCliente(row.id);
+        return n ? negociacaoStatusLabel(n.status) : "Nenhuma";
+      }}
+    ]
+  },
+  negociacoes: {
+    label: "Negociações", singular:"Negociação",
+    fields: [
+      {key:"clienteId", label:"Cliente", type:"ref", ref:"clientes", required:true},
+      {key:"tipoInteresse", label:"Interesse em", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"], required:true},
+      {key:"status", label:"Status da negociação", type:"select", options:["solicitou_orcamento","orcamento_enviado","negociacao","fechado","perdido"], triggersRefresh:true},
+      {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"], visibleIf: fs=>fs.status==="perdido"},
+      {key:"valorProposto", label:"Valor proposto (R$)", type:"number"},
+      {key:"observacoes", label:"Observações", type:"textarea"}
+    ],
+    columns: [
+      {key:"clienteId", label:"Cliente", format:v=>nomeRef("clientes",v)},
+      {key:"tipoInteresse", label:"Interesse", format:v=>v?capitalize(v.replace("_"," ")):"—"},
+      {key:"status", label:"Status", format:v=>{
+        const s = v||"solicitou_orcamento";
+        const sym = {solicitou_orcamento:"○", orcamento_enviado:"◔", negociacao:"◑", fechado:"✓", perdido:"✕"};
+        return `<span class="badge negociacao-${s}">${sym[s]||""} ${NEGOCIACAO_STATUS_LABELS[s]||capitalize(s)}</span>`;
+      }},
+      {key:"valorProposto", label:"Valor proposto", format:v=>v?money(v):"—"},
+      {key:"_evento", label:"Evento vinculado", format:(v,row)=> row.eventoId ? "✓ criado" : "—"}
     ]
   },
   criancas: {
@@ -782,6 +809,48 @@ const STATUS_LABELS = {
   fechado:"Fechado", realizado:"Realizado", entregue:"Entregue", perdido:"Perdido"
 };
 function statusLabel(s){ return STATUS_LABELS[s] || capitalize(s); }
+
+const NEGOCIACAO_STATUS_LABELS = {
+  solicitou_orcamento:"Solicitou orçamento", orcamento_enviado:"Orçamento enviado",
+  negociacao:"Em negociação", fechado:"Fechado", perdido:"Perdido"
+};
+function negociacaoStatusLabel(s){ return NEGOCIACAO_STATUS_LABELS[s] || capitalize(s||"solicitou_orcamento"); }
+
+/* ---------- Status do relacionamento (calculado, não é campo salvo) ----------
+   Lead: nunca teve evento concluído (realizado/entregue).
+   Cliente Recorrente: 2+ eventos concluídos.
+   Cliente Ativo: exatamente 1 evento concluído, há até 24 meses.
+   Cliente Inativo: exatamente 1 evento concluído, há mais de 24 meses.
+   Isso é independente do status de negociação atual (que é temporário/pontual). */
+const RELACIONAMENTO_LABELS = { lead:"Lead", ativo:"Cliente Ativo", inativo:"Cliente Inativo", recorrente:"Cliente Recorrente" };
+const RELACIONAMENTO_CORES = { lead:"var(--muted-2)", ativo:"#22c55e", inativo:"#ef4444", recorrente:"#a855f7" };
+function mesesDesde(dataStr){
+  if(!dataStr) return Infinity;
+  const inicio = new Date(dataStr+"T00:00:00");
+  const hoje = new Date();
+  return (hoje.getFullYear()-inicio.getFullYear())*12 + (hoje.getMonth()-inicio.getMonth());
+}
+function eventosConcluidosCliente(clienteId){
+  return state.eventos
+    .filter(e=>e.clienteId===clienteId && ["realizado","entregue"].includes(e.status||""))
+    .sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+}
+function statusRelacionamentoCliente(clienteId){
+  const concluidos = eventosConcluidosCliente(clienteId);
+  if(concluidos.length===0) return "lead";
+  if(concluidos.length>=2) return "recorrente";
+  return mesesDesde(concluidos[0].data) <= 24 ? "ativo" : "inativo";
+}
+function badgeRelacionamento(clienteId){
+  const s = statusRelacionamentoCliente(clienteId);
+  return `<span class="badge" style="border-color:${RELACIONAMENTO_CORES[s]};color:${RELACIONAMENTO_CORES[s]}">${RELACIONAMENTO_LABELS[s]}</span>`;
+}
+function negociacaoAtualCliente(clienteId){
+  const abertas = state.negociacoes
+    .filter(n=>n.clienteId===clienteId && !["fechado","perdido"].includes(n.status||"solicitou_orcamento"))
+    .sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+  return abertas[0] || null;
+}
 function money(v){ return (Number(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function formatDate(v){
   if(!v) return "—";
@@ -858,6 +927,7 @@ const NAV_ITEMS = [
   {key:"agenda",        label:"Agenda"},
   {key:"conversar",     label:"Conversar"},
   {key:"leads",         label:"Leads"},
+  {key:"negociacoes",   label:"Negociações"},
   {key:"eventos",       label:"Eventos"},
   {key:"clientes",      label:"Clientes"},
   {key:"criancas",      label:"Aniversariantes"},
@@ -871,6 +941,7 @@ const NAV_ICONS = {
   dashboard:     `🏠`,
   agenda:        `📅`,
   leads:         `<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="8" r="4" fill="#3b82f6"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#3b82f6" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>`,
+  negociacoes:   `🤝`,
   eventos:       `📆`,
   clientes:      `<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="8" r="4" fill="#22c55e"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>`,
   criancas:      `🎂`,
@@ -1029,6 +1100,7 @@ function renderPage(page){
   if(page==="eventos") return renderEventosPage(main);
   if(page==="agenda") return renderAgenda(main);
   if(page==="leads") return renderLeadsPage(main);
+  if(page==="negociacoes") return renderNegociacoesPage(main);
   if(page==="produtos") return renderProdutosPage(main);
   if(page==="relatorios") return renderRelatorios(main);
   if(page==="conversar") return renderConversar(main);
@@ -1391,6 +1463,11 @@ function buildCrmContext(){
     return `${c.nomeCasal}${c.conjuge?" & "+c.conjuge:""} | casados em:${formatDate(c.dataCasamento)} | ${anos} anos | próximas bodas em ${prox} dias | cliente:${cli?.nome||"?"}`;
   }).join("\n");
 
+  // Negociações em aberto (status atual, separado do status de relacionamento do cliente)
+  const negociacoesCtx = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento")).map(n=>{
+    return `${nomeRef("clientes",n.clienteId)} | interesse:${capitalize((n.tipoInteresse||"?").replace("_"," "))} | status:${negociacaoStatusLabel(n.status)}${n.valorProposto?` | valor proposto:${money(n.valorProposto)}`:""}`;
+  }).join("\n");
+
   // Alertas ativos
   const alertas = calcularAlertas().map(a=>a.texto.replace(/<[^>]+>/g,"")).join("\n");
 
@@ -1407,6 +1484,10 @@ Eventos: ${state.eventos.length} | Clientes: ${state.clientes.length} | Leads: $
 
 === ALERTAS ATIVOS ===
 ${alertas||"Nenhum alerta no momento."}
+
+=== NEGOCIAÇÕES EM ABERTO (${state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento")).length}) ===
+(status da negociação atual — diferente do status de relacionamento do cliente, que é Lead/Ativo/Inativo/Recorrente e é calculado a partir dos eventos concluídos)
+${negociacoesCtx||"Nenhuma negociação em aberto no momento."}
 
 === CLIENTES (${state.clientes.length}) ===
 (inclui histórico de eventos, filhos com próximos aniversários, casamentos e todas as anotações)
@@ -2254,6 +2335,127 @@ function togglePilhaLead(chave){
 }
 
 /* =========================================================
+   NEGOCIAÇÕES — status da negociação atual, separado do
+   status de relacionamento (Lead/Ativo/Inativo/Recorrente),
+   que é calculado automaticamente a partir dos eventos concluídos.
+   ========================================================= */
+const negociacoesExpandidas = new Set(["abertas"]);
+
+function renderNegociacoesPage(main){
+  const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento"))
+    .sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||""));
+  const fechadas = state.negociacoes.filter(n=>n.status==="fechado")
+    .sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+  const perdidas = state.negociacoes.filter(n=>n.status==="perdido")
+    .sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+
+  main.innerHTML = `
+    <div class="page-header">
+      <div><div class="eyebrow">Funil</div><h2>Negociações</h2></div>
+      <div class="page-actions">
+        <button class="primary" onclick="openForm('negociacoes')">+ Nova Negociação</button>
+      </div>
+    </div>
+    <div style="font-size:12px; color:var(--muted-2); margin:-10px 0 14px;">
+      💡 Isso é o status da negociação atual (temporário). O status de relacionamento do cliente (Lead / Ativo / Inativo / Recorrente) é calculado automaticamente e fica na página Clientes.
+    </div>
+    ${renderPilhaNegociacoes("abertas", "Em aberto", abertas)}
+    ${renderPilhaNegociacoes("fechadas", "Fechadas", fechadas)}
+    ${renderPilhaNegociacoes("perdidas", "Perdidas", perdidas)}
+  `;
+}
+
+function renderPilhaNegociacoes(chave, titulo, itens){
+  const isOpen = negociacoesExpandidas.has(chave);
+  const sym = {solicitou_orcamento:"○", orcamento_enviado:"◔", negociacao:"◑", fechado:"✓", perdido:"✕"};
+  return `
+    <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;"
+           onclick="togglePilhaNegociacao('${chave}')">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:'Fraunces',serif; font-size:18px;">${isOpen?"▾":"▸"} ${titulo}</span>
+          <span style="font-size:12px; color:var(--muted);">${itens.length} negociaç${itens.length===1?"ão":"ões"}</span>
+        </div>
+        <span style="font-size:12px; color:var(--muted-2);">${isOpen?"recolher":"expandir"}</span>
+      </div>
+      ${isOpen ? `
+        <div style="border-top:1px solid var(--border-solid); overflow-x:auto;">
+          ${itens.length ? `<table>
+            <thead><tr><th>Cliente</th><th>Interesse</th><th>Status</th><th>Valor proposto</th><th></th></tr></thead>
+            <tbody>
+              ${itens.map(n=>`<tr>
+                <td><a href="#" onclick="openView('clientes','${n.clienteId}');return false;">${nomeRef("clientes",n.clienteId)}</a></td>
+                <td>${n.tipoInteresse ? capitalize(n.tipoInteresse.replace("_"," ")) : "—"}</td>
+                <td><span class="badge">${sym[n.status||"solicitou_orcamento"]||""} ${negociacaoStatusLabel(n.status)}</span></td>
+                <td>${n.valorProposto?money(n.valorProposto):"—"}</td>
+                <td class="row-actions">
+                  <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
+                  <button class="sm" onclick="openForm('negociacoes','${n.id}')">Editar</button>
+                  <button class="sm danger" onclick="deleteDoc('negociacoes','${n.id}')">Excluir</button>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>` : `<div class="empty-state" style="padding:24px;">Nenhuma negociação aqui.</div>`}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function togglePilhaNegociacao(chave){
+  if(negociacoesExpandidas.has(chave)) negociacoesExpandidas.delete(chave);
+  else negociacoesExpandidas.add(chave);
+  renderPage("negociacoes");
+}
+
+function renderViewNegociacao(neg){
+  const cliente = state.clientes.find(c=>c.id===neg.clienteId);
+  const wa = cliente ? whatsappLink(cliente.telefone) : null;
+  const historico = Array.isArray(neg.historicoStatus) ? [...neg.historicoStatus].sort((a,b)=>(a.data||"").localeCompare(b.data||"")) : [];
+  const podeGerarEvento = neg.status==="fechado" && !neg.eventoId;
+
+  return `<h3>Negociação · ${cliente?.nome||"—"}</h3>
+    ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${neg.clienteId}');return false;">${nomeRef("clientes",neg.clienteId)}</a>`)}
+    ${viewRow("Interesse em", neg.tipoInteresse ? capitalize(neg.tipoInteresse.replace("_"," ")) : "—")}
+    ${viewRow("Status", `<span class="badge">${negociacaoStatusLabel(neg.status)}</span>`)}
+    ${neg.motivoPerda && neg.status==="perdido" ? viewRow("Motivo da perda", capitalize(neg.motivoPerda.replace("_"," "))) : ""}
+    ${viewRow("Valor proposto", neg.valorProposto ? money(neg.valorProposto) : "—")}
+    ${neg.observacoes ? viewRow("Observações", neg.observacoes) : ""}
+    ${neg.eventoId ? viewRow("Evento vinculado", `<a href="#" onclick="openView('eventos','${neg.eventoId}');return false;">Ver evento →</a>`) : ""}
+    ${historico.length ? `
+      <div class="view-section-title">Histórico da negociação</div>
+      ${historico.map(h=>`<div class="comentario-item"><div class="comentario-data">${formatarDataHora(h.data)}</div><div class="comentario-texto">${negociacaoStatusLabel(h.status)}</div></div>`).join("")}
+    ` : ""}
+    ${viewActions("negociacoes", neg.id, `
+      ${wa ? `<button class="ghost" onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
+      ${podeGerarEvento ? `<button class="ghost" onclick="closeModal();criarEventoDeNegociacao('${neg.id}')">📆 Criar evento a partir desta negociação</button>` : ""}
+    `)}`;
+}
+
+function abrirNovaNegociacaoParaCliente(clienteId){
+  openForm("negociacoes");
+  setTimeout(()=>{
+    formState.clienteId = clienteId;
+    refreshFormFields();
+  }, 100);
+}
+
+function criarEventoDeNegociacao(negId){
+  const neg = state.negociacoes.find(n=>n.id===negId);
+  if(!neg) return;
+  openForm("eventos");
+  setTimeout(()=>{
+    formState.clienteId = neg.clienteId;
+    formState.tipo = neg.tipoInteresse || "";
+    if(neg.valorProposto){ formState.valorTabela = neg.valorProposto; formState.valorContratado = neg.valorProposto; }
+    formState.status = "fechado";
+    formState._negociacaoId = negId;
+    refreshFormFields();
+    toast("Campos preenchidos a partir da negociação. Confira e complete a data antes de salvar.", 4500);
+  }, 100);
+}
+
+/* =========================================================
    PRODUTOS — PEDIDOS COM PILHAS POR ETAPA
    ========================================================= */
 const ETAPAS_PRODUTO = [
@@ -2753,6 +2955,26 @@ function renderCardMeta(){
     </div>`;
 }
 
+function renderNegociacoesAbertasDashboard(){
+  const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento"));
+  if(!abertas.length) return "";
+  const ordenadas = [...abertas].sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||""));
+  const sym = {solicitou_orcamento:"○", orcamento_enviado:"◔", negociacao:"◑"};
+  return `
+    <div class="section-title">🤝 Negociações em aberto (${abertas.length})</div>
+    <div class="card" style="padding:0;">
+      <table><thead><tr><th>Cliente</th><th>Interesse</th><th>Status</th><th>Valor proposto</th><th></th></tr></thead><tbody>
+        ${ordenadas.map(n=>`<tr>
+          <td><a href="#" onclick="openView('clientes','${n.clienteId}');return false;">${nomeRef("clientes",n.clienteId)}</a></td>
+          <td>${n.tipoInteresse?capitalize(n.tipoInteresse.replace("_"," ")):"—"}</td>
+          <td><span class="badge">${sym[n.status||"solicitou_orcamento"]||""} ${negociacaoStatusLabel(n.status)}</span></td>
+          <td>${n.valorProposto?money(n.valorProposto):"—"}</td>
+          <td class="row-actions"><button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button></td>
+        </tr>`).join("")}
+      </tbody></table>
+    </div>`;
+}
+
 function renderDashboard(main){
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const futuros = state.eventos.filter(e=>e.data && new Date(e.data+"T00:00:00") >= hoje).sort((a,b)=>a.data.localeCompare(b.data));
@@ -2789,6 +3011,8 @@ function renderDashboard(main){
     </div>
 
     ${renderCardMeta()}
+
+    ${renderNegociacoesAbertasDashboard()}
 
     ${(()=>{
       const hoje = new Date().toISOString().slice(0,10);
@@ -3496,7 +3720,7 @@ function copiarResumoEvento(eventoId){
 function openView(col, id){
   const item = state[col]?.find(i=>i.id===id);
   if(!item) return;
-  const renderers = { eventos: renderViewEvento, clientes: renderViewCliente, criancas: renderViewCrianca, casamentos: renderViewCasamento, leads: renderViewLead, produtos: renderViewProduto };
+  const renderers = { eventos: renderViewEvento, clientes: renderViewCliente, criancas: renderViewCrianca, casamentos: renderViewCasamento, leads: renderViewLead, produtos: renderViewProduto, negociacoes: renderViewNegociacao };
   const html = (renderers[col] || renderViewGeneric)(item, col);
   document.getElementById("modal-content").innerHTML = html;
   document.getElementById("modal-backdrop").classList.add("active");
@@ -4446,7 +4670,13 @@ function renderViewCliente(cli){
   const criancasDisponiveis = state.criancas.filter(c=>c.clientePaiId!==cli.id && c.clienteMaeId!==cli.id)
     .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
 
+  const negociacoesCliente = state.negociacoes.filter(n=>n.clienteId===cli.id).sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+  const negAtual = negociacaoAtualCliente(cli.id);
+
   return `<h3>${cli.nome}${cli.nomeConjuge ? " & "+cli.nomeConjuge : ""}</h3>
+    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:center;">
+      ${badgeRelacionamento(cli.id)}
+    </div>
     ${temIA() ? `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📷 Atualizar via print ou contato .vcf (IA)</button>` : `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📋 Atualizar via contato .vcf</button>`}
     ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener">${cli.telefone} ↗ WhatsApp</a>` : cli.telefone) : "—")}
     ${viewRow("Cidade", cli.cidade || "—")}
@@ -4468,6 +4698,14 @@ function renderViewCliente(cli){
       </select>
       <button class="sm" onclick="vincularCriancaExistente('${cli.id}')">Vincular</button>
     </div>
+
+    <div class="view-section-title">Negociação atual</div>
+    <div style="font-size:13px; margin-bottom:8px;">${negAtual ? `<span class="badge">${negociacaoStatusLabel(negAtual.status)}</span>` : `<span style="color:var(--muted-2);">Nenhuma</span>`}</div>
+    <button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirNovaNegociacaoParaCliente('${cli.id}'),150)">+ Nova negociação</button>
+    ${negociacoesCliente.length ? `
+      <div class="view-section-title">Histórico de negociações (${negociacoesCliente.length})</div>
+      ${negociacoesCliente.map(n=>`<div class="view-link-card" onclick="openView('negociacoes','${n.id}')">${n.tipoInteresse?capitalize(n.tipoInteresse.replace("_"," ")):"—"} · ${negociacaoStatusLabel(n.status)}${n.valorProposto?" · "+money(n.valorProposto):""}</div>`).join("")}
+    ` : ""}
 
     <div class="view-section-title">Próximo evento</div>
     ${proximo
@@ -4801,6 +5039,7 @@ function openForm(col, id){
   formState = existing ? { ...existing } : {};
   formState._col = col; formState._id = id || null;
   if(!existing && col==="eventos") formState.status = "orcamento"; // deixa explícito em vez de só "parecer" orçamento na tela
+  if(!existing && col==="negociacoes") formState.status = "solicitou_orcamento";
   if(!existing && col==="produtos"){
     formState.etapa = "encomendado";
     formState.dataPedido = new Date().toISOString().slice(0,10);
@@ -5147,6 +5386,17 @@ async function saveDoc(){
     }
   }
 
+  // registra automaticamente a data de cada mudança de status da negociação
+  if(col === "negociacoes"){
+    const statusAnterior = existing ? (existing.status||"solicitou_orcamento") : null;
+    const statusNovo = data.status || "solicitou_orcamento";
+    const historico = existing && Array.isArray(existing.historicoStatus) ? [...existing.historicoStatus] : [];
+    if(!existing || statusAnterior !== statusNovo){
+      historico.push({ status: statusNovo, data: new Date().toISOString() });
+    }
+    data.historicoStatus = historico;
+  }
+
   // registra automaticamente a data de cada mudança de etapa do pedido de produto
   if(col === "produtos"){
     const etapaAnterior = existing ? (existing.etapa||"encomendado") : null;
@@ -5170,7 +5420,11 @@ async function saveDoc(){
       toast(`${schema.singular} atualizado.`);
     } else {
       data.criadoEm = new Date().toISOString();
-      await db.collection(col).add(data);
+      const novoRef = await db.collection(col).add(data);
+      if(col === "eventos" && formState._negociacaoId){
+        try{ await db.collection("negociacoes").doc(formState._negociacaoId).update({ eventoId: novoRef.id }); }
+        catch(err){ console.error("[negociacoes] erro ao vincular evento:", err); }
+      }
       toast(`${schema.singular} criado.`);
     }
     closeModal();
