@@ -1248,7 +1248,7 @@ function buildCrmContext(){
       capitalize((e.tipo||"").replace("_"," "))+(e.outroDescricao?" ("+e.outroDescricao+")":""),
       `cliente:${nomeRef("clientes",e.clienteId)}`,
       crianca ? `criança:${crianca.nome}` : "",
-      e.valorContratado ? `valor:${money(e.valorContratado)}` : "",
+      `valor:${money(e.valorContratado)}`,
       saldo>0 ? `saldo:${money(saldo)}` : "pago",
       `status:${statusLabel(e.status||"orcamento")}`,
       e.dataEntregaPrevista ? `entrega:${formatDate(e.dataEntregaPrevista)}` : "",
