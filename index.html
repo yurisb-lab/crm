@@ -3034,51 +3034,26 @@ function renderDashboard(main){
   const negociacoesAbertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento"));
   const aniversariosCriancas = state.criancas.map(c=>({id:c.id, tipo:"crianca", nome:c.nome, data:c.dataNascimento, vinculo:nomeRef("clientes",c.clientePaiId), dias:diasParaAniversario(c.dataNascimento), idade:idadeAtual(c.dataNascimento), aprox:!!c.nascimentoAproximado}));
   const aniversariosCasamentos = state.casamentos.map(c=>({id:c.id, tipo:"casamento", nome:c.nomeCasal, data:c.dataCasamento, vinculo:nomeRef("clientes",c.clienteId), dias:diasParaAniversario(c.dataCasamento), idade:idadeAtual(c.dataCasamento)}));
-  const aniversarios = [...aniversariosCriancas, ...aniversariosCasamentos].filter(c=>c.dias<=60).sort((a,b)=>a.dias-b.dias);
-  const pendentesEntrega = state.eventos.filter(e=>e.status==="realizado");
-  const entregues = state.eventos.filter(e=>e.status==="entregue");
 
   main.innerHTML = `
     <div class="page-header">
       <div><div class="eyebrow">Visão geral</div><h2>Dashboard</h2></div>
     </div>
 
-    <div class="grid grid-3" style="margin-bottom:14px;">
-      <div class="card stat-card stat-card-primary">
-        <div class="label">Próximo evento</div>
-        <div class="value" style="font-size:20px">${proximo ? capitalize((proximo.tipo||"").replace("_"," ")) : "—"}</div>
-        <div class="sub">${proximo ? formatDate(proximo.data) + (proximo.horario? " · "+proximo.horario:"") + " · " + nomeRef("clientes",proximo.clienteId) : "Nenhum evento futuro"}</div>
-      </div>
-      <div class="card stat-card">
-        <div class="label">Leads negociando</div>
-        <div class="value">${leadsNegociando.length}</div>
-        <div class="sub">${leadsNegociando.length ? "aguardando fechamento" : "nenhum no momento"}</div>
-      </div>
-      <div class="card stat-card">
-        <div class="label">Negociações abertas</div>
-        <div class="value">${negociacoesAbertas.length}</div>
-        <div class="sub">${negociacoesAbertas.length ? "aguardando fechamento" : "nenhuma no momento"}</div>
-      </div>
-    </div>
-
-    ${renderCardMeta()}
-
-    ${renderLeadsNegociandoDashboard()}
-
-    ${renderNegociacoesAbertasDashboard()}
-
     ${(()=>{
-      const hoje = new Date().toISOString().slice(0,10);
+      const hojeStr = new Date().toISOString().slice(0,10);
       const doMesOrdenados = [...doMes].sort((a,b)=>(a.data+a.horario||"").localeCompare(b.data+b.horario||""));
-      if(!doMesOrdenados.length) return "";
       const nomesMes2 = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
       const mesAtual = nomesMes2[new Date().getMonth()];
+      if(!doMesOrdenados.length) return `
+        <div class="section-title" style="margin-top:0;">📆 Eventos de ${mesAtual}</div>
+        <div class="card"><div class="empty-state">Nenhum evento neste mês.</div></div>`;
       return `
-        <div class="section-title">📆 Eventos de ${mesAtual}</div>
+        <div class="section-title" style="margin-top:0;">📆 Eventos de ${mesAtual}</div>
         <div class="card" style="padding:0;">
           ${doMesOrdenados.map(e=>{
             const saldo = (Number(e.valorContratado)||0) - totalPago(e.id);
-            const passado = e.data < hoje;
+            const passado = e.data < hojeStr;
             return `<div style="display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; cursor:pointer; ${passado?"opacity:.55":""}"
                          onclick="openView('eventos','${e.id}')">
               <div style="width:5px; height:36px; border-radius:3px; background:${corHexTipo(e.tipo)}; flex-shrink:0;"></div>
@@ -3100,6 +3075,18 @@ function renderDashboard(main){
           }).join("")}
         </div>`;
     })()}
+
+    ${renderCardMeta()}
+
+    ${renderLeadsNegociandoDashboard()}
+
+    ${renderNegociacoesAbertasDashboard()}
+
+    <div class="card stat-card stat-card-primary" style="margin:20px 0 14px;">
+      <div class="label">Próximo evento</div>
+      <div class="value" style="font-size:20px">${proximo ? capitalize((proximo.tipo||"").replace("_"," ")) : "—"}</div>
+      <div class="sub">${proximo ? formatDate(proximo.data) + (proximo.horario? " · "+proximo.horario:"") + " · " + nomeRef("clientes",proximo.clienteId) : "Nenhum evento futuro"}</div>
+    </div>
 
     ${(()=>{
       const alertas = calcularAlertas();
