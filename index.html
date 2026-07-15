@@ -30,6 +30,7 @@
     --muted-2:#6b6b6b;
     --amber:#ffffff;
     --amber-dim:#ffffff1f;
+    --nav-icon-active:#f0b429;
     --terracotta:#ffffff;
     --green:#ffffff;
     --danger:#ffffff;
@@ -47,6 +48,7 @@
     --muted-2:#8f8f8f;
     --amber:#000000;
     --amber-dim:#0000000f;
+    --nav-icon-active:#b45309;
     --terracotta:#000000;
     --green:#000000;
     --danger:#000000;
@@ -137,7 +139,7 @@
   nav button.active{ background:var(--amber-dim); color:var(--amber); }
   nav button.active .dot{ background:var(--amber); }
   nav button.active img.nav-icon{ opacity:1; filter:drop-shadow(0 0 3px var(--amber)); }
-  nav button.active .nav-icon-wrap i{ filter:drop-shadow(0 0 3px var(--amber)); }
+  nav button.active .nav-icon-wrap i{ color:var(--nav-icon-active); filter:drop-shadow(0 0 3px var(--nav-icon-active)); }
   nav button[data-page="clientes"]{ margin-top:6px; }
   .nav-child-wrap{ margin-left:14px; padding-left:10px; border-left:1.5px solid var(--border-solid); }
   .nav-child-wrap button{ font-size:13px; color:var(--muted-2); padding:7px 10px; }
