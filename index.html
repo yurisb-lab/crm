@@ -136,6 +136,12 @@
   nav button.active{ background:var(--amber-dim); color:var(--amber); }
   nav button.active .dot{ background:var(--amber); }
   nav button.active img.nav-icon{ opacity:1; filter:drop-shadow(0 0 3px var(--amber)); }
+  nav button[data-page="clientes"]{ margin-top:6px; }
+  .nav-child-wrap{ margin-left:14px; padding-left:10px; border-left:1.5px solid var(--border-solid); }
+  .nav-child-wrap button{ font-size:13px; color:var(--muted-2); padding:7px 10px; }
+  .nav-child-wrap button:hover{ color:var(--text); }
+  .nav-child-wrap button.active{ color:var(--amber); background:var(--amber-dim); }
+  .nav-child-wrap:last-of-type{ margin-bottom:4px; }
   .sidebar-footer{ font-size:12px; color:var(--muted-2); padding:10px 12px; }
   .sidebar-footer .footer-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .theme-toggle{
@@ -930,8 +936,8 @@ const NAV_ITEMS = [
   {key:"negociacoes",   label:"Negociações"},
   {key:"eventos",       label:"Eventos"},
   {key:"clientes",      label:"Clientes"},
-  {key:"criancas",      label:"Aniversariantes"},
-  {key:"casamentos",    label:"Casamentos"},
+  {key:"criancas",      label:"Aniversariantes", child:true},
+  {key:"casamentos",    label:"Casamentos", child:true},
   {key:"produtos",      label:"Produtos"},
   {key:"pagamentos",    label:"Financeiro"},
   {key:"relatorios",    label:"Relatórios"},
@@ -954,11 +960,14 @@ const NAV_ICONS = {
 };
 function buildNav(){
   const nav = document.getElementById("nav");
-  nav.innerHTML = NAV_ITEMS.map(item=>`
+  nav.innerHTML = NAV_ITEMS.map(item=>{
+    const btn = `
     <button data-page="${item.key}" onclick="renderPage('${item.key}')">
       <span class="nav-icon-wrap">${NAV_ICONS[item.key]||""}</span>${item.label}
     </button>
-  `).join("");
+  `;
+    return item.child ? `<div class="nav-child-wrap">${btn}</div>` : btn;
+  }).join("");
 }
 function setActiveNav(page){
   document.querySelectorAll("#nav button").forEach(b=>{
