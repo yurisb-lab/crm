@@ -233,7 +233,6 @@
   .badge.realizado{ background:color-mix(in srgb, var(--text) 45%, transparent); color:var(--text); }
   .badge.entregue{ background:var(--text); color:var(--bg); border-color:var(--text); }
   .badge.perdido{ background:transparent; color:var(--muted-2); border-style:dashed; text-decoration:line-through; }
-  .badge.lead-novo{ background:transparent; color:var(--muted); border-style:dashed; }
   .badge.lead-contatado{ background:color-mix(in srgb, var(--text) 14%, transparent); color:var(--text); }
   .badge.lead-negociando{ background:color-mix(in srgb, var(--text) 32%, transparent); color:var(--text); }
   .badge.lead-convertido{ background:var(--text); color:var(--bg); border-color:var(--text); }
@@ -598,7 +597,7 @@ const SCHEMAS = {
       {key:"telefone", label:"Telefone", type:"tel"},
       {key:"origem", label:"Como chegou até você", type:"select", options:["instagram","indicacao","google","igreja","outro"]},
       {key:"interesseTipo", label:"Interesse em", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"]},
-      {key:"status", label:"Status", type:"select", options:["novo","negociando","convertido","perdido"]},
+      {key:"status", label:"Status", type:"select", options:["negociando","convertido","perdido"]},
       {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"]},
       {key:"observacoes", label:"Observações", type:"textarea"}
     ],
@@ -607,9 +606,9 @@ const SCHEMAS = {
       {key:"telefone", label:"Telefone"},
       {key:"interesseTipo", label:"Interesse", format:v=>v?capitalize(v.replace("_"," ")):"—"},
       {key:"status", label:"Status", format:v=>{
-        const s = v||"novo";
-        const sym = {novo:"○", negociando:"◑", convertido:"✓", perdido:"✕"};
-        const lbl = {novo:"Novo", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+        const s = v||"negociando";
+        const sym = {negociando:"◑", convertido:"✓", perdido:"✕"};
+        const lbl = {negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
         return `<span class="badge lead-${s}">${sym[s]||""} ${lbl[s]||capitalize(s)}</span>`;
       }}
     ]
@@ -1462,7 +1461,7 @@ function buildCrmContext(){
 
   // Leads — todos os comentários
   const leadsCtx = state.leads.map(l=>{
-    const lbl = {novo:"Novo",negociando:"Negociando",convertido:"Convertido",perdido:"Perdido"};
+    const lbl = {negociando:"Negociando",convertido:"Convertido",perdido:"Perdido"};
     const comentarios = (l.comentarios||[]).sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||"")).map(x=>`[${formatarDataHora(x.criadoEm)}] ${x.texto}`).join(" | ");
     const diasSemContato = (()=>{
       const ults = (l.comentarios||[]).map(c=>c.criadoEm||"").sort().reverse()[0];
@@ -1471,7 +1470,7 @@ function buildCrmContext(){
     })();
     return [
       l.nome,
-      `status:${lbl[l.status||"novo"]}`,
+      `status:${lbl[l.status||"negociando"]}`,
       `interesse:${capitalize((l.interesseTipo||"?").replace("_"," "))}`,
       `origem:${l.origem||"?"}`,
       `sem contato há ${diasSemContato} dias`,
@@ -2303,7 +2302,7 @@ async function desbloquearData(id){
 const leadsExpandidos = new Set(["ativos"]);
 
 function renderLeadsPage(main){
-  const ativos = state.leads.filter(l=>!["convertido","perdido"].includes(l.status||"novo"))
+  const ativos = state.leads.filter(l=>!["convertido","perdido"].includes(l.status||"negociando"))
     .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
   const convertidos = state.leads.filter(l=>l.status==="convertido")
     .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
@@ -2325,8 +2324,8 @@ function renderLeadsPage(main){
 
 function renderPilhaLeads(chave, titulo, itens){
   const isOpen = leadsExpandidos.has(chave);
-  const sym = {novo:"○", negociando:"◑", convertido:"✓", perdido:"✕"};
-  const lbl = {novo:"Novo", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+  const sym = {negociando:"◑", convertido:"✓", perdido:"✕"};
+  const lbl = {negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
   return `
     <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
       <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;"
@@ -2345,7 +2344,7 @@ function renderPilhaLeads(chave, titulo, itens){
               ${itens.map(lead=>`<tr>
                 <td>${lead.nome||"—"}</td>
                 <td>${lead.interesseTipo ? capitalize(lead.interesseTipo.replace("_"," ")) : "—"}</td>
-                <td><span class="badge lead-${lead.status||"novo"}">${sym[lead.status||"novo"]||""} ${lbl[lead.status||"novo"]||capitalize(lead.status||"")}</span></td>
+                <td><span class="badge lead-${lead.status||"negociando"}">${sym[lead.status||"negociando"]||""} ${lbl[lead.status||"negociando"]||capitalize(lead.status||"")}</span></td>
                 <td class="row-actions">
                   ${chave==="ativos" && !lead.clienteId ? `<button class="sm" onclick="converterLeadEmCliente('${lead.id}')">Converter</button>` : ""}
                   <button class="sm" onclick="openView('leads','${lead.id}')">Ver</button>
@@ -2988,6 +2987,24 @@ function renderCardMeta(){
     </div>`;
 }
 
+function renderLeadsNegociandoDashboard(){
+  const negociando = state.leads.filter(l=>!["convertido","perdido"].includes(l.status||"negociando"));
+  if(!negociando.length) return "";
+  const ordenados = [...negociando].sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  return `
+    <div class="section-title">💬 Leads negociando (${negociando.length})</div>
+    <div class="card" style="padding:0;">
+      <table><thead><tr><th>Nome</th><th>Interesse</th><th>Origem</th><th></th></tr></thead><tbody>
+        ${ordenados.map(l=>`<tr>
+          <td>${l.nome||"—"}</td>
+          <td>${l.interesseTipo?capitalize(l.interesseTipo.replace("_"," ")):"—"}</td>
+          <td>${l.origem?capitalize(l.origem):"—"}</td>
+          <td class="row-actions"><button class="sm" onclick="openView('leads','${l.id}')">Ver</button></td>
+        </tr>`).join("")}
+      </tbody></table>
+    </div>`;
+}
+
 function renderNegociacoesAbertasDashboard(){
   const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento"));
   if(!abertas.length) return "";
@@ -3013,7 +3030,8 @@ function renderDashboard(main){
   const futuros = state.eventos.filter(e=>e.data && new Date(e.data+"T00:00:00") >= hoje).sort((a,b)=>a.data.localeCompare(b.data));
   const proximo = futuros[0];
   const doMes = state.eventos.filter(e=>isMesmoMes(e.data));
-  const aReceber = state.eventos.reduce((sum,e)=> sum + Math.max((Number(e.valorContratado)||0) - totalPago(e.id), 0), 0);
+  const leadsNegociando = state.leads.filter(l=>!["convertido","perdido"].includes(l.status||"negociando"));
+  const negociacoesAbertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento"));
   const aniversariosCriancas = state.criancas.map(c=>({id:c.id, tipo:"crianca", nome:c.nome, data:c.dataNascimento, vinculo:nomeRef("clientes",c.clientePaiId), dias:diasParaAniversario(c.dataNascimento), idade:idadeAtual(c.dataNascimento), aprox:!!c.nascimentoAproximado}));
   const aniversariosCasamentos = state.casamentos.map(c=>({id:c.id, tipo:"casamento", nome:c.nomeCasal, data:c.dataCasamento, vinculo:nomeRef("clientes",c.clienteId), dias:diasParaAniversario(c.dataCasamento), idade:idadeAtual(c.dataCasamento)}));
   const aniversarios = [...aniversariosCriancas, ...aniversariosCasamentos].filter(c=>c.dias<=60).sort((a,b)=>a.dias-b.dias);
@@ -3032,18 +3050,20 @@ function renderDashboard(main){
         <div class="sub">${proximo ? formatDate(proximo.data) + (proximo.horario? " · "+proximo.horario:"") + " · " + nomeRef("clientes",proximo.clienteId) : "Nenhum evento futuro"}</div>
       </div>
       <div class="card stat-card">
-        <div class="label">Eventos este mês</div>
-        <div class="value">${doMes.length}</div>
-        <div class="sub">${doMes.filter(e=>e.status==="fechado"||e.status==="orcamento").length} em aberto · ${entregues.length} entregues</div>
+        <div class="label">Leads negociando</div>
+        <div class="value">${leadsNegociando.length}</div>
+        <div class="sub">${leadsNegociando.length ? "aguardando fechamento" : "nenhum no momento"}</div>
       </div>
       <div class="card stat-card">
-        <div class="label">A receber</div>
-        <div class="value">${money(aReceber)}</div>
-        <div class="sub">saldo pendente em todos os eventos</div>
+        <div class="label">Negociações abertas</div>
+        <div class="value">${negociacoesAbertas.length}</div>
+        <div class="sub">${negociacoesAbertas.length ? "aguardando fechamento" : "nenhuma no momento"}</div>
       </div>
     </div>
 
     ${renderCardMeta()}
+
+    ${renderLeadsNegociandoDashboard()}
 
     ${renderNegociacoesAbertasDashboard()}
 
@@ -4650,9 +4670,9 @@ function usarVariacao(i){
   toast("Variação aplicada.");
 }
 function renderViewLead(lead){
-  const sym = {novo:"○", negociando:"◑", convertido:"✓", perdido:"✕"};
-  const lbl = {novo:"Novo", negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
-  const s = lead.status || "novo";
+  const sym = {negociando:"◑", convertido:"✓", perdido:"✕"};
+  const lbl = {negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+  const s = lead.status || "negociando";
   const wa = whatsappLink(lead.telefone);
   const jaConvertido = !!lead.clienteId;
   const lid = lead.id;
@@ -5080,6 +5100,7 @@ function openForm(col, id){
   formState._col = col; formState._id = id || null;
   if(!existing && col==="eventos") formState.status = "orcamento"; // deixa explícito em vez de só "parecer" orçamento na tela
   if(!existing && col==="negociacoes") formState.status = "solicitou_orcamento";
+  if(!existing && col==="leads") formState.status = "negociando";
   if(!existing && col==="produtos"){
     formState.etapa = "encomendado";
     formState.dataPedido = new Date().toISOString().slice(0,10);
