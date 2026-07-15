@@ -17,6 +17,7 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.47.0/iconfont/tabler-icons.min.css">
 <style>
   :root, [data-theme="dark"]{
     --bg:#000000;
@@ -136,6 +137,7 @@
   nav button.active{ background:var(--amber-dim); color:var(--amber); }
   nav button.active .dot{ background:var(--amber); }
   nav button.active img.nav-icon{ opacity:1; filter:drop-shadow(0 0 3px var(--amber)); }
+  nav button.active .nav-icon-wrap i{ filter:drop-shadow(0 0 3px var(--amber)); }
   nav button[data-page="clientes"]{ margin-top:6px; }
   .nav-child-wrap{ margin-left:14px; padding-left:10px; border-left:1.5px solid var(--border-solid); }
   .nav-child-wrap button{ font-size:13px; color:var(--muted-2); padding:7px 10px; }
@@ -360,9 +362,10 @@
     width:24px; height:24px; display:flex; align-items:center; justify-content:center;
     flex-shrink:0; font-size:18px; line-height:1;
   }
-  .nav-icon-wrap svg{ transition:opacity .15s; opacity:.8; }
-  nav button:hover .nav-icon-wrap svg{ opacity:1; }
-  nav button.active .nav-icon-wrap svg{ opacity:1; }
+  .nav-icon-wrap svg, .nav-icon-wrap i{ transition:opacity .15s; opacity:.8; }
+  nav button:hover .nav-icon-wrap svg, nav button:hover .nav-icon-wrap i{ opacity:1; }
+  nav button.active .nav-icon-wrap svg, nav button.active .nav-icon-wrap i{ opacity:1; }
+  .nav-icon-wrap i{ font-size:18px; }
   #toast{
     position:fixed; bottom:24px; right:24px; background:var(--surface-2); border:1px solid var(--amber);
     color:var(--text); padding:12px 18px; border-radius:8px; font-size:13px; z-index:99; display:none;
@@ -963,19 +966,19 @@ const NAV_ITEMS = [
   {key:"configuracoes", label:"Configurações"}
 ];
 const NAV_ICONS = {
-  dashboard:     `🏠`,
-  agenda:        `📅`,
-  leads:         `<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="8" r="4" fill="#3b82f6"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#3b82f6" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>`,
-  negociacoes:   `🤝`,
-  eventos:       `📆`,
-  clientes:      `<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="8" r="4" fill="#22c55e"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#22c55e" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg>`,
-  criancas:      `🎂`,
-  casamentos:    `❤️`,
-  produtos:      `📦`,
-  pagamentos:    `💰`,
-  relatorios:    `📊`,
-  conversar:     `✨`,
-  configuracoes: `⚙️`,
+  dashboard:     `<i class="ti ti-home"></i>`,
+  agenda:        `<i class="ti ti-calendar"></i>`,
+  leads:         `<i class="ti ti-user-plus"></i>`,
+  negociacoes:   `<i class="ti ti-arrows-right-left"></i>`,
+  eventos:       `<i class="ti ti-calendar-event"></i>`,
+  clientes:      `<i class="ti ti-users"></i>`,
+  criancas:      `<i class="ti ti-cake"></i>`,
+  casamentos:    `<i class="ti ti-heart"></i>`,
+  produtos:      `<i class="ti ti-package"></i>`,
+  pagamentos:    `<i class="ti ti-wallet"></i>`,
+  relatorios:    `<i class="ti ti-chart-bar"></i>`,
+  conversar:     `<i class="ti ti-sparkles"></i>`,
+  configuracoes: `<i class="ti ti-settings"></i>`,
 };
 function buildNav(){
   const nav = document.getElementById("nav");
