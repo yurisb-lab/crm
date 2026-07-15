@@ -625,10 +625,14 @@ const SCHEMAS = {
       {key:"telefone", label:"Telefone"},
       {key:"cidade", label:"Cidade"},
       {key:"origem", label:"Origem", format:v=>v?capitalize(v):"—"},
-      {key:"_relacionamento", label:"Relacionamento", format:(v,row)=>badgeRelacionamento(row.id)},
+      {key:"_relacionamento", label:"Relacionamento", format:(v,row)=>badgeRelacionamento(row.id),
+        sortValue: row => ({lead:0, inativo:1, ativo:2, recorrente:3})[statusRelacionamentoCliente(row.id)] ?? 0},
       {key:"_negociacaoAtual", label:"Negociação atual", format:(v,row)=>{
         const n = negociacaoAtualCliente(row.id);
         return n ? negociacaoStatusLabel(n.status) : "Nenhuma";
+      }, sortValue: row => {
+        const n = negociacaoAtualCliente(row.id);
+        return n ? ({solicitou_orcamento:1, orcamento_enviado:2, negociacao:3, fechado:4, perdido:5})[n.status||"solicitou_orcamento"]||0 : 0;
       }}
     ]
   },
@@ -671,18 +675,18 @@ const SCHEMAS = {
         const idade = idadeAtual(row.dataNascimento);
         if(typeof idade !== "number") return "—";
         return row.nascimentoAproximado ? `~${idade} anos` : `${idade} anos`;
-      }},
+      }, sortValue: row => { const idade = idadeAtual(row.dataNascimento); return typeof idade==="number" ? idade : -1; }},
       {key:"_proximaIdade", label:"Completará", format:(v,row)=>{
         const idade = idadeAtual(row.dataNascimento);
         if(typeof idade !== "number") return "—";
         return row.nascimentoAproximado ? `~${idade+1} anos` : `${idade+1} anos`;
-      }},
+      }, sortValue: row => { const idade = idadeAtual(row.dataNascimento); return typeof idade==="number" ? idade+1 : -1; }},
       {key:"_proximo", label:"Aniversário em", format:(v,row)=>{
         const dias = diasParaAniversario(row.dataNascimento);
         if(dias===0) return "🎂 Hoje!";
         if(dias<=30) return `🎂 ${dias} dias`;
         return `${dias} dias`;
-      }}
+      }, sortValue: row => { const dias = diasParaAniversario(row.dataNascimento); return typeof dias==="number" ? dias : Infinity; }}
     ]
   },
   casamentos: {
@@ -699,17 +703,17 @@ const SCHEMAS = {
       {key:"_anosAtual", label:"Anos casados", format:(v,row)=>{
         const anos = idadeAtual(row.dataCasamento);
         return typeof anos === "number" ? `${anos} anos` : "—";
-      }},
+      }, sortValue: row => { const anos = idadeAtual(row.dataCasamento); return typeof anos==="number" ? anos : -1; }},
       {key:"_proximosAnos", label:"Completará", format:(v,row)=>{
         const anos = idadeAtual(row.dataCasamento);
         return typeof anos === "number" ? `${anos+1} anos` : "—";
-      }},
+      }, sortValue: row => { const anos = idadeAtual(row.dataCasamento); return typeof anos==="number" ? anos+1 : -1; }},
       {key:"_proximo", label:"Bodas em", format:(v,row)=>{
         const dias = diasParaAniversario(row.dataCasamento);
         if(dias===0) return "💍 Hoje!";
         if(dias<=30) return `💍 ${dias} dias`;
         return `${dias} dias`;
-      }}
+      }, sortValue: row => { const dias = diasParaAniversario(row.dataCasamento); return typeof dias==="number" ? dias : Infinity; }}
     ]
   },
   eventos: {
@@ -923,6 +927,21 @@ function totalPago(eventoId){
 }
 function totalPagoProduto(produtoId){
   return state.pagamentos.filter(p=>p.produtoId===produtoId).reduce((s,p)=>s+(Number(p.valor)||0),0);
+}
+
+/* ---------- Ordenação de colunas (tabelas de cadastro: clientes, aniversariantes, casamentos...) ---------- */
+function compararValores(a, b){
+  if(typeof a === "number" && typeof b === "number") return a - b;
+  return String(a ?? "").localeCompare(String(b ?? ""), "pt-BR", {numeric:true});
+}
+const collectionSort = {};
+function toggleOrdenacaoColuna(col, key){
+  const schema = SCHEMAS[col];
+  const atual = collectionSort[col] || { key: schema.columns[0].key, dir: 1 };
+  if(atual.key === key) atual.dir *= -1;
+  else { atual.key = key; atual.dir = 1; }
+  collectionSort[col] = atual;
+  renderCollectionList(col);
 }
 
 /* =========================================================
@@ -3445,16 +3464,23 @@ function renderCollectionList(col){
       return String(v).toLowerCase().includes(termo);
     }));
   }
+  const sortState = collectionSort[col] || { key: schema.columns[0].key, dir: 1 };
+  const colOrdenada = schema.columns.find(c=>c.key===sortState.key);
   items.sort((a,b)=>{
-    if(a.data && b.data) return b.data.localeCompare(a.data);
-    return (a.nome||a.nomeCasal||"").localeCompare(b.nome||b.nomeCasal||"", "pt-BR");
+    const va = colOrdenada?.sortValue ? colOrdenada.sortValue(a) : (a[sortState.key] ?? "");
+    const vb = colOrdenada?.sortValue ? colOrdenada.sortValue(b) : (b[sortState.key] ?? "");
+    return compararValores(va, vb) * sortState.dir;
   });
 
   container.innerHTML = `
     <div class="card" style="padding:0; overflow-x:auto;">
       ${items.length ? `
       <table>
-        <thead><tr>${schema.columns.map(c=>`<th>${c.label}</th>`).join("")}<th></th></tr></thead>
+        <thead><tr>${schema.columns.map(c=>{
+          const ativa = sortState.key===c.key;
+          const seta = ativa ? (sortState.dir===1?" ▲":" ▼") : "";
+          return `<th style="cursor:pointer; user-select:none;" onclick="toggleOrdenacaoColuna('${col}','${c.key}')" title="Ordenar por ${c.label}">${c.label}${seta}</th>`;
+        }).join("")}<th></th></tr></thead>
         <tbody>
           ${items.map(item=>`
             <tr>
