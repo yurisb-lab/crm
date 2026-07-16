@@ -636,7 +636,7 @@ const SCHEMAS = {
         return n ? negociacaoStatusLabel(n.status) : "Nenhuma";
       }, sortValue: row => {
         const n = negociacaoAtualCliente(row.id);
-        return n ? ({solicitou_orcamento:1, orcamento_enviado:2, negociacao:3, fechado:4, perdido:5})[n.status||"solicitou_orcamento"]||0 : 0;
+        return n ? ({negociacao:1, fechado:2, perdido:3})[n.status||"negociacao"]||0 : 0;
       }}
     ]
   },
@@ -645,7 +645,7 @@ const SCHEMAS = {
     fields: [
       {key:"clienteId", label:"Cliente", type:"ref", ref:"clientes", required:true},
       {key:"tipoInteresse", label:"Interesse em", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"], required:true},
-      {key:"status", label:"Status da negociação", type:"select", options:["solicitou_orcamento","orcamento_enviado","negociacao","fechado","perdido"], triggersRefresh:true},
+      {key:"status", label:"Status da negociação", type:"select", options:["negociacao","fechado","perdido"], triggersRefresh:true},
       {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"], visibleIf: fs=>fs.status==="perdido"},
       {key:"valorProposto", label:"Valor proposto (R$)", type:"number"},
       {key:"observacoes", label:"Observações", type:"textarea"}
@@ -654,8 +654,8 @@ const SCHEMAS = {
       {key:"clienteId", label:"Cliente", format:v=>nomeRef("clientes",v)},
       {key:"tipoInteresse", label:"Interesse", format:v=>v?capitalize(v.replace("_"," ")):"—"},
       {key:"status", label:"Status", format:v=>{
-        const s = v||"solicitou_orcamento";
-        const sym = {solicitou_orcamento:"○", orcamento_enviado:"◔", negociacao:"◑", fechado:"✓", perdido:"✕"};
+        const s = v||"negociacao";
+        const sym = {negociacao:"◑", fechado:"✓", perdido:"✕"};
         return `<span class="badge negociacao-${s}">${sym[s]||""} ${NEGOCIACAO_STATUS_LABELS[s]||capitalize(s)}</span>`;
       }},
       {key:"valorProposto", label:"Valor proposto", format:v=>v?money(v):"—"},
@@ -825,10 +825,9 @@ const STATUS_LABELS = {
 function statusLabel(s){ return STATUS_LABELS[s] || capitalize(s); }
 
 const NEGOCIACAO_STATUS_LABELS = {
-  solicitou_orcamento:"Solicitou orçamento", orcamento_enviado:"Orçamento enviado",
   negociacao:"Em negociação", fechado:"Fechado", perdido:"Perdido"
 };
-function negociacaoStatusLabel(s){ return NEGOCIACAO_STATUS_LABELS[s] || capitalize(s||"solicitou_orcamento"); }
+function negociacaoStatusLabel(s){ return NEGOCIACAO_STATUS_LABELS[s] || capitalize(s||"negociacao"); }
 
 /* ---------- Status do relacionamento (calculado, não é campo salvo) ----------
    Lead: nunca teve evento concluído (realizado/entregue).
@@ -861,7 +860,7 @@ function badgeRelacionamento(clienteId){
 }
 function negociacaoAtualCliente(clienteId){
   const abertas = state.negociacoes
-    .filter(n=>n.clienteId===clienteId && !["fechado","perdido"].includes(n.status||"solicitou_orcamento"))
+    .filter(n=>n.clienteId===clienteId && !["fechado","perdido"].includes(n.status||"negociacao"))
     .sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
   return abertas[0] || null;
 }
@@ -1496,7 +1495,7 @@ function buildCrmContext(){
   }).join("\n");
 
   // Negociações em aberto (status atual, separado do status de relacionamento do cliente)
-  const negociacoesCtx = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento")).map(n=>{
+  const negociacoesCtx = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"negociacao")).map(n=>{
     return `${nomeRef("clientes",n.clienteId)} | interesse:${capitalize((n.tipoInteresse||"?").replace("_"," "))} | status:${negociacaoStatusLabel(n.status)}${n.valorProposto?` | valor proposto:${money(n.valorProposto)}`:""}`;
   }).join("\n");
 
@@ -1517,7 +1516,7 @@ Eventos: ${state.eventos.length} | Clientes: ${state.clientes.length} | Leads: $
 === ALERTAS ATIVOS ===
 ${alertas||"Nenhum alerta no momento."}
 
-=== NEGOCIAÇÕES EM ABERTO (${state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento")).length}) ===
+=== NEGOCIAÇÕES EM ABERTO (${state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"negociacao")).length}) ===
 (status da negociação atual — diferente do status de relacionamento do cliente, que é Lead/Ativo/Inativo/Recorrente e é calculado a partir dos eventos concluídos)
 ${negociacoesCtx||"Nenhuma negociação em aberto no momento."}
 
@@ -2374,7 +2373,7 @@ function togglePilhaLead(chave){
 const negociacoesExpandidas = new Set(["abertas"]);
 
 function renderNegociacoesPage(main){
-  const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento"))
+  const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"negociacao"))
     .sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||""));
   const fechadas = state.negociacoes.filter(n=>n.status==="fechado")
     .sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
@@ -2399,7 +2398,7 @@ function renderNegociacoesPage(main){
 
 function renderPilhaNegociacoes(chave, titulo, itens){
   const isOpen = negociacoesExpandidas.has(chave);
-  const sym = {solicitou_orcamento:"○", orcamento_enviado:"◔", negociacao:"◑", fechado:"✓", perdido:"✕"};
+  const sym = {negociacao:"◑", fechado:"✓", perdido:"✕"};
   return `
     <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
       <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;"
@@ -2418,7 +2417,7 @@ function renderPilhaNegociacoes(chave, titulo, itens){
               ${itens.map(n=>`<tr>
                 <td><a href="#" onclick="openView('clientes','${n.clienteId}');return false;">${nomeRef("clientes",n.clienteId)}</a></td>
                 <td>${n.tipoInteresse ? capitalize(n.tipoInteresse.replace("_"," ")) : "—"}</td>
-                <td><span class="badge">${sym[n.status||"solicitou_orcamento"]||""} ${negociacaoStatusLabel(n.status)}</span></td>
+                <td><span class="badge">${sym[n.status||"negociacao"]||""} ${negociacaoStatusLabel(n.status)}</span></td>
                 <td>${n.valorProposto?money(n.valorProposto):"—"}</td>
                 <td class="row-actions">
                   <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
@@ -3006,10 +3005,10 @@ function renderLeadsNegociandoDashboard(){
 }
 
 function renderNegociacoesAbertasDashboard(){
-  const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento"));
+  const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"negociacao"));
   if(!abertas.length) return "";
   const ordenadas = [...abertas].sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||""));
-  const sym = {solicitou_orcamento:"○", orcamento_enviado:"◔", negociacao:"◑"};
+  const sym = {negociacao:"◑"};
   return `
     <div class="section-title">🤝 Negociações em aberto (${abertas.length})</div>
     <div class="card" style="padding:0;">
@@ -3017,7 +3016,7 @@ function renderNegociacoesAbertasDashboard(){
         ${ordenadas.map(n=>`<tr>
           <td><a href="#" onclick="openView('clientes','${n.clienteId}');return false;">${nomeRef("clientes",n.clienteId)}</a></td>
           <td>${n.tipoInteresse?capitalize(n.tipoInteresse.replace("_"," ")):"—"}</td>
-          <td><span class="badge">${sym[n.status||"solicitou_orcamento"]||""} ${negociacaoStatusLabel(n.status)}</span></td>
+          <td><span class="badge">${sym[n.status||"negociacao"]||""} ${negociacaoStatusLabel(n.status)}</span></td>
           <td>${n.valorProposto?money(n.valorProposto):"—"}</td>
           <td class="row-actions"><button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button></td>
         </tr>`).join("")}
@@ -3031,7 +3030,7 @@ function renderDashboard(main){
   const proximo = futuros[0];
   const doMes = state.eventos.filter(e=>isMesmoMes(e.data));
   const leadsNegociando = state.leads.filter(l=>!["convertido","perdido"].includes(l.status||"negociando"));
-  const negociacoesAbertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"solicitou_orcamento"));
+  const negociacoesAbertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"negociacao"));
   const aniversariosCriancas = state.criancas.map(c=>({id:c.id, tipo:"crianca", nome:c.nome, data:c.dataNascimento, vinculo:nomeRef("clientes",c.clientePaiId), dias:diasParaAniversario(c.dataNascimento), idade:idadeAtual(c.dataNascimento), aprox:!!c.nascimentoAproximado}));
   const aniversariosCasamentos = state.casamentos.map(c=>({id:c.id, tipo:"casamento", nome:c.nomeCasal, data:c.dataCasamento, vinculo:nomeRef("clientes",c.clienteId), dias:diasParaAniversario(c.dataCasamento), idade:idadeAtual(c.dataCasamento)}));
 
@@ -3076,7 +3075,7 @@ function renderDashboard(main){
         </div>`;
     })()}
 
-    ${renderCardMeta()}
+    <div style="margin-top:20px;">${renderCardMeta()}</div>
 
     ${renderLeadsNegociandoDashboard()}
 
@@ -5086,7 +5085,7 @@ function openForm(col, id){
   formState = existing ? { ...existing } : {};
   formState._col = col; formState._id = id || null;
   if(!existing && col==="eventos") formState.status = "orcamento"; // deixa explícito em vez de só "parecer" orçamento na tela
-  if(!existing && col==="negociacoes") formState.status = "solicitou_orcamento";
+  if(!existing && col==="negociacoes") formState.status = "negociacao";
   if(!existing && col==="leads") formState.status = "negociando";
   if(!existing && col==="produtos"){
     formState.etapa = "encomendado";
@@ -5233,7 +5232,49 @@ async function confirmarBaixaRapida(){
     toast("Erro ao registrar o pagamento.");
   }
 }
-function closeModal(){ document.getElementById("modal-backdrop").classList.remove("active"); formState = {}; }
+let _modalHistoryPushed = false;
+function closeModal(){
+  document.getElementById("modal-backdrop").classList.remove("active");
+  formState = {};
+  // se esse modal tinha entrada própria no histórico (aberto normalmente, não via botão voltar),
+  // consome essa entrada agora pra não deixar "lixo" no histórico do navegador
+  if(_modalHistoryPushed){
+    _modalHistoryPushed = false;
+    history.back();
+  }
+}
+
+/* ---------- Fechar modal: Esc, clique fora, e botão voltar (mobile) ---------- */
+(function(){
+  const backdrop = document.getElementById("modal-backdrop");
+
+  // detecta quando o modal é aberto (por qualquer uma das dezenas de chamadas .classList.add("active") no código)
+  // e empilha uma entrada no histórico, pra que o botão "voltar" feche o modal em vez de sair do app
+  new MutationObserver(()=>{
+    if(backdrop.classList.contains("active") && !_modalHistoryPushed){
+      history.pushState({ modalAberto:true }, "");
+      _modalHistoryPushed = true;
+    }
+  }).observe(backdrop, { attributes:true, attributeFilter:["class"] });
+
+  // botão/gesto de voltar do navegador (inclui o botão voltar do Android)
+  window.addEventListener("popstate", ()=>{
+    if(backdrop.classList.contains("active")){
+      _modalHistoryPushed = false; // essa entrada do histórico já foi consumida pelo próprio "voltar"
+      closeModal();
+    }
+  });
+
+  // clique fora da caixa do modal (no fundo escurecido)
+  backdrop.addEventListener("click", (e)=>{
+    if(e.target === backdrop) closeModal();
+  });
+
+  // tecla Esc
+  document.addEventListener("keydown", (e)=>{
+    if(e.key === "Escape" && backdrop.classList.contains("active")) closeModal();
+  });
+})();
 
 function renderField(f, value){
   const id = `field-${f.key}`;
@@ -5436,8 +5477,8 @@ async function saveDoc(){
 
   // registra automaticamente a data de cada mudança de status da negociação
   if(col === "negociacoes"){
-    const statusAnterior = existing ? (existing.status||"solicitou_orcamento") : null;
-    const statusNovo = data.status || "solicitou_orcamento";
+    const statusAnterior = existing ? (existing.status||"negociacao") : null;
+    const statusNovo = data.status || "negociacao";
     const historico = existing && Array.isArray(existing.historicoStatus) ? [...existing.historicoStatus] : [];
     if(!existing || statusAnterior !== statusNovo){
       historico.push({ status: statusNovo, data: new Date().toISOString() });
