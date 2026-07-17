@@ -1020,6 +1020,7 @@ function renderEventosPage(main){
           ${todosOsTipos.map(t=>`<option value="${t}" ${eventosFiltroTipo===t?"selected":""}>${capitalize(t.replace("_"," "))}</option>`).join("")}
         </select>
         ${temIA() ? `<button class="ghost" onclick="criarEventoPorFoto()">📸 Criar por foto (IA)</button>` : ""}
+        <button class="ghost" onclick="triggerLoteFotosUpload()">📸 Criar em lote (fotos)</button>
         <button class="primary" onclick="openForm('eventos')">+ Novo Evento</button>
       </div>
     </div>
@@ -3828,6 +3829,191 @@ async function extrairDataExif(file){
     console.warn("[exif] não foi possível ler metadados da foto:", err);
     return null;
   }
+}
+
+/* =========================================================
+   CRIAR EVENTOS EM LOTE A PARTIR DE VÁRIAS FOTOS
+   Só usa o EXIF (sem IA): lê a data real da câmera de cada foto,
+   agrupa por data (fotos do mesmo dia = candidatas ao mesmo evento)
+   e apresenta um card de revisão por grupo — nada é salvo sem
+   confirmação explícita, e nenhuma foto é enviada ao Firestore.
+   ========================================================= */
+let loteFotosGrupos = [];
+let _loteGrupoIdSeq = 1;
+
+function triggerLoteFotosUpload(){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.multiple = true;
+  input.onchange = (e)=> processarFotosLote(Array.from(e.target.files||[]));
+  input.click();
+}
+
+async function processarFotosLote(files){
+  if(!files.length) return;
+  toast(`📸 Lendo metadados de ${files.length} foto${files.length===1?"":"s"}...`, 4000);
+
+  const porData = {}; // "AAAA-MM-DD" (ou "sem-data") -> quantidade de fotos
+  for(const file of files){
+    const dataExif = await extrairDataExif(file);
+    const chave = dataExif || "sem-data";
+    porData[chave] = (porData[chave]||0) + 1;
+  }
+
+  const chaves = Object.keys(porData).sort((a,b)=>{
+    if(a==="sem-data") return 1;
+    if(b==="sem-data") return -1;
+    return a.localeCompare(b);
+  });
+
+  loteFotosGrupos = chaves.map(chave=>({
+    id: "loteGrupo"+(_loteGrupoIdSeq++),
+    data: chave==="sem-data" ? "" : chave,
+    qtdFotos: porData[chave],
+    tipo: "",
+    clienteId: "",
+    _quickNovoCliente: {}
+  }));
+
+  abrirModalLoteFotos();
+}
+
+function abrirModalLoteFotos(){
+  document.getElementById("modal-content").innerHTML = `
+    <h3>📸 Criar eventos em lote</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:14px; line-height:1.5;">
+      Agrupei as fotos por data (metadado EXIF da câmera — fotos do mesmo dia caem no mesmo grupo). Confira o tipo e o cliente de cada grupo antes de criar os eventos. Nenhuma foto é enviada ou salva — só a data é usada.
+    </div>
+    <div id="lote-fotos-lista">${renderListaGruposLote()}</div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Fechar</button>
+      <button class="primary" onclick="criarTodosGruposLote()">Criar todos os prontos</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+function renderListaGruposLote(){
+  if(!loteFotosGrupos.length) return `<div class="empty-state">Nenhum grupo pendente.</div>`;
+  return loteFotosGrupos.map(renderGrupoLoteFoto).join("");
+}
+
+function renderGrupoLoteFoto(grupo){
+  const todosOsTipos = ["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"];
+  const clientesOrdenados = [...state.clientes].sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  const isNovoCliente = grupo.clienteId === "__new__";
+  return `
+    <div class="card" style="margin-bottom:10px; padding:14px 16px;">
+      <div style="font-size:12px; color:var(--muted); margin-bottom:10px;">
+        📷 ${grupo.qtdFotos} foto${grupo.qtdFotos===1?"":"s"} ${grupo.data ? "· mesmo dia" : "· sem data no EXIF (preencha manualmente)"}
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Data</label>
+          <input type="date" value="${grupo.data}" onchange="onLoteGrupoCampo('${grupo.id}','data',this.value)">
+        </div>
+        <div class="field"><label>Tipo</label>
+          <select onchange="onLoteGrupoCampo('${grupo.id}','tipo',this.value)">
+            <option value="">—</option>
+            ${todosOsTipos.map(t=>`<option value="${t}" ${grupo.tipo===t?"selected":""}>${capitalize(t.replace("_"," "))}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Cliente</label>
+        <select onchange="onLoteGrupoCliente('${grupo.id}',this.value)">
+          <option value="">—</option>
+          <option value="__new__" ${isNovoCliente?"selected":""}>+ Cadastrar novo cliente</option>
+          ${clientesOrdenados.map(c=>`<option value="${c.id}" ${grupo.clienteId===c.id?"selected":""}>${c.nomeConjuge ? c.nome+" & "+c.nomeConjuge : c.nome}</option>`).join("")}
+        </select>
+      </div>
+      ${isNovoCliente ? `
+        <div class="field"><label>Nome do novo cliente</label>
+          <input type="text" value="${grupo._quickNovoCliente?.nome||""}" oninput="onLoteGrupoNovoClienteCampo('${grupo.id}','nome',this.value)">
+        </div>
+        <div class="field"><label>Telefone (opcional)</label>
+          <input type="tel" value="${grupo._quickNovoCliente?.telefone||""}" oninput="onLoteGrupoNovoClienteCampo('${grupo.id}','telefone',this.value)">
+        </div>
+      ` : ""}
+      <div class="modal-actions" style="border-top:1px solid var(--border); margin-top:12px; padding-top:12px;">
+        <button class="ghost sm" onclick="removerGrupoLote('${grupo.id}')">Ignorar este grupo</button>
+        <button class="primary sm" onclick="criarEventoDoGrupoLote('${grupo.id}')">Criar este evento</button>
+      </div>
+    </div>
+  `;
+}
+
+function onLoteGrupoCampo(id, campo, valor){
+  const g = loteFotosGrupos.find(x=>x.id===id);
+  if(g) g[campo] = valor;
+}
+function onLoteGrupoCliente(id, clienteId){
+  const g = loteFotosGrupos.find(x=>x.id===id);
+  if(!g) return;
+  g.clienteId = clienteId;
+  if(clienteId==="__new__" && !g._quickNovoCliente) g._quickNovoCliente = {};
+  rerenderListaLote();
+}
+function onLoteGrupoNovoClienteCampo(id, campo, valor){
+  const g = loteFotosGrupos.find(x=>x.id===id);
+  if(g){ g._quickNovoCliente = g._quickNovoCliente||{}; g._quickNovoCliente[campo] = valor; }
+}
+function rerenderListaLote(){
+  const container = document.getElementById("lote-fotos-lista");
+  if(container) container.innerHTML = renderListaGruposLote();
+}
+function removerGrupoLote(id){
+  loteFotosGrupos = loteFotosGrupos.filter(g=>g.id!==id);
+  rerenderListaLote();
+  if(!loteFotosGrupos.length) toast("Nenhum grupo restante.");
+}
+
+async function criarEventoDoGrupoLote(id, opcoes={}){
+  const { silencioso=false } = opcoes;
+  const g = loteFotosGrupos.find(x=>x.id===id);
+  if(!g) return false;
+  if(!g.data){ if(!silencioso) toast("Informe a data deste grupo."); return false; }
+  if(!g.tipo){ if(!silencioso) toast("Selecione o tipo de evento deste grupo."); return false; }
+  if(!g.clienteId){ if(!silencioso) toast("Selecione o cliente deste grupo."); return false; }
+  if(g.clienteId==="__new__" && !g._quickNovoCliente?.nome){ if(!silencioso) toast("Informe o nome do novo cliente."); return false; }
+
+  try{
+    let clienteId = g.clienteId;
+    if(clienteId==="__new__"){
+      const ref = await db.collection("clientes").add({
+        nome: g._quickNovoCliente.nome,
+        telefone: g._quickNovoCliente.telefone||"",
+        criadoEm: new Date().toISOString()
+      });
+      clienteId = ref.id;
+    }
+    await db.collection("eventos").add({
+      tipo: g.tipo, data: g.data, clienteId, status:"orcamento",
+      fotoLida: true, criadoEm: new Date().toISOString()
+    });
+    loteFotosGrupos = loteFotosGrupos.filter(x=>x.id!==id);
+    if(!silencioso){
+      toast("Evento criado.");
+      if(loteFotosGrupos.length) rerenderListaLote(); else closeModal();
+    }
+    return true;
+  }catch(err){
+    console.error(err);
+    if(!silencioso) toast("Erro ao criar o evento. Veja o console.");
+    return false;
+  }
+}
+
+async function criarTodosGruposLote(){
+  const idsPendentes = loteFotosGrupos.map(g=>g.id);
+  let criados = 0, pulados = 0;
+  for(const id of idsPendentes){
+    const ok = await criarEventoDoGrupoLote(id, {silencioso:true});
+    if(ok) criados++; else pulados++;
+  }
+  if(criados) toast(`${criados} evento${criados===1?"":"s"} criado${criados===1?"":"s"}.${pulados?` ${pulados} grupo${pulados===1?"":"s"} incompleto${pulados===1?"":"s"} ficou${pulados===1?"":"aram"} pendente — preencha e crie individualmente.`:""}`, 5000);
+  else toast("Nenhum grupo estava completo. Preencha tipo, cliente e data antes de criar.");
+  if(loteFotosGrupos.length) rerenderListaLote(); else closeModal();
 }
 
 async function toggleBloqueioEvento(eventoId, atualmenteBloqueado){
