@@ -227,12 +227,9 @@
 
   .badge{ display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; border:1px solid var(--border-solid); }
   .badge.lead{ background:transparent; color:var(--muted-2); border-style:dashed; }
-  .badge.orcamento{ background:transparent; color:var(--muted); }
-  .badge.negociacao{ background:color-mix(in srgb, var(--text) 28%, transparent); color:var(--text); }
-  .badge.fechado{ background:color-mix(in srgb, var(--text) 14%, transparent); color:var(--text); }
+  .badge.confirmado{ background:color-mix(in srgb, var(--text) 14%, transparent); color:var(--text); }
   .badge.realizado{ background:color-mix(in srgb, var(--text) 45%, transparent); color:var(--text); }
   .badge.entregue{ background:var(--text); color:var(--bg); border-color:var(--text); }
-  .badge.perdido{ background:transparent; color:var(--muted-2); border-style:dashed; text-decoration:line-through; }
   .badge.lead-contatado{ background:color-mix(in srgb, var(--text) 14%, transparent); color:var(--text); }
   .badge.lead-negociando{ background:color-mix(in srgb, var(--text) 32%, transparent); color:var(--text); }
   .badge.lead-convertido{ background:var(--text); color:var(--bg); border-color:var(--text); }
@@ -298,16 +295,13 @@
   .chat-suggestion:hover{ border-color:var(--text); color:var(--text); }
 
   /* ---- CORES DE EVENTOS (calendário e badges) ---- */
-  :root{ --cor-aniversario:#f97316; --cor-batizado:#06b6d4; --cor-casamento:#a855f7; --cor-ensaio:#3b82f6; --cor-outro:#6b7280; --cor-fechado:#22c55e; --cor-orcamento:#eab308; --cor-perdido:#ef4444; }
+  :root{ --cor-aniversario:#f97316; --cor-batizado:#06b6d4; --cor-casamento:#a855f7; --cor-ensaio:#3b82f6; --cor-outro:#6b7280; }
   .ev-chip{ display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:20px; font-size:11px; font-weight:600; color:#fff; white-space:nowrap; }
   .ev-chip.aniversario{ background:var(--cor-aniversario); }
   .ev-chip.batizado{ background:var(--cor-batizado); }
   .ev-chip.casamento_civil,.ev-chip.casamento_religioso{ background:var(--cor-casamento); }
   .ev-chip.ensaio{ background:var(--cor-ensaio); }
   .ev-chip.outro{ background:var(--cor-outro); }
-  .ev-chip.status-orcamento{ background:var(--cor-orcamento); color:#1a1a1a; }
-  .ev-chip.status-perdido{ background:var(--cor-perdido); }
-  .ev-chip.status-fechado,.ev-chip.status-realizado,.ev-chip.status-entregue{ background:var(--cor-fechado); }
 
   /* ---- CALENDÁRIO ---- */
   .cal-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
@@ -741,8 +735,7 @@ const SCHEMAS = {
       {key:"valorTabela", label:"Valor de tabela (R$)", type:"number"},
       {key:"valorContratado", label:"Valor final cobrado (R$)", type:"number"},
       {key:"motivoDesconto", label:"Motivo do desconto (se houver)", type:"text", visibleIf: fs=>Number(fs.valorTabela||0)>0},
-      {key:"status", label:"Status", type:"select", options:["orcamento","negociacao","fechado","realizado","entregue","perdido"], triggersRefresh:true},
-      {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"], visibleIf: fs=>fs.status==="perdido" && !["casamento_civil","casamento_religioso"].includes(fs.tipo)},
+      {key:"status", label:"Status", type:"select", options:["confirmado","realizado","entregue"], triggersRefresh:true},
       {key:"tags", label:"Tags (separe por vírgula)", type:"tags"},
       {key:"linkGaleriaCompleta", label:"Link da galeria completa", type:"text"},
       {key:"dataEntregaPrevista", label:"Entrega prevista", type:"date"},
@@ -757,8 +750,8 @@ const SCHEMAS = {
       {key:"clienteId", label:"Cliente", format:v=>nomeRef("clientes",v)},
       {key:"valorContratado", label:"Valor", format:v=>v?money(v):"—"},
       {key:"status", label:"Status", format:v=>{
-        const s = v||'orcamento';
-        const symbols = {orcamento:'○', negociacao:'◐', fechado:'●', realizado:'●', entregue:'✓', perdido:'✕'};
+        const s = v||'confirmado';
+        const symbols = {confirmado:'●', realizado:'●', entregue:'✓'};
         return `<span class="badge ${s}">${symbols[s]||""} ${statusLabel(s)}</span>`;
       }},
       {key:"_saldo", label:"Saldo", format:(v,row)=>{
@@ -824,8 +817,7 @@ const ETAPA_PRODUTO_LABEL = {
    ========================================================= */
 function capitalize(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
 const STATUS_LABELS = {
-  lead:"Lead", orcamento:"Orçamento enviado", negociacao:"Negociação",
-  fechado:"Fechado", realizado:"Realizado", entregue:"Entregue", perdido:"Perdido"
+  confirmado:"Confirmado", realizado:"Realizado", entregue:"Entregue"
 };
 function statusLabel(s){ return STATUS_LABELS[s] || capitalize(s); }
 
@@ -1060,7 +1052,7 @@ function renderEventosList(){
       // tipo de evento
       if((e.tipo||"").replace("_"," ").includes(termo)) return true;
       // status
-      if(statusLabel(e.status||"orcamento").toLowerCase().includes(termo)) return true;
+      if(statusLabel(e.status||"confirmado").toLowerCase().includes(termo)) return true;
       // descrição de "outro"
       if((e.outroDescricao||"").toLowerCase().includes(termo)) return true;
       return false;
@@ -1428,7 +1420,7 @@ function buildCrmContext(){
     const comentarios = (c.comentarios||[]).sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||"")).map(x=>`[${formatarDataHora(x.criadoEm)}] ${x.texto}`).join(" | ");
 
     // histórico resumido de eventos (últimos 5 anos, no máximo 8 mais recentes)
-    const historicoEvs = evs.filter(e=>(e.data||"")>=dataLimiteContexto).slice(0,8).map(e=>`${capitalize((e.tipo||"").replace("_"," "))} ${formatDate(e.data)} (${statusLabel(e.status||"orcamento")})`).join(", ");
+    const historicoEvs = evs.filter(e=>(e.data||"")>=dataLimiteContexto).slice(0,8).map(e=>`${capitalize((e.tipo||"").replace("_"," "))} ${formatDate(e.data)} (${statusLabel(e.status||"confirmado")})`).join(", ");
 
     const partes = [
       `${c.nome}${c.nomeConjuge?" & "+c.nomeConjuge:""}`,
@@ -1457,7 +1449,7 @@ function buildCrmContext(){
       crianca ? `criança:${crianca.nome}` : "",
       `valor:${money(e.valorContratado)}`,
       saldo>0 ? `saldo:${money(saldo)}` : "pago",
-      `status:${statusLabel(e.status||"orcamento")}`,
+      `status:${statusLabel(e.status||"confirmado")}`,
       e.dataEntregaPrevista ? `entrega:${formatDate(e.dataEntregaPrevista)}` : "",
       e.bloqueado ? "BLOQUEADO" : "",
       e.fotoLida ? "DATA-VERIFICADA" : "",
@@ -1596,7 +1588,7 @@ function eventosDoClienteParaSelect(clienteId){
   return state.eventos
     .filter(e=>e.clienteId===clienteId)
     .sort((a,b)=>(b.data||"").localeCompare(a.data||""))
-    .map(e=>({ id:e.id, label: `${capitalize((e.tipo||"outro").replace("_"," "))} · ${formatDate(e.data)} · ${statusLabel(e.status||"orcamento")}` }));
+    .map(e=>({ id:e.id, label: `${capitalize((e.tipo||"outro").replace("_"," "))} · ${formatDate(e.data)} · ${statusLabel(e.status||"confirmado")}` }));
 }
 
 function labelCampoIA(colecao, campo){
@@ -1820,7 +1812,7 @@ async function confirmarGrupoEventoIA(grupo){
   }
 
   if(grupo.operacao==="criar"){
-    const dados = { clienteId, status:"orcamento", criadoEm: new Date().toISOString() };
+    const dados = { clienteId, status:"confirmado", criadoEm: new Date().toISOString() };
     camposItens.forEach(i=> dados[i.campo] = converterValorCampoIA("eventos", i.campo, i.valorNovo));
     if(!dados.tipo){ toast("Identifique o tipo do evento antes de confirmar (edite manualmente pelo formulário normal)."); return false; }
     if(!dados.data){ toast("Identifique a data do evento antes de confirmar (edite manualmente pelo formulário normal)."); return false; }
@@ -2011,7 +2003,7 @@ function renderAgenda(main){
         ${renderGridCal()}
       </div>
       <div class="cal-legend">
-        ${[["var(--cor-aniversario)","Aniversário"],["var(--cor-batizado)","Batizado"],["var(--cor-casamento)","Casamento"],["var(--cor-ensaio)","Ensaio"],["var(--cor-fechado)","Confirmado"],["var(--cor-orcamento)","Aguard. sinal"]].map(([c,l])=>`<div class="cal-legend-item"><div class="cal-legend-dot" style="background:${c}"></div>${l}</div>`).join("")}
+        ${[["var(--cor-aniversario)","Aniversário"],["var(--cor-batizado)","Batizado"],["var(--cor-casamento)","Casamento"],["var(--cor-ensaio)","Ensaio"]].map(([c,l])=>`<div class="cal-legend-item"><div class="cal-legend-dot" style="background:${c}"></div>${l}</div>`).join("")}
       </div>
     </div>
 
@@ -2089,7 +2081,7 @@ function renderAgendaLista(){
                     <div style="font-size:12px; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap; margin-top:2px;">
                       <span>${formatDate(e.data)}${e.horario?" · "+e.horario:""}</span>
                       <span class="ev-chip ${e.tipo||'outro'}" style="font-size:10px;">${capitalize((e.tipo||"outro").replace("_"," "))}</span>
-                      <span class="badge ${e.status||'orcamento'}" style="font-size:10px;">${statusLabel(e.status||"orcamento")}</span>
+                      <span class="badge ${e.status||'confirmado'}" style="font-size:10px;">${statusLabel(e.status||"confirmado")}</span>
                     </div>
                     ${e.endereco?`<div style="font-size:11px;color:var(--muted-2);margin-top:2px;">📍 ${e.endereco}</div>`:""}
                   </div>
@@ -2160,10 +2152,6 @@ function renderDiaCal(data, outromes){
   </div>`;
 }
 function corClasseTipo(e){
-  const s = e.status||"orcamento";
-  if(s==="perdido") return "status-perdido";
-  if(["fechado","realizado","entregue"].includes(s)) return "status-fechado";
-  if(s==="orcamento") return "status-orcamento";
   return e.tipo||"outro";
 }
 function corHexTipo(tipo){ return {aniversario:"#f97316",batizado:"#06b6d4",casamento_civil:"#a855f7",casamento_religioso:"#a855f7",ensaio:"#3b82f6"}[tipo]||"#6b7280"; }
@@ -2177,9 +2165,7 @@ function calcDisponibilidade(iso){
   if(bloq) return {label:"Bloqueada 🚫", cor:"#6b7280"};
   const evs = state.eventos.filter(e=>e.data===iso);
   if(!evs.length) return {label:"Livre ✓", cor:"#22c55e"};
-  const temFechado = evs.some(e=>["fechado","realizado","entregue"].includes(e.status||""));
-  if(temFechado) return {label:"Ocupada ●", cor:"#ef4444"};
-  return {label:"Reservada (orçamento)", cor:"#eab308"};
+  return {label:"Ocupada ●", cor:"#ef4444"};
 }
 function abrirDiaCal(iso){
   const evsDia = state.eventos.filter(e=>e.data===iso).sort((a,b)=>(a.horario||"").localeCompare(b.horario||""));
@@ -2196,7 +2182,7 @@ function abrirDiaCal(iso){
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
           <span class="ev-chip ${e.tipo||'outro'}">${capitalize((e.tipo||"outro").replace("_"," "))}</span>
           ${e.horario?`<span style="font-size:13px;font-weight:600;">${e.horario}</span>`:""}
-          <span class="badge ${e.status||'orcamento'}" style="font-size:10px;">${statusLabel(e.status||"orcamento")}</span>
+          <span class="badge ${e.status||'confirmado'}" style="font-size:10px;">${statusLabel(e.status||"confirmado")}</span>
         </div>
         <div style="font-weight:600; margin-bottom:2px;">${e.nomeEvento||nomeRef("clientes",e.clienteId)}</div>
         ${e.endereco?`<div style="font-size:12px;color:var(--muted);">📍 ${e.endereco}</div>`:""}
@@ -2494,7 +2480,7 @@ function criarEventoDeNegociacao(negId){
     formState.clienteId = neg.clienteId;
     formState.tipo = neg.tipoInteresse || "";
     if(neg.valorProposto){ formState.valorTabela = neg.valorProposto; formState.valorContratado = neg.valorProposto; }
-    formState.status = "fechado";
+    formState.status = "confirmado";
     formState._negociacaoId = negId;
     refreshFormFields();
     toast("Campos preenchidos a partir da negociação. Confira e complete a data antes de salvar.", 4500);
@@ -2699,7 +2685,7 @@ function renderRelatorios(main){
   const pendenteAno = eventosAno.reduce((s,e)=>s+Math.max((Number(e.valorContratado)||0)-totalPago(e.id),0),0);
   const clientesNovosAno = state.clientes.filter(c=>(c.criadoEm||"").startsWith(anoStr)).length;
   const eventosEntreguesAno = eventosAno.filter(e=>e.status==="entregue").length;
-  const eventosFechadosAno = eventosAno.filter(e=>["fechado","realizado","entregue"].includes(e.status||"")).length;
+  const eventosFechadosAno = eventosAno.filter(e=>(e.status||"confirmado")!=="perdido").length;
   const ticketMedioAno = eventosFechadosAno ? contratadoAno / eventosFechadosAno : 0;
   const tipoMaisComumAno = (()=>{
     const count = {};
@@ -2768,21 +2754,7 @@ function renderRelatorios(main){
   const leadsPerdidos = state.leads.filter(l=>l.status==="perdido").length;
   const taxaConversaoLeads = leadsRecebidos>0 ? (leadsConvertidos/leadsRecebidos*100) : 0;
 
-  // ---------- Funil de Eventos (coleção "eventos" — independente dos leads) ----------
-  const funilEtapas = [
-    {key:"orcamento", label:"Orçamento enviado"},
-    {key:"negociacao", label:"Negociação"},
-    {key:"fechado", label:"Fechado", extra:["realizado","entregue"]},
-    {key:"perdido", label:"Perdido"}
-  ];
-  const funilContagem = funilEtapas.map(et=>{
-    const statusesContados = [et.key, ...(et.extra||[])];
-    return { ...et, n: state.eventos.filter(e=>statusesContados.includes(e.status||"orcamento")).length };
-  });
-  const totalFechadosEventos = funilContagem.find(f=>f.key==="fechado").n;
-  const totalPerdidosEventos = funilContagem.find(f=>f.key==="perdido").n;
-
-  // ---------- Motivos de perda — separados por origem (leads x eventos) ----------
+  // ---------- Motivos de perda — Leads ----------
   const motivosPerda = ["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"];
   const motivosLabel = {outro_fotografo:"Fechou com outro fotógrafo", achou_caro:"Achou caro", cancelou_festa:"Cancelou a festa", nao_respondeu:"Não respondeu", outro:"Outro motivo"};
   const porMotivoLeads = motivosPerda.map(m=>({
@@ -2790,12 +2762,6 @@ function renderRelatorios(main){
     n: state.leads.filter(l=>l.status==="perdido" && l.motivoPerda===m).length
   })).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
   const perdidosSemMotivoLeads = state.leads.filter(l=>l.status==="perdido" && !l.motivoPerda).length;
-
-  const porMotivoEventos = motivosPerda.map(m=>({
-    motivo:m,
-    n: state.eventos.filter(e=>e.status==="perdido" && e.motivoPerda===m).length
-  })).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
-  const perdidosSemMotivoEventos = state.eventos.filter(e=>e.status==="perdido" && !e.motivoPerda).length;
 
   // ---------- Histórico de recibos ----------
   const [buscaRecibo, setBuscaRecibo] = [window._buscaRecibo||"", v=>{window._buscaRecibo=v;}];
@@ -2917,25 +2883,6 @@ function renderRelatorios(main){
         </tbody></table>
       </div>
     ` : ""}
-
-    <div class="section-title">Funil de Eventos</div>
-    <div class="card" style="padding:0;">
-      <table><thead><tr><th>Etapa</th><th>Quantidade</th></tr></thead><tbody>
-        ${funilContagem.map(f=>`<tr><td>${f.label}</td><td>${f.n}</td></tr>`).join("")}
-      </tbody></table>
-    </div>
-    <div style="font-size:12px; color:var(--muted-2); margin:10px 2px 0;">
-      💡 Como o sistema não guarda histórico de mudança de etapa, estes números são uma fotografia do status atual de cada evento — não um funil cumulativo ao longo do tempo. Este funil também não é a "conversão" direta dos leads acima: boa parte dos eventos foi cadastrada antes de você começar a usar a tela de Leads.
-    </div>
-    ${(porMotivoEventos.length || perdidosSemMotivoEventos) ? `
-      <div class="section-title">Motivos de perda — Eventos</div>
-      <div class="card" style="padding:0;">
-        <table><thead><tr><th>Motivo</th><th>Quantidade</th></tr></thead><tbody>
-          ${porMotivoEventos.map(x=>`<tr><td>${motivosLabel[x.motivo]}</td><td>${x.n}</td></tr>`).join("")}
-          ${perdidosSemMotivoEventos ? `<tr><td>Sem motivo informado</td><td>${perdidosSemMotivoEventos}</td></tr>` : ""}
-        </tbody></table>
-      </div>
-    ` : ""}
   `;
 
   main.innerHTML = `
@@ -2943,7 +2890,7 @@ function renderRelatorios(main){
 
     <div class="section-title" style="margin-top:0;">Ano de ${anoAtual}</div>
     <div class="grid grid-4">
-      <div class="card stat-card"><div class="label">Eventos em ${anoAtual}</div><div class="value">${eventosAno.length}</div><div class="sub">${eventosFechadosAno} fechados · ${eventosEntreguesAno} entregues</div></div>
+      <div class="card stat-card"><div class="label">Eventos em ${anoAtual}</div><div class="value">${eventosAno.length}</div><div class="sub">${eventosFechadosAno} confirmados · ${eventosEntreguesAno} entregues</div></div>
       <div class="card stat-card"><div class="label">Recebido em ${anoAtual}</div><div class="value" style="font-size:18px;">${money(recebidoAno)}</div><div class="sub">de ${money(contratadoAno)} contratados</div></div>
       <div class="card stat-card"><div class="label">A receber (${anoAtual})</div><div class="value" style="font-size:18px;">${money(pendenteAno)}</div><div class="sub">saldo pendente nos eventos do ano</div></div>
       <div class="card stat-card"><div class="label">Ticket médio (${anoAtual})</div><div class="value" style="font-size:18px;">${money(ticketMedioAno)}</div><div class="sub">tipo mais comum: ${tipoMaisComumAno}</div></div>
@@ -2963,7 +2910,7 @@ function renderRelatorios(main){
       conteudoClientes)}
 
     ${renderSecaoRelatorio("vendas", "📊", "Vendas / Funil",
-      `${leadsRecebidos} leads · ${totalFechadosEventos} eventos fechados · ${leadsPerdidos} leads perdidos`,
+      `${leadsRecebidos} leads · ${taxaConversaoLeads.toFixed(0)}% convertidos · ${leadsPerdidos} leads perdidos`,
       conteudoVendas)}
   `;
 }
@@ -3098,7 +3045,7 @@ function renderDashboard(main){
                 <div style="font-size:12px; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap; margin-top:2px;">
                   <span>${formatDate(e.data)}${e.horario?" · "+e.horario:""}</span>
                   <span class="ev-chip ${e.tipo||'outro'}" style="font-size:10px;">${capitalize((e.tipo||"outro").replace("_"," "))}</span>
-                  <span class="badge ${e.status||'orcamento'}" style="font-size:10px;">${statusLabel(e.status||"orcamento")}</span>
+                  <span class="badge ${e.status||'confirmado'}" style="font-size:10px;">${statusLabel(e.status||"confirmado")}</span>
                   ${e.bloqueado?'<span title="Bloqueado">🔒</span>':""}
                   ${e.fotoLida?'<span title="Data por foto">📸</span>':""}
                 </div>
@@ -4002,7 +3949,7 @@ async function criarEventoDoGrupoLote(id, opcoes={}){
       clienteId = ref.id;
     }
     await db.collection("eventos").add({
-      tipo: g.tipo, data: g.data, clienteId, status:"orcamento",
+      tipo: g.tipo, data: g.data, clienteId, status:"confirmado",
       fotoLida: true, criadoEm: new Date().toISOString()
     });
     loteFotosGrupos = loteFotosGrupos.filter(x=>x.id!==id);
@@ -4332,8 +4279,8 @@ async function confirmarFotoFesta(eventoId){
 function renderViewEvento(ev){
   const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
   const pago = totalPago(ev.id);
-  const symbols = {orcamento:'○', negociacao:'◐', fechado:'●', realizado:'●', entregue:'✓', perdido:'✕'};
-  const s = ev.status || 'orcamento';
+  const symbols = {confirmado:'●', realizado:'●', entregue:'✓'};
+  const s = ev.status || 'confirmado';
   const cliente = state.clientes.find(c=>c.id===ev.clienteId);
   const wa = cliente ? whatsappLink(cliente.telefone) : null;
   const gcalUrl = buildGCalUrl(ev);
@@ -4366,7 +4313,6 @@ function renderViewEvento(ev){
     ${ev.recepcao!==undefined && ev.recepcao!=="" ? viewRow("Houve recepção?", ev.recepcao ? "Sim" : "Não") : ""}
     ${viewRow("Horário", ev.horario || "—")}
     ${viewRow("Status", `<span class="badge ${s}">${symbols[s]||""} ${statusLabel(s)}</span>`)}
-    ${ev.motivoPerda && s==="perdido" ? viewRow("Motivo da perda", capitalize(ev.motivoPerda.replace("_"," "))) : ""}
     ${(()=>{
       const tabela = Number(ev.valorTabela)||0;
       const final = Number(ev.valorContratado)||0;
@@ -4671,7 +4617,7 @@ async function gerarBriefingCliente(clienteId){
 
   const historicoStr = evs.map(e=>{
     const saldo = (Number(e.valorContratado)||0)-totalPago(e.id);
-    return `- ${capitalize((e.tipo||"").replace("_"," "))} em ${formatDate(e.data)} | valor: ${money(e.valorContratado)} | ${saldo>0?`saldo pendente: ${money(saldo)}`:"pago"} | status: ${statusLabel(e.status||"orcamento")}`;
+    return `- ${capitalize((e.tipo||"").replace("_"," "))} em ${formatDate(e.data)} | valor: ${money(e.valorContratado)} | ${saldo>0?`saldo pendente: ${money(saldo)}`:"pago"} | status: ${statusLabel(e.status||"confirmado")}`;
   }).join("\n");
 
   const filhosStr = filhos.map(f=>{
@@ -4743,7 +4689,7 @@ async function gerarResumoCliente(col, id){
   const comentarios = (item.comentarios||[]).sort((a,b)=>a.criadoEm?.localeCompare(b.criadoEm||"")||0)
     .map(c=>`[${formatarDataHora(c.criadoEm)}] ${c.texto}`).join("\n");
   const eventos = col==="clientes" ? state.eventos.filter(e=>e.clienteId===id)
-    .map(e=>`${capitalize((e.tipo||"").replace("_"," "))} em ${formatDate(e.data)} — ${statusLabel(e.status||"orcamento")}`)
+    .map(e=>`${capitalize((e.tipo||"").replace("_"," "))} em ${formatDate(e.data)} — ${statusLabel(e.status||"confirmado")}`)
     .join("\n") : "";
   const prompt = `Você é um assistente de um fotógrafo brasileiro chamado Yuri. Analise as informações abaixo sobre um ${col==="leads"?"lead":"cliente"} e escreva um resumo prático em 3-5 linhas, como se fosse uma nota de briefing antes de retomar contato. Inclua pontos de atenção se houver.\n\n${col==="leads"?"LEAD":"CLIENTE"}: ${item.nome||""}\nOrigem: ${item.origem||"—"}\nStatus: ${item.status||"—"}\n${eventos?"Histórico de eventos:\n"+eventos+"\n":""}\nComentários:\n${comentarios||"(nenhum comentário ainda)"}`;
   const resultado = await callGemini(prompt);
@@ -4776,16 +4722,6 @@ function calcularAlertas(){
     const ref = ults ? new Date(ults) : new Date(l.criadoEm||agora);
     const dias = Math.floor((agora-ref)/86400000);
     if(dias>=7) alertas.push({tipo:"lead_parado", texto:`Lead <b>${l.nome}</b> sem atualização há ${dias} dias.`, id:l.id, col:"leads"});
-  });
-
-  // Orçamentos sem resposta há 5+ dias
-  state.eventos.filter(e=>e.status==="orcamento").forEach(e=>{
-    const ref = new Date(e.criadoEm||e.data||agora);
-    const dias = Math.floor((agora-ref)/86400000);
-    if(dias>=5){
-      const cli = nomeRef("clientes",e.clienteId);
-      alertas.push({tipo:"orcamento_parado", texto:`Orçamento de <b>${cli}</b> (${capitalize((e.tipo||"").replace("_"," "))}) sem resposta há ${dias} dias.`, id:e.id, col:"eventos"});
-    }
   });
 
   // Eventos realizados sem entrega há 30+ dias
@@ -5309,7 +5245,7 @@ function openForm(col, id){
   const existing = id ? state[col].find(i=>i.id===id) : null;
   formState = existing ? { ...existing } : {};
   formState._col = col; formState._id = id || null;
-  if(!existing && col==="eventos") formState.status = "orcamento"; // deixa explícito em vez de só "parecer" orçamento na tela
+  if(!existing && col==="eventos") formState.status = "confirmado"; // deixa explícito em vez de só "parecer" confirmado na tela
   if(!existing && col==="negociacoes") formState.status = "negociacao";
   if(!existing && col==="leads") formState.status = "negociando";
   if(!existing && col==="produtos"){
