@@ -316,6 +316,9 @@
   .cal-day.other-month{ opacity:.3; }
   .cal-day.today{ outline:2px solid var(--text); outline-offset:-2px; }
   .cal-day.blocked{ background:repeating-linear-gradient(45deg,var(--surface-2),var(--surface-2) 4px,var(--border-solid) 4px,var(--border-solid) 8px); }
+  .cal-day.prereservado:not(.blocked){
+  outline:2px dashed #eab308; outline-offset:-2px;}
+  .pre-chip{ display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:20px; font-size:11px; font-weight:600; background:#eab308; color:#000; }
   .cal-day-num{ font-size:12px; font-weight:600; margin-bottom:4px; }
   .cal-day-events{ display:flex; flex-direction:column; gap:2px; }
   .cal-ev{ font-size:10px; padding:1px 5px; border-radius:3px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -452,7 +455,7 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err=>{
    STATE
    ========================================================= */
 const state = {
-  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], produtos: [], pagamentos: [], recibos: [], bloqueios: [], negociacoes: [],
+  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], produtos: [], pagamentos: [], recibos: [], bloqueios: [], negociacoes: [], prereservas: [],
   config: {},
   currentPage: "dashboard"
 };
@@ -538,7 +541,7 @@ auth.onAuthStateChanged(user=>{
    FIRESTORE LIVE LISTENERS
    ========================================================= */
 function startListeners(){
-  ["leads","clientes","criancas","casamentos","eventos","produtos","pagamentos","recibos","bloqueios","negociacoes"].forEach(col=>{
+  ["leads","clientes","criancas","casamentos","eventos","produtos","pagamentos","recibos","bloqueios","negociacoes","prereservas"].forEach(col=>{
     const unsub = db.collection(col).onSnapshot(
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
@@ -2141,12 +2144,14 @@ function renderDiaCal(data, outromes){
   const hoje = new Date().toISOString().slice(0,10);
   const evsDia = state.eventos.filter(e=>e.data===iso);
   const bloqDia = state.bloqueios.find(b=>b.data===iso);
-  const classes = ["cal-day", outromes?"other-month":"", iso===hoje?"today":"", bloqDia?"blocked":"", evsDia.length?"has-events":""].filter(Boolean).join(" ");
+  const preDia = state.prereservas.filter(p=>p.data===iso);
+  const classes = ["cal-day", outromes?"other-month":"", iso===hoje?"today":"", bloqDia?"blocked":"", evsDia.length?"has-events":"", preDia.length?"prereservado":""].filter(Boolean).join(" ");
   return `<div class="${classes}" onclick="abrirDiaCal('${iso}')">
     <div class="cal-day-num">${data.getDate()}</div>
     <div class="cal-day-events">
       ${evsDia.slice(0,3).map(e=>`<div class="cal-ev ${corClasseTipo(e)}">${e.horario?e.horario.slice(0,5)+" ":""}${nomeEventoCurto(e)}</div>`).join("")}
       ${evsDia.length>3?`<div style="font-size:10px;color:var(--muted)">+${evsDia.length-3} mais</div>`:""}
+      ${preDia.length && !evsDia.length ? `<div class="cal-ev" style="background:#eab308;color:#000;">🕓 ${preDia.length} interessado${preDia.length>1?"s":""}</div>` : ""}
     </div>
     ${bloqDia?`<div style="font-size:9px;color:var(--muted-2);margin-top:2px;">${bloqDia.motivo||"Bloqueado"}</div>`:""}
   </div>`;
@@ -2177,6 +2182,56 @@ function abrirDiaCal(iso){
       <span style="background:${disp.cor}; color:#fff; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600;">${disp.label}</span>
       ${bloqDia ? `<button class="ghost sm" onclick="desbloquearData('${bloqDia.id}')">Remover bloqueio</button>` : `<button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirBloquearData('${iso}'),200)">Bloquear esta data</button>`}
     </div>
+    function abrirDiaCal(iso){
+  const evsDia = state.eventos.filter(e=>e.data===iso).sort((a,b)=>(a.horario||"").localeCompare(b.horario||""));
+  const bloqDia = state.bloqueios.find(b=>b.data===iso);
+  const preDia = state.prereservas.filter(p=>p.data===iso);
+  const disp = calcDisponibilidade(iso);
+  document.getElementById("modal-content").innerHTML = `
+    <h3>${formatDate(iso)}</h3>
+    <div style="margin-bottom:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span style="background:${disp.cor}; color:#fff; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600;">${disp.label}</span>
+      ${bloqDia ? `<button class="ghost sm" onclick="desbloquearData('${bloqDia.id}')">Remover bloqueio</button>` : `<button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirBloquearData('${iso}'),200)">Bloquear esta data</button>`}
+      <button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirPreReserva('${iso}'),200)">🕓 + Pré-reservar</button>
+    </div>
+    ${preDia.length ? `
+      <div style="margin-bottom:14px;">
+        ${preDia.map(p=>`
+          <div style="border-left:4px solid #eab308; background:var(--surface-2); border-radius:0 8px 8px 0; padding:10px 12px; margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <div>
+                <span class="pre-chip">🕓 Interessado</span>
+                <b style="margin-left:6px;">${nomePreReserva(p)}</b>
+                ${p.telefone ? ` · ${p.telefone}` : ""}
+              </div>
+              <div class="row-actions">
+                <button class="sm" onclick="closeModal();setTimeout(()=>abrirPreReservaEditar('${p.id}'),200)">Editar</button>
+                <button class="sm danger" onclick="removerPreReserva('${p.id}')">Remover</button>
+              </div>
+            </div>
+            ${p.observacoes ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${p.observacoes}</div>` : ""}
+          </div>
+        `).join("")}
+      </div>
+    ` : ""}
+    ${evsDia.length ? evsDia.map(e=>`
+      <div style="border-left:4px solid ${corHexTipo(e.tipo)}; background:var(--surface-2); border-radius:0 8px 8px 0; padding:12px; margin-bottom:10px; cursor:pointer;" onclick="closeModal();setTimeout(()=>openView('eventos','${e.id}'),200)">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+          <span class="ev-chip ${e.tipo||'outro'}">${capitalize((e.tipo||"outro").replace("_"," "))}</span>
+          ${e.horario?`<span style="font-size:13px;font-weight:600;">${e.horario}</span>`:""}
+          <span class="badge ${e.status||'confirmado'}" style="font-size:10px;">${statusLabel(e.status||"confirmado")}</span>
+        </div>
+        <div style="font-weight:600; margin-bottom:2px;">${e.nomeEvento||nomeRef("clientes",e.clienteId)}</div>
+        ${e.endereco?`<div style="font-size:12px;color:var(--muted);">📍 ${e.endereco}</div>`:""}
+      </div>
+    `).join("") : (preDia.length ? "" : `<div style="font-size:13px;color:var(--muted-2);padding:12px 0;">Nenhum evento nesta data.</div>`)}
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Fechar</button>
+      <button class="primary" onclick="closeModal();openFormComData('${iso}')">+ Evento aqui</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
     ${evsDia.length ? evsDia.map(e=>`
       <div style="border-left:4px solid ${corHexTipo(e.tipo)}; background:var(--surface-2); border-radius:0 8px 8px 0; padding:12px; margin-bottom:10px; cursor:pointer;" onclick="closeModal();setTimeout(()=>openView('eventos','${e.id}'),200)">
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
@@ -2288,6 +2343,81 @@ async function desbloquearData(id){
   if(!confirm("Remover bloqueio desta data?")) return;
   await db.collection("bloqueios").doc(id).delete();
   toast("Bloqueio removido."); closeModal();
+}
+function modalPreReservaHtml(titulo, dataVal, leadIdVal, nomeVal, telVal, obsVal, btnFn){
+  const leadsOrdenados = [...state.leads].sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  return `
+    <h3>${titulo}</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">
+      Isso NÃO é um evento confirmado — só marca que alguém demonstrou interesse nessa data. Se outro cliente fechar a data de verdade, você cria o evento normalmente.
+    </div>
+    <div class="field"><label>Data</label><input id="pre-data" type="date" value="${dataVal||""}"></div>
+    <div class="field"><label>Lead vinculado (opcional)</label>
+      <select id="pre-lead">
+        <option value="">— sem lead vinculado —</option>
+        ${leadsOrdenados.map(l=>`<option value="${l.id}" ${leadIdVal===l.id?"selected":""}>${l.nome}</option>`).join("")}
+      </select>
+    </div>
+    <div class="field"><label>Nome (se não tiver lead cadastrado)</label>
+      <input id="pre-nome" type="text" value="${nomeVal||""}" placeholder="Ex: Márcia (contato pelo Instagram)">
+    </div>
+    <div class="field"><label>Telefone (opcional)</label><input id="pre-tel" type="tel" value="${telVal||""}"></div>
+    <div class="field"><label>Observações</label><textarea id="pre-obs" placeholder="Ex: perguntou sobre aniversário de 1 aninho, ainda não fechou valor">${obsVal||""}</textarea></div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="${btnFn}">Salvar</button>
+    </div>
+  `;
+}
+
+function abrirPreReserva(dataPreenchida){
+  document.getElementById("modal-content").innerHTML = modalPreReservaHtml(
+    "🕓 Pré-reservar data", dataPreenchida, "", "", "", "", "salvarPreReserva()"
+  );
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function salvarPreReserva(){
+  const data = document.getElementById("pre-data")?.value;
+  const leadId = document.getElementById("pre-lead")?.value || "";
+  const nome = document.getElementById("pre-nome")?.value.trim() || "";
+  const telefone = document.getElementById("pre-tel")?.value.trim() || "";
+  const observacoes = document.getElementById("pre-obs")?.value.trim() || "";
+  if(!data){ toast("Informe a data."); return; }
+  if(!leadId && !nome){ toast("Selecione um lead ou informe ao menos um nome."); return; }
+  await db.collection("prereservas").add({
+    data, leadId, nome, telefone, observacoes,
+    criadoEm: new Date().toISOString()
+  });
+  toast("Data pré-reservada."); closeModal();
+}
+
+function abrirPreReservaEditar(id){
+  const p = state.prereservas.find(x=>x.id===id);
+  if(!p) return;
+  document.getElementById("modal-content").innerHTML = modalPreReservaHtml(
+    "Editar pré-reserva", p.data, p.leadId, p.nome, p.telefone, p.observacoes,
+    `atualizarPreReserva('${id}')`
+  );
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function atualizarPreReserva(id){
+  const data = document.getElementById("pre-data")?.value;
+  const leadId = document.getElementById("pre-lead")?.value || "";
+  const nome = document.getElementById("pre-nome")?.value.trim() || "";
+  const telefone = document.getElementById("pre-tel")?.value.trim() || "";
+  const observacoes = document.getElementById("pre-obs")?.value.trim() || "";
+  if(!data){ toast("Informe a data."); return; }
+  await db.collection("prereservas").doc(id).update({ data, leadId, nome, telefone, observacoes });
+  toast("Pré-reserva atualizada."); closeModal();
+}
+async function removerPreReserva(id){
+  if(!confirm("Remover esta pré-reserva?")) return;
+  await db.collection("prereservas").doc(id).delete();
+  toast("Pré-reserva removida."); closeModal();
+}
+function nomePreReserva(p){
+  if(p.leadId) return nomeRef("leads", p.leadId) !== "—" ? (state.leads.find(l=>l.id===p.leadId)?.nome || p.nome || "Interessado") : (p.nome||"Interessado");
+  return p.nome || "Interessado";
 }
 
 const leadsExpandidos = new Set(["ativos"]);
