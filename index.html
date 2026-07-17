@@ -4120,11 +4120,22 @@ function triggerFotoFestaUpload(){
 
 async function processarFotoFestaNovoEvento(file){
   if(!file) return;
+  // só faz sentido preencher algo se o formulário de "novo evento" ainda estiver aberto
+  if(formState._col !== "eventos" || formState._id){
+    toast("Abra o formulário de novo evento antes de enviar a foto.");
+    return;
+  }
+
   const t = document.getElementById("toast");
   if(t){ t.textContent = "📸 Analisando a foto..."; t.style.display="block"; }
 
-  // lê a data real da câmera (EXIF) antes de tudo — é mais confiável que a IA "chutando" pela imagem
+  // lê a data real da câmera (EXIF) antes de tudo — é mais confiável que a IA "chutando" pela imagem.
+  // aplica no formulário JÁ AQUI: mesmo que o Gemini falhe depois, a data fica correta.
   const dataExif = await extrairDataExif(file);
+  if(dataExif){
+    formState.data = dataExif;
+    refreshFormFields();
+  }
 
   const reader = new FileReader();
   reader.onerror = ()=> toast("Erro ao ler a imagem.");
@@ -4155,7 +4166,8 @@ Instruções por campo:
 
     const resultado = await callGeminiVision(base64, mimeType, prompt);
     if(!resultado.texto){
-      toast(mensagemErroIA(resultado, "analisar a foto"), resultado.sobrecarregado ? 7000 : undefined);
+      const prefixoData = dataExif ? "✅ Data do evento já preenchida pelo EXIF da câmera. " : "";
+      toast(`${prefixoData}Não consegui ler o restante da foto (tipo, tema, tags etc.) — ${mensagemErroIA(resultado, "analisar a foto")}`, resultado.sobrecarregado ? 8000 : 6000);
       return;
     }
     let dados;
@@ -4164,13 +4176,8 @@ Instruções por campo:
       dados = JSON.parse(limpo);
     }catch(err){
       console.error("[foto-festa-novo-evento] parse error:", err, resultado.texto);
-      toast("Não consegui interpretar os dados da foto. Veja o console.");
-      return;
-    }
-
-    // só preenche se o formulário de "novo evento" ainda estiver aberto
-    if(formState._col !== "eventos" || formState._id){
-      toast("Abra o formulário de novo evento antes de enviar a foto.");
+      const prefixoData = dataExif ? " A data do evento já foi preenchida pelo EXIF da câmera." : "";
+      toast("Não consegui interpretar os dados da foto." + prefixoData + " Veja o console.");
       return;
     }
 
@@ -4262,7 +4269,12 @@ Instruções por campo:
 
     const resultado = await callGeminiVision(base64, mimeType, prompt);
     if(!resultado.texto){
-      toast(mensagemErroIA(resultado, "analisar a foto"), resultado.sobrecarregado ? 7000 : undefined);
+      if(dataExif){
+        toast("✅ Data identificada pelo EXIF da câmera. Não consegui ler o restante da foto (tema, tags etc.) — confirme a atualização da data.", 6000);
+        abrirConfirmacaoFotoFesta(eventoId, { dataCapturaExif: dataExif, idadeCrianca: null, nomeNaFoto: "", temaFesta: "", tags: [], observacoes: "", _dataFonte: "exif" });
+      } else {
+        toast(mensagemErroIA(resultado, "analisar a foto"), resultado.sobrecarregado ? 7000 : undefined);
+      }
       return;
     }
     let dados;
