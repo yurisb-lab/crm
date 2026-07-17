@@ -277,6 +277,11 @@
   }
   .view-link-card:hover{ border-color:var(--text); }
   .view-section-title{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:18px 0 8px; }
+  .btn-row-responsive{ display:flex; gap:8px; flex-wrap:wrap; }
+  @media(max-width:480px){
+    .btn-row-responsive{ flex-direction:column; }
+    .btn-row-responsive button{ width:100%; text-align:center; }
+  }
 
   .chat-container{ display:flex; flex-direction:column; height:calc(100vh - 160px); min-height:400px; }
   .chat-container.empty{ height:auto; min-height:200px; }
@@ -2468,6 +2473,15 @@ function abrirNovaNegociacaoParaCliente(clienteId){
   openForm("negociacoes");
   setTimeout(()=>{
     formState.clienteId = clienteId;
+    refreshFormFields();
+  }, 100);
+}
+
+function abrirNovoEventoParaCliente(clienteId){
+  openForm("eventos");
+  setTimeout(()=>{
+    formState.clienteId = clienteId;
+    autoSelecionarCriancaVinculada(clienteId);
     refreshFormFields();
   }, 100);
 }
@@ -4955,7 +4969,10 @@ function renderViewCliente(cli){
 
     <div class="view-section-title">Negociação atual</div>
     <div style="font-size:13px; margin-bottom:8px;">${negAtual ? `<span class="badge">${negociacaoStatusLabel(negAtual.status)}</span>` : `<span style="color:var(--muted-2);">Nenhuma</span>`}</div>
-    <button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirNovaNegociacaoParaCliente('${cli.id}'),150)">+ Nova negociação</button>
+    <div class="btn-row-responsive">
+      <button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirNovaNegociacaoParaCliente('${cli.id}'),150)">+ Nova negociação</button>
+      <button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirNovoEventoParaCliente('${cli.id}'),150)">+ Novo evento</button>
+    </div>
     ${negociacoesCliente.length ? `
       <div class="view-section-title">Histórico de negociações (${negociacoesCliente.length})</div>
       ${negociacoesCliente.map(n=>`<div class="view-link-card" onclick="openView('negociacoes','${n.id}')">${n.tipoInteresse?capitalize(n.tipoInteresse.replace("_"," ")):"—"} · ${negociacaoStatusLabel(n.status)}${n.valorProposto?" · "+money(n.valorProposto):""}</div>`).join("")}
