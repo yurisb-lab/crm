@@ -658,7 +658,9 @@ const SCHEMAS = {
     fields: [
       {key:"clienteId", label:"Cliente", type:"ref", ref:"clientes", required:true},
       {key:"tipoInteresse", label:"Interesse em", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"], required:true},
-      {key:"mesPrevisto", label:"Mês previsto (se ainda não sabe a data exata — ex: aguardando cartório, ensaio de gestante)", type:"month"},
+      {key:"tipoData", label:"Tipo de data", type:"select", options:["mes","data"], triggersRefresh:true},
+      {key:"mesPrevisto", label:"Mês previsto (se ainda não sabe a data exata — ex: aguardando cartório, ensaio de gestante)", type:"month", visibleIf: fs=>(fs.tipoData||"mes")==="mes"},
+      {key:"dataDefinida", label:"Data definida (cria uma pré-reserva automática na Agenda)", type:"date", required:true, visibleIf: fs=>fs.tipoData==="data"},
       {key:"status", label:"Status da negociação", type:"select", options:["negociacao","fechado","perdido"], triggersRefresh:true},
       {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"], visibleIf: fs=>fs.status==="perdido"},
       {key:"valorProposto", label:"Valor proposto (R$)", type:"number"},
@@ -667,7 +669,7 @@ const SCHEMAS = {
     columns: [
       {key:"clienteId", label:"Cliente", format:v=>nomeRef("clientes",v)},
       {key:"tipoInteresse", label:"Interesse", format:v=>v?capitalize(v.replace("_"," ")):"—"},
-      {key:"mesPrevisto", label:"Mês previsto", format:v=>v?formatarMesAno(v):"—"},
+      {key:"mesPrevisto", label:"Data/Mês previsto", format:(v,row)=> row.tipoData==="data" && row.dataDefinida ? formatDate(row.dataDefinida)+" (data exata)" : (v?formatarMesAno(v):"—")},
       {key:"status", label:"Status", format:v=>{
         const s = v||"negociacao";
         const sym = {negociacao:"◑", fechado:"✓", perdido:"✕"};
@@ -2052,9 +2054,16 @@ function renderAgendaLista(){
     porMes[chave].push({tipo:"bloqueio", item:b});
   });
 
+  // pré-reservas futuras (incluindo hoje) — interessados avulsos e negociações com data definida
+  state.prereservas.filter(p=>p.data && p.data>=hoje).forEach(p=>{
+    const chave = p.data.slice(0,7);
+    if(!porMes[chave]) porMes[chave] = [];
+    porMes[chave].push({tipo:"prereserva", item:p});
+  });
+
   // negociações com mês previsto (sem data exata ainda) e sem evento vinculado —
   // fica visível mesmo que o mês previsto já tenha passado, pra não perder o registro de que a consulta existe
-  state.negociacoes.filter(n=>n.mesPrevisto && !n.eventoId && n.status!=="perdido").forEach(n=>{
+  state.negociacoes.filter(n=>n.mesPrevisto && !n.eventoId && n.status!=="perdido" && (n.tipoData||"mes")!=="data").forEach(n=>{
     const chave = n.mesPrevisto;
     if(!porMes[chave]) porMes[chave] = [];
     porMes[chave].push({tipo:"negociacaoSemData", item:n});
@@ -2073,9 +2082,10 @@ function renderAgendaLista(){
     });
     const evs = itens.filter(i=>i.tipo==="evento");
     const bloqs = itens.filter(i=>i.tipo==="bloqueio");
+    const preRes = itens.filter(i=>i.tipo==="prereserva");
     const negSemData = itens.filter(i=>i.tipo==="negociacaoSemData");
     const totalValor = evs.reduce((s,{item:e})=>s+(Number(e.valorContratado)||0),0);
-    const resumo = `${evs.length} evento${evs.length===1?"":"s"}${bloqs.length?` · ${bloqs.length} bloqueio${bloqs.length===1?"":"s"}`:""}${negSemData.length?` · ${negSemData.length} sem data confirmada`:""}${totalValor?` · ${money(totalValor)}`:""}`;
+    const resumo = `${evs.length} evento${evs.length===1?"":"s"}${bloqs.length?` · ${bloqs.length} bloqueio${bloqs.length===1?"":"s"}`:""}${preRes.length?` · ${preRes.length} pré-reserva${preRes.length===1?"":"s"}`:""}${negSemData.length?` · ${negSemData.length} sem data confirmada`:""}${totalValor?` · ${money(totalValor)}`:""}`;
 
     return `
       <div class="card" style="padding:0; margin-bottom:10px; overflow:hidden;">
@@ -2112,6 +2122,26 @@ function renderAgendaLista(){
                       ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
                       <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
                       <button class="sm" onclick="criarEventoDeNegociacao('${n.id}')">📆 Criar evento</button>
+                    </div>
+                  </div>`;
+              }
+              if(tipo==="prereserva"){
+                const p = item;
+                const isNeg = !!p.negociacaoId;
+                const wa = whatsappLink(p.telefone);
+                return `
+                  <div style="display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; border-left:3px solid #eab308;">
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <span>${isNeg?"🤝":"🕓"} ${nomePreReserva(p)}</span>
+                        <span class="pre-chip" style="font-size:10px;">${isNeg?"Negociação":"Interessado"}</span>
+                      </div>
+                      <div style="font-size:12px; color:var(--muted-2); margin-top:2px;">${formatDate(p.data)}${p.observacoes?" · "+p.observacoes:""}</div>
+                    </div>
+                    <div class="row-actions">
+                      ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
+                      <button class="sm" onclick="${isNeg?`openView('negociacoes','${p.negociacaoId}')`:`abrirPreReservaEditar('${p.id}')`}">${isNeg?"Ver":"Editar"}</button>
+                      ${isNeg ? "" : `<button class="sm danger" onclick="removerPreReserva('${p.id}')">Remover</button>`}
                     </div>
                   </div>`;
               }
@@ -2203,7 +2233,10 @@ function renderDiaCal(data, outromes){
     <div class="cal-day-events">
       ${evsDia.slice(0,3).map(e=>`<div class="cal-ev ${corClasseTipo(e)}">${e.horario?e.horario.slice(0,5)+" ":""}${nomeEventoCurto(e)}</div>`).join("")}
       ${evsDia.length>3?`<div style="font-size:10px;color:var(--muted)">+${evsDia.length-3} mais</div>`:""}
-      ${preDia.length && !evsDia.length ? `<div class="cal-ev" style="background:#eab308;color:#000;">🕓 ${preDia.length} interessado${preDia.length>1?"s":""}</div>` : ""}
+      ${preDia.length && !evsDia.length ? (()=>{
+        const temNeg = preDia.some(p=>p.negociacaoId);
+        return `<div class="cal-ev" style="background:#eab308;color:#000;">${temNeg?"🤝":"🕓"} ${preDia.length} ${temNeg?"negociação":"interessado"}${preDia.length>1?"s":""}</div>`;
+      })() : ""}
     </div>
     ${bloqDia?`<div style="font-size:9px;color:var(--muted-2);margin-top:2px;">${bloqDia.motivo||"Bloqueado"}</div>`:""}
   </div>`;
@@ -2238,22 +2271,29 @@ function abrirDiaCal(iso){
     </div>
     ${preDia.length ? `
       <div style="margin-bottom:14px;">
-        ${preDia.map(p=>`
+        ${preDia.map(p=>{
+          const isNeg = !!p.negociacaoId;
+          const chip = isNeg ? `<span class="pre-chip">🤝 Negociação</span>` : `<span class="pre-chip">🕓 Interessado</span>`;
+          const editarAction = isNeg
+            ? `closeModal();setTimeout(()=>openView('negociacoes','${p.negociacaoId}'),200)`
+            : `closeModal();setTimeout(()=>abrirPreReservaEditar('${p.id}'),200)`;
+          return `
           <div style="border-left:4px solid #eab308; background:var(--surface-2); border-radius:0 8px 8px 0; padding:10px 12px; margin-bottom:8px;">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
               <div>
-                <span class="pre-chip">🕓 Interessado</span>
+                ${chip}
                 <b style="margin-left:6px;">${nomePreReserva(p)}</b>
                 ${p.telefone ? ` · ${p.telefone}` : ""}
               </div>
               <div class="row-actions">
-                <button class="sm" onclick="closeModal();setTimeout(()=>abrirPreReservaEditar('${p.id}'),200)">Editar</button>
-                <button class="sm danger" onclick="removerPreReserva('${p.id}')">Remover</button>
+                <button class="sm" onclick="${editarAction}">${isNeg?"Ver negociação":"Editar"}</button>
+                ${isNeg ? "" : `<button class="sm danger" onclick="removerPreReserva('${p.id}')">Remover</button>`}
               </div>
             </div>
             ${p.observacoes ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${p.observacoes}</div>` : ""}
           </div>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
     ` : ""}
     ${evsDia.length ? evsDia.map(e=>`
@@ -2449,6 +2489,37 @@ function nomePreReserva(p){
   return p.nome || "Interessado";
 }
 
+/* ---------- Pré-reserva automática vinculada a uma negociação com "Data definida" ----------
+   Regras: existe enquanto tipoData==="data" e a negociação não estiver perdida, e some
+   assim que a negociação for perdida OU fechada com um evento já criado (o evento real
+   já ocupa a data). Se voltar pra "Só o mês", também é removida. */
+async function sincronizarPreReservaNegociacao(negId, neg){
+  const deveExistir = neg.tipoData==="data" && !!neg.dataDefinida && neg.status!=="perdido" && !(neg.status==="fechado" && neg.eventoId);
+  const existente = state.prereservas.find(p=>p.negociacaoId===negId);
+  try{
+    if(deveExistir){
+      const cliente = state.clientes.find(c=>c.id===neg.clienteId);
+      const payload = {
+        data: neg.dataDefinida,
+        leadId: "",
+        nome: cliente ? (cliente.nomeConjuge ? `${cliente.nome} & ${cliente.nomeConjuge}` : cliente.nome) : "",
+        telefone: cliente?.telefone || "",
+        observacoes: `Negociação em andamento${neg.tipoInteresse ? " · "+capitalize(neg.tipoInteresse.replace("_"," ")) : ""}`,
+        negociacaoId: negId
+      };
+      if(existente){
+        await db.collection("prereservas").doc(existente.id).update(payload);
+      } else {
+        await db.collection("prereservas").add({ ...payload, criadoEm: new Date().toISOString() });
+      }
+    } else if(existente){
+      await db.collection("prereservas").doc(existente.id).delete();
+    }
+  }catch(err){
+    console.error("[prereserva-negociacao] erro ao sincronizar:", err);
+  }
+}
+
 const leadsExpandidos = new Set(["ativos"]);
 
 function renderLeadsPage(main){
@@ -2600,7 +2671,7 @@ function renderViewNegociacao(neg){
   return `<h3>Negociação · ${cliente?.nome||"—"}</h3>
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${neg.clienteId}');return false;">${nomeRef("clientes",neg.clienteId)}</a>`)}
     ${viewRow("Interesse em", neg.tipoInteresse ? capitalize(neg.tipoInteresse.replace("_"," ")) : "—")}
-    ${neg.mesPrevisto ? viewRow("Mês previsto (sem data definida)", formatarMesAno(neg.mesPrevisto)) : ""}
+    ${neg.tipoData==="data" && neg.dataDefinida ? viewRow("Data definida", formatDate(neg.dataDefinida) + ` <span style="font-size:11px;color:var(--muted-2);">(pré-reserva automática na Agenda)</span>`) : (neg.mesPrevisto ? viewRow("Mês previsto (sem data definida)", formatarMesAno(neg.mesPrevisto)) : "")}
     ${viewRow("Status", `<span class="badge">${negociacaoStatusLabel(neg.status)}</span>`)}
     ${neg.motivoPerda && neg.status==="perdido" ? viewRow("Motivo da perda", capitalize(neg.motivoPerda.replace("_"," "))) : ""}
     ${viewRow("Valor proposto", neg.valorProposto ? money(neg.valorProposto) : "—")}
@@ -5770,7 +5841,8 @@ function openForm(col, id){
   formState = existing ? { ...existing } : {};
   formState._col = col; formState._id = id || null;
   if(!existing && col==="eventos") formState.status = "confirmado"; // deixa explícito em vez de só "parecer" confirmado na tela
-  if(!existing && col==="negociacoes") formState.status = "negociacao";
+  if(!existing && col==="negociacoes"){ formState.status = "negociacao"; formState.tipoData = "mes"; }
+  if(existing && col==="negociacoes" && !formState.tipoData) formState.tipoData = formState.dataDefinida ? "data" : "mes";
   if(!existing && col==="leads") formState.status = "negociando";
   if(!existing && col==="produtos"){
     formState.etapa = "encomendado";
@@ -5971,7 +6043,7 @@ function renderField(f, value){
     return `<div class="field"><label>${f.label}</label>
       <select id="${id}" onchange="formState['${f.key}']=this.value;${extraOnchange}${f.triggersRefresh?' refreshFormFields();':''}" style="width:100%">
         <option value="">—</option>
-        ${f.options.map(o=>`<option value="${o}" ${value===o?"selected":""}>${f.key==="status" ? statusLabel(o) : f.key==="etapa" ? (ETAPA_PRODUTO_LABEL[o]||capitalize(o)) : capitalize(o.replace("_"," "))}</option>`).join("")}
+        ${f.options.map(o=>`<option value="${o}" ${value===o?"selected":""}>${f.key==="status" ? statusLabel(o) : f.key==="etapa" ? (ETAPA_PRODUTO_LABEL[o]||capitalize(o)) : f.key==="tipoData" ? (o==="mes"?"Só o mês":"Data definida") : capitalize(o.replace("_"," "))}</option>`).join("")}
       </select></div>`;
   }
   if(f.type==="catalogo"){
@@ -6169,6 +6241,9 @@ async function saveDoc(){
       historico.push({ status: statusNovo, data: new Date().toISOString() });
     }
     data.historicoStatus = historico;
+    // limpa o campo do tipo de data não usado, pra não sobrar lixo de uma escolha anterior
+    if(data.tipoData==="data") data.mesPrevisto = "";
+    else data.dataDefinida = "";
   }
 
   // registra automaticamente a data de cada mudança de etapa do pedido de produto
@@ -6191,12 +6266,18 @@ async function saveDoc(){
   try{
     if(id){
       await db.collection(col).doc(id).update(data);
+      if(col === "negociacoes") await sincronizarPreReservaNegociacao(id, { ...data, eventoId: existing?.eventoId||"" });
       toast(`${schema.singular} atualizado.`);
     } else {
       data.criadoEm = new Date().toISOString();
       const novoRef = await db.collection(col).add(data);
+      if(col === "negociacoes") await sincronizarPreReservaNegociacao(novoRef.id, { ...data, eventoId:"" });
       if(col === "eventos" && formState._negociacaoId){
-        try{ await db.collection("negociacoes").doc(formState._negociacaoId).update({ eventoId: novoRef.id }); }
+        try{
+          await db.collection("negociacoes").doc(formState._negociacaoId).update({ eventoId: novoRef.id });
+          const negAtualizada = state.negociacoes.find(n=>n.id===formState._negociacaoId);
+          if(negAtualizada) await sincronizarPreReservaNegociacao(formState._negociacaoId, { ...negAtualizada, eventoId: novoRef.id });
+        }
         catch(err){ console.error("[negociacoes] erro ao vincular evento:", err); }
       }
       toast(`${schema.singular} criado.`);
