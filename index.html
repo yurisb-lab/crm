@@ -374,6 +374,27 @@
     position:fixed; bottom:24px; right:24px; background:var(--surface-2); border:1px solid var(--amber);
     color:var(--text); padding:12px 18px; border-radius:8px; font-size:13px; z-index:99; display:none;
   }
+
+  /* ---- AVISO DE EVENTO PRÓXIMO (hoje / amanhã) ---- */
+  .avisos-evento-wrap{ display:flex; flex-direction:column; gap:10px; margin-bottom:22px; }
+  .aviso-evento-card{
+    display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+    padding:14px 18px; border-radius:10px;
+    background: color-mix(in srgb, #eab308 12%, var(--surface-2));
+    border:1.5px solid #eab308;
+  }
+  .aviso-evento-card.urgente{
+    background: color-mix(in srgb, #ef4444 14%, var(--surface-2));
+    border-color:#ef4444;
+  }
+  .aviso-evento-titulo{ font-family:'Fraunces',serif; font-size:16px; font-weight:600; }
+  .aviso-evento-detalhe{ font-size:13px; color:var(--muted); margin-top:4px; }
+  .aviso-evento-acoes{ display:flex; gap:8px; flex-shrink:0; }
+  @media(max-width:480px){
+    .aviso-evento-card{ flex-direction:column; align-items:flex-start; }
+    .aviso-evento-acoes{ width:100%; }
+    .aviso-evento-acoes button{ flex:1; }
+  }
 </style>
 </head>
 <body>
@@ -3427,6 +3448,57 @@ function renderHistoricoContatos(cli){
   return html;
 }
 
+/* =========================================================
+   AVISO DE EVENTO PRÓXIMO (hoje / amanhã)
+   Banner fixo no topo do Dashboard, visível por ~24h antes do
+   evento e durante todo o dia do evento. Some sozinho no dia
+   seguinte, pois passa a não bater mais com "hoje" nem "amanhã".
+   O botão "Preparado" só esconde aquele card específico (guardado
+   no localStorage do aparelho — não é dado do negócio, é só uma
+   preferência de tela, por isso não vai pro Firestore).
+   ========================================================= */
+function avisoEventoDispensado(eventoId, dataEvento){
+  return localStorage.getItem(`aviso-evento-dispensado-${eventoId}-${dataEvento}`) === "1";
+}
+function dispensarAvisoEvento(eventoId, dataEvento){
+  localStorage.setItem(`aviso-evento-dispensado-${eventoId}-${dataEvento}`, "1");
+  renderPage("dashboard");
+}
+function renderCardAvisoEvento(e, quando, emoji, urgente){
+  const cli = nomeRef("clientes", e.clienteId);
+  const tipoLabel = e.tipo==="outro" && e.outroDescricao ? e.outroDescricao : capitalize((e.tipo||"outro").replace("_"," "));
+  const detalhes = [tipoLabel, cli, e.horario?("🕓 "+e.horario):"", e.endereco?("📍 "+e.endereco):""].filter(Boolean).join(" · ");
+  return `
+    <div class="aviso-evento-card ${urgente?"urgente":""}">
+      <div>
+        <div class="aviso-evento-titulo">${emoji} Você tem evento ${quando}! Tudo preparado?</div>
+        <div class="aviso-evento-detalhe">${detalhes}</div>
+      </div>
+      <div class="aviso-evento-acoes">
+        <button class="sm" onclick="openView('eventos','${e.id}')">Ver evento</button>
+        <button class="sm ghost" onclick="dispensarAvisoEvento('${e.id}','${e.data}')">✓ Preparado</button>
+      </div>
+    </div>`;
+}
+function renderAvisosEventoProximo(){
+  const hojeStr = new Date().toISOString().slice(0,10);
+  const amanhaDate = new Date(); amanhaDate.setDate(amanhaDate.getDate()+1);
+  const amanhaStr = amanhaDate.toISOString().slice(0,10);
+
+  const naoCancelado = e => (e.status||"confirmado") !== "cancelado";
+  const eventosHoje = state.eventos.filter(e=>e.data===hojeStr && naoCancelado(e) && !avisoEventoDispensado(e.id, e.data));
+  const eventosAmanha = state.eventos.filter(e=>e.data===amanhaStr && naoCancelado(e) && !avisoEventoDispensado(e.id, e.data));
+
+  if(!eventosHoje.length && !eventosAmanha.length) return "";
+
+  const html = [
+    ...eventosHoje.map(e=>renderCardAvisoEvento(e, "hoje", "🔴", true)),
+    ...eventosAmanha.map(e=>renderCardAvisoEvento(e, "amanhã", "🟡", false))
+  ].join("");
+
+  return `<div class="avisos-evento-wrap">${html}</div>`;
+}
+
 function renderDashboard(main){
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const futuros = state.eventos.filter(e=>e.data && new Date(e.data+"T00:00:00") >= hoje).sort((a,b)=>a.data.localeCompare(b.data));
@@ -3441,6 +3513,8 @@ function renderDashboard(main){
     <div class="page-header">
       <div><div class="eyebrow">Visão geral</div><h2>Dashboard</h2></div>
     </div>
+
+    ${renderAvisosEventoProximo()}
 
     ${(()=>{
       const hojeStr = new Date().toISOString().slice(0,10);
