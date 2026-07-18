@@ -4465,8 +4465,13 @@ function renderComentarios(col, id){
     <div id="comentarios-lista-${col}-${id}">
       ${sorted.length ? sorted.map((c,i)=>`
         <div class="comentario-item">
-          <div class="comentario-data">${formatarDataHora(c.criadoEm)}</div>
-          <div class="comentario-texto">${escapeHtml(c.texto)}</div>
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div style="flex:1; min-width:0;">
+              <div class="comentario-data">${formatarDataHora(c.criadoEm)}</div>
+              <div class="comentario-texto">${escapeHtml(c.texto)}</div>
+            </div>
+            <button class="ghost sm" title="Excluir comentário" onclick="excluirComentario('${col}','${id}','${c.criadoEm}')">✕</button>
+          </div>
         </div>`).join("") : `<div style="font-size:13px;color:var(--muted-2);">Nenhum comentário ainda.</div>`}
     </div>
     <div class="comentario-input-row">
@@ -4529,6 +4534,21 @@ async function salvarComentario(col, id, textoForcado){
     if(input) input.value = "";
     toast("Comentário salvo.");
   }catch(err){ console.error(err); toast("Erro ao salvar comentário."); }
+}
+
+async function excluirComentario(col, id, criadoEm){
+  if(!confirm("Excluir este comentário? Essa ação não pode ser desfeita.")) return;
+  const item = state[col]?.find(i=>i.id===id);
+  if(!item) return;
+  const novos = (item.comentarios||[]).filter(c=>c.criadoEm!==criadoEm);
+  try{
+    await db.collection(col).doc(id).update({ comentarios: novos });
+    toast("Comentário excluído.");
+    openView(col, id); // reabre a view pra atualizar a lista já sem o comentário removido
+  }catch(err){
+    console.error(err);
+    toast("Erro ao excluir comentário. Veja o console.");
+  }
 }
 
 function escapeHtml(s){ return s ? s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : ""; }
