@@ -3464,19 +3464,24 @@ function dispensarAvisoEvento(eventoId, dataEvento){
   localStorage.setItem(`aviso-evento-dispensado-${eventoId}-${dataEvento}`, "1");
   renderPage("dashboard");
 }
+function desdispensarAvisoEvento(eventoId, dataEvento){
+  localStorage.removeItem(`aviso-evento-dispensado-${eventoId}-${dataEvento}`);
+  renderPage("dashboard");
+}
 function renderCardAvisoEvento(e, quando, emoji, urgente){
   const cli = nomeRef("clientes", e.clienteId);
   const tipoLabel = e.tipo==="outro" && e.outroDescricao ? e.outroDescricao : capitalize((e.tipo||"outro").replace("_"," "));
   const detalhes = [tipoLabel, cli, e.horario?("🕓 "+e.horario):"", e.endereco?("📍 "+e.endereco):""].filter(Boolean).join(" · ");
+  const preparado = avisoEventoDispensado(e.id, e.data);
   return `
-    <div class="aviso-evento-card ${urgente?"urgente":""}">
+    <div class="aviso-evento-card ${urgente?"urgente":""}" style="${preparado?"opacity:.55;":""}">
       <div>
-        <div class="aviso-evento-titulo">${emoji} Você tem evento ${quando}! Tudo preparado?</div>
+        <div class="aviso-evento-titulo">${emoji} Você tem evento ${quando}! ${preparado ? "✓ Já marcado como preparado" : "Tudo preparado?"}</div>
         <div class="aviso-evento-detalhe">${detalhes}</div>
       </div>
       <div class="aviso-evento-acoes">
         <button class="sm" onclick="openView('eventos','${e.id}')">Ver evento</button>
-        <button class="sm ghost" onclick="dispensarAvisoEvento('${e.id}','${e.data}')">✓ Preparado</button>
+        <button class="sm ghost" onclick="${preparado ? `desdispensarAvisoEvento('${e.id}','${e.data}')` : `dispensarAvisoEvento('${e.id}','${e.data}')`}">${preparado ? "↩ Desmarcar" : "✓ Preparado"}</button>
       </div>
     </div>`;
 }
@@ -3486,8 +3491,8 @@ function renderAvisosEventoProximo(){
   const amanhaStr = amanhaDate.toISOString().slice(0,10);
 
   const naoCancelado = e => (e.status||"confirmado") !== "cancelado";
-  const eventosHoje = state.eventos.filter(e=>e.data===hojeStr && naoCancelado(e) && !avisoEventoDispensado(e.id, e.data));
-  const eventosAmanha = state.eventos.filter(e=>e.data===amanhaStr && naoCancelado(e) && !avisoEventoDispensado(e.id, e.data));
+  const eventosHoje = state.eventos.filter(e=>e.data===hojeStr && naoCancelado(e));
+  const eventosAmanha = state.eventos.filter(e=>e.data===amanhaStr && naoCancelado(e));
 
   if(!eventosHoje.length && !eventosAmanha.length) return "";
 
