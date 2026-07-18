@@ -3187,7 +3187,7 @@ function renderDashboard(main){
         <table><tbody>
           ${alertas.map(a=>`<tr>
             <td style="padding:11px 12px; font-size:13px; line-height:1.5;">${a.texto}</td>
-            <td class="row-actions"><button class="sm" onclick="openView('${a.col}','${a.id}')">Ver</button></td>
+            <td class="row-actions"><button class="sm" onclick="abrirAlerta('${a.tipo}','${a.col}','${a.id}')">Ver</button></td>
           </tr>`).join("")}
         </tbody></table>
       </div>`;
@@ -4851,6 +4851,12 @@ async function gerarVariacoesMensagem(texto, dadosContexto){
 /* =========================================================
    ALERTAS PROATIVOS
    ========================================================= */
+// um item fica "adormecido" pra um tipo de alerta específico até a data guardada em alertaSnoozeAte
+// (guardamos o tipo junto porque, em tese, o mesmo documento poderia futuramente disparar mais de um tipo de alerta)
+function alertaAdormecido(item, tipo, hoje){
+  return !!(item.alertaSnoozeTipo===tipo && item.alertaSnoozeAte && item.alertaSnoozeAte>=hoje);
+}
+
 function calcularAlertas(){
   const alertas = [];
   const agora = new Date();
@@ -4861,14 +4867,14 @@ function calcularAlertas(){
     const ults = (l.comentarios||[]).map(c=>c.criadoEm||"").sort().reverse()[0];
     const ref = ults ? new Date(ults) : new Date(l.criadoEm||agora);
     const dias = Math.floor((agora-ref)/86400000);
-    if(dias>=7) alertas.push({tipo:"lead_parado", texto:`Lead <b>${l.nome}</b> sem atualização há ${dias} dias.`, id:l.id, col:"leads"});
+    if(dias>=7 && !alertaAdormecido(l,"lead_parado",hoje)) alertas.push({tipo:"lead_parado", texto:`Lead <b>${l.nome}</b> sem atualização há ${dias} dias.`, id:l.id, col:"leads"});
   });
 
   // Eventos realizados sem entrega há 30+ dias
   state.eventos.filter(e=>e.status==="realizado"&&!e.dataEntregaReal).forEach(e=>{
     const ref = new Date(e.data||agora);
     const dias = Math.floor((agora-ref)/86400000);
-    if(dias>=30){
+    if(dias>=30 && !alertaAdormecido(e,"entrega_atrasada",hoje)){
       const cli = nomeRef("clientes",e.clienteId);
       alertas.push({tipo:"entrega_atrasada", texto:`Evento de <b>${cli}</b> realizado há ${dias} dias ainda sem entrega.`, id:e.id, col:"eventos"});
     }
@@ -4877,7 +4883,7 @@ function calcularAlertas(){
   // Saldo a receber em eventos entregues
   state.eventos.filter(e=>e.status==="entregue").forEach(e=>{
     const saldo = (Number(e.valorContratado)||0)-totalPago(e.id);
-    if(saldo>0){
+    if(saldo>0 && !alertaAdormecido(e,"saldo_pendente",hoje)){
       const cli = nomeRef("clientes",e.clienteId);
       alertas.push({tipo:"saldo_pendente", texto:`Evento entregue de <b>${cli}</b> ainda tem ${money(saldo)} a receber.`, id:e.id, col:"eventos"});
     }
@@ -4887,7 +4893,7 @@ function calcularAlertas(){
   state.produtos.filter(p=>(p.etapa||"encomendado")!=="entregue" && p.prazoPrevia).forEach(p=>{
     const prazo = new Date(p.prazoPrevia+"T00:00:00");
     const dias = Math.floor((agora-prazo)/86400000)*-1;
-    if(dias<=3){
+    if(dias<=3 && !alertaAdormecido(p,"prazo_previa_produto",hoje)){
       const cli = nomeRef("clientes",p.clienteId);
       const nomeProd = p.produtoNome||"produto";
       const texto = dias<0 ? `Prazo da prévia de <b>${nomeProd}</b> para <b>${cli}</b> venceu há ${Math.abs(dias)} dia${Math.abs(dias)===1?"":"s"}.`
@@ -4898,6 +4904,141 @@ function calcularAlertas(){
   });
 
   return alertas;
+}
+
+/* =========================================================
+   TELA DE ALERTA — mostra o motivo, contexto pra resolver,
+   ações rápidas específicas do tipo, histórico de ações
+   (reaproveita o padrão de comentários) e a soneca.
+   ========================================================= */
+function montarConteudoAlerta(tipo, item){
+  const hoje = new Date().toISOString().slice(0,10);
+
+  if(tipo==="lead_parado"){
+    const ults = (item.comentarios||[]).map(c=>c.criadoEm||"").sort().reverse()[0];
+    const ref = ults ? new Date(ults) : new Date(item.criadoEm||new Date());
+    const dias = Math.floor((new Date()-ref)/86400000);
+    const wa = whatsappLink(item.telefone);
+    return {
+      titulo: "Lead parado",
+      motivo: `${item.nome||"Este lead"} está sem atualização há ${dias} dia${dias===1?"":"s"}.`,
+      infoRows: [
+        ["Interesse em", item.interesseTipo ? capitalize(item.interesseTipo.replace("_"," ")) : "—"],
+        ["Origem", item.origem ? capitalize(item.origem) : "—"],
+        ["Último contato", ults ? formatarDataHora(ults) : "Nenhum registrado"]
+      ],
+      acoesHtml: `
+        ${wa?`<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>`:""}
+        <button onclick="openForm('leads','${item.id}')">✏️ Editar lead</button>
+      `
+    };
+  }
+
+  if(tipo==="entrega_atrasada"){
+    const cliente = state.clientes.find(c=>c.id===item.clienteId);
+    const wa = cliente ? whatsappLink(cliente.telefone) : null;
+    const dias = Math.floor((new Date()-new Date(item.data||new Date()))/86400000);
+    return {
+      titulo: "Entrega atrasada",
+      motivo: `Evento de ${nomeRef("clientes",item.clienteId)} realizado há ${dias} dias ainda sem entrega.`,
+      infoRows: [
+        ["Tipo", item.tipo ? capitalize(item.tipo.replace("_"," ")) : "—"],
+        ["Data do evento", formatDate(item.data)],
+        ["Entrega prevista", item.dataEntregaPrevista ? formatDate(item.dataEntregaPrevista) : "—"]
+      ],
+      acoesHtml: `
+        ${wa?`<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>`:""}
+        <button onclick="marcarEventoEntregue('${item.id}')">✓ Marcar entregue</button>
+      `
+    };
+  }
+
+  if(tipo==="saldo_pendente"){
+    const cliente = state.clientes.find(c=>c.id===item.clienteId);
+    const wa = cliente ? whatsappLink(cliente.telefone) : null;
+    const saldo = (Number(item.valorContratado)||0) - totalPago(item.id);
+    return {
+      titulo: "Saldo pendente",
+      motivo: `Evento entregue de ${nomeRef("clientes",item.clienteId)} ainda tem ${money(saldo)} a receber.`,
+      infoRows: [
+        ["Valor contratado", money(item.valorContratado)],
+        ["Recebido", money(totalPago(item.id))],
+        ["Saldo", money(saldo)]
+      ],
+      acoesHtml: `
+        ${wa?`<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>`:""}
+        <button onclick="abrirBaixaRapida('${item.id}')">💰 Dar baixa</button>
+      `
+    };
+  }
+
+  if(tipo==="prazo_previa_produto"){
+    return {
+      titulo: "Prazo de prévia",
+      motivo: `Prazo da prévia de ${item.produtoNome||"produto"} para ${nomeRef("clientes",item.clienteId)} ${item.prazoPrevia<hoje?"venceu":"está próximo"}.`,
+      infoRows: [
+        ["Etapa atual", ETAPA_PRODUTO_LABEL[item.etapa||"encomendado"]],
+        ["Prazo da prévia", item.prazoPrevia ? formatDate(item.prazoPrevia) : "—"],
+        ["Fornecedor", item.fornecedor || "—"]
+      ],
+      acoesHtml: `<button onclick="openForm('produtos','${item.id}')">✏️ Editar etapa</button>`
+    };
+  }
+
+  return null;
+}
+
+function abrirAlerta(tipo, col, id){
+  const item = state[col]?.find(i=>i.id===id);
+  if(!item){ toast("Registro não encontrado."); return; }
+  const cfg = montarConteudoAlerta(tipo, item);
+  if(!cfg) return openView(col, id);
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3 style="margin-bottom:4px;">${cfg.titulo}</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:14px;">${cfg.motivo}</div>
+    <div class="card meta-info" style="padding:10px 14px; margin-bottom:14px;">
+      ${cfg.infoRows.map(r=>`<div class="meta-row"><span>${r[0]}</span><b>${r[1]}</b></div>`).join("")}
+    </div>
+    <div class="btn-row-responsive" style="margin-bottom:16px;">${cfg.acoesHtml}</div>
+    ${renderComentarios(col, id)}
+    <div class="modal-actions" style="justify-content:space-between; flex-wrap:wrap;">
+      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:12px; color:var(--muted-2);">Lembrar em:</span>
+        ${[3,7,15,30].map(d=>`<button class="sm ghost" onclick="snoozeAlerta('${col}','${id}','${tipo}',${d})">${d}d</button>`).join("")}
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="ghost" onclick="openView('${col}','${id}')">Ver registro completo</button>
+        <button class="ghost" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+async function snoozeAlerta(col, id, tipo, dias){
+  const ate = new Date();
+  ate.setDate(ate.getDate()+dias);
+  const ateStr = ate.toISOString().slice(0,10);
+  try{
+    await db.collection(col).doc(id).update({ alertaSnoozeAte: ateStr, alertaSnoozeTipo: tipo });
+    toast(`Alerta adiado até ${formatDate(ateStr)}.`);
+    closeModal();
+  }catch(err){
+    console.error(err);
+    toast("Erro ao adiar o alerta. Veja o console.");
+  }
+}
+
+async function marcarEventoEntregue(eventoId){
+  try{
+    await db.collection("eventos").doc(eventoId).update({ status:"entregue", dataEntregaReal: new Date().toISOString().slice(0,10) });
+    toast("Evento marcado como entregue.");
+    closeModal();
+  }catch(err){
+    console.error(err);
+    toast("Erro ao marcar como entregue. Veja o console.");
+  }
 }
 
 function abrirModalEnvioMensagem(textoOriginal, cliente, contexto){
