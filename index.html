@@ -643,11 +643,11 @@ const SCHEMAS = {
       }},
       {key:"_ultimoContato", label:"Último contato", format:(v,row)=>{
         const uc = ultimoContatoCliente(row.id);
-        if(!uc) return `<span style="color:var(--muted-2);">—</span>`;
+        if(!uc) return "<span style=\"color:var(--muted-2);\">—</span>";
         const dias = Math.floor((new Date()-new Date(uc.data))/86400000);
-        const cor = dias<=30 ? "var(--green)" : dias<=90 ? "var(--amber)" : "var(--muted-2)";
-        return `<span style="color:${cor};font-size:12px;">${formatDate(uc.data)}</span>`;
-      }, sortValue: row => {
+        const cor = dias<=30 ? "#22c55e" : dias<=90 ? "#eab308" : "var(--muted-2)";
+        return "<span style=\"color:"+cor+";font-size:12px;\">"+formatDate(uc.data)+"</span>";
+      }, sortValue: row=>{
         const uc = ultimoContatoCliente(row.id);
         return uc ? uc.data : "0000";
       }}
@@ -1433,9 +1433,6 @@ function buildCrmContext(){
     // todos os comentários (sem limite)
     const comentarios = (c.comentarios||[]).sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||"")).map(x=>`[${formatarDataHora(x.criadoEm)}] ${x.texto}`).join(" | ");
 
-    // histórico de contatos de reativação
-    const contatos = (c.historicoContatos||[]).sort((a,b)=>(a.data||"").localeCompare(b.data||"")).map(x=>`[${formatDate(x.data)}]${x.observacao?" "+x.observacao:""}`).join(" | ");
-
     // histórico resumido de eventos (últimos 5 anos, no máximo 8 mais recentes)
     const historicoEvs = evs.filter(e=>(e.data||"")>=dataLimiteContexto).slice(0,8).map(e=>`${capitalize((e.tipo||"").replace("_"," "))} ${formatDate(e.data)} (${statusLabel(e.status||"confirmado")})`).join(", ");
 
@@ -1449,7 +1446,6 @@ function buildCrmContext(){
       filhosStr ? `filhos:[${filhosStr}]` : "",
       casamentoStr ? `casamento:[${casamentoStr}]` : "",
       historicoEvs ? `histórico:[${historicoEvs}]` : "",
-      contatos ? `contatos-reativacao:[${contatos}]` : "",
       comentarios ? `notas:[${comentarios}]` : "",
       c.observacoes ? `obs:[${c.observacoes}]` : "",
     ].filter(Boolean);
@@ -2507,6 +2503,7 @@ function renderNegociacoesPage(main){
     ${renderPilhaNegociacoes("abertas", "Em aberto", abertas)}
     ${renderPilhaNegociacoes("fechadas", "Fechadas", fechadas)}
     ${renderPilhaNegociacoes("perdidas", "Perdidas", perdidas)}
+    ${renderPainelReativacao()}
   `;
 }
 
@@ -3131,7 +3128,7 @@ function renderNegociacoesAbertasDashboard(){
 }
 
 /* =========================================================
-   REATIVAÇÃO DE CLIENTES
+   REATIVACAO DE CLIENTES
    ========================================================= */
 function ultimoContatoCliente(clienteId){
   const cli = state.clientes.find(c=>c.id===clienteId);
@@ -3145,23 +3142,16 @@ function clientesParaReativar(){
   const limite12mStr = limite12m.toISOString().slice(0,10);
   const limite90d = new Date(); limite90d.setDate(limite90d.getDate()-90);
   const limite90dStr = limite90d.toISOString().slice(0,10);
-
   return state.clientes.filter(cli=>{
-    // tem evento futuro? sai da lista
     const temFuturo = state.eventos.some(e=>e.clienteId===cli.id && e.data>=hoje);
     if(temFuturo) return false;
-
-    // foi contatado nos últimos 90 dias? sai da lista
     const uc = ultimoContatoCliente(cli.id);
     if(uc && uc.data >= limite90dStr) return false;
-
-    // último evento há mais de 12 meses (ou nunca teve evento)
     const evs = state.eventos.filter(e=>e.clienteId===cli.id && e.data);
-    if(!evs.length) return false; // nunca teve evento, não entra (seria lead)
+    if(!evs.length) return false;
     const ultimoEv = evs.sort((a,b)=>(b.data||"").localeCompare(a.data||""))[0];
     return ultimoEv.data <= limite12mStr;
   }).sort((a,b)=>{
-    // ordena: nunca contatados primeiro, depois por contato mais antigo
     const ua = ultimoContatoCliente(a.id);
     const ub = ultimoContatoCliente(b.id);
     if(!ua && !ub) return 0;
@@ -3174,40 +3164,29 @@ function clientesParaReativar(){
 function renderPainelReativacao(){
   const lista = clientesParaReativar();
   if(!lista.length) return "";
-
-  const hoje = new Date().toISOString().slice(0,10);
-
   return `
-    <div class="section-title">🔄 Reativar clientes (${lista.length})</div>
+    <div class="section-title">Reativar clientes (${lista.length})</div>
     <div class="card" style="padding:0;">
       ${lista.map(cli=>{
         const uc = ultimoContatoCliente(cli.id);
         const wa = whatsappLink(cli.telefone);
         const evs = state.eventos.filter(e=>e.clienteId===cli.id && e.data).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
         const ultimoEv = evs[0];
-        const diasEv = ultimoEv ? Math.floor((new Date()-new Date(ultimoEv.data+"T00:00:00"))/86400000) : null;
-        const mesesEv = diasEv ? Math.floor(diasEv/30) : null;
-
-        const ucLabel = uc
-          ? `Último contato: ${formatDate(uc.data)}`
-          : `Nunca contatado`;
+        const mesesEv = ultimoEv ? Math.floor((new Date()-new Date(ultimoEv.data+"T00:00:00"))/86400000/30) : null;
+        const ucLabel = uc ? "Ultimo contato: "+formatDate(uc.data) : "Nunca contatado";
         const ucCor = !uc ? "var(--muted-2)" : "var(--muted)";
-
-        return `
-          <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
-            <div style="flex:1; min-width:180px;">
-              <div style="font-weight:600; font-size:14px; cursor:pointer;" onclick="openView('clientes','${cli.id}')">${cli.nome}${cli.nomeConjuge?" & "+cli.nomeConjuge:""}</div>
-              <div style="font-size:12px; color:var(--muted); margin-top:3px;">
-                ${ultimoEv ? `último evento: ${capitalize((ultimoEv.tipo||"").replace("_"," "))} · ${formatDate(ultimoEv.data)}${mesesEv?" · há "+mesesEv+" meses":""}` : "sem eventos"}
-              </div>
-              <div style="font-size:11px; color:${ucCor}; margin-top:2px;">${ucLabel}</div>
-              ${uc && uc.observacao ? `<div style="font-size:12px; color:var(--muted); margin-top:4px; font-style:italic;">"${uc.observacao}"</div>` : ""}
-            </div>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; flex-shrink:0;">
-              ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
-              <button class="sm" onclick="abrirMarcarContatado('${cli.id}')">✓ Contatado</button>
-            </div>
-          </div>`;
+        return "<div style=\"display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap;\">"
+          +"<div style=\"flex:1; min-width:180px;\">"
+          +"<div style=\"font-weight:600; font-size:14px; cursor:pointer;\" onclick=\"openView('clientes','"+cli.id+"')\">"+(cli.nome+(cli.nomeConjuge?" & "+cli.nomeConjuge:""))+"</div>"
+          +"<div style=\"font-size:12px; color:var(--muted); margin-top:3px;\">"+(ultimoEv ? "ultimo evento: "+capitalize((ultimoEv.tipo||"").replace("_"," "))+" - "+formatDate(ultimoEv.data)+(mesesEv?" - ha "+mesesEv+" meses":"") : "sem eventos")+"</div>"
+          +"<div style=\"font-size:11px; color:"+ucCor+"; margin-top:2px;\">"+ucLabel+"</div>"
+          +(uc && uc.observacao ? "<div style=\"font-size:12px; color:var(--muted); margin-top:4px; font-style:italic;\">\""+escapeHtml(uc.observacao)+"\"</div>" : "")
+          +"</div>"
+          +"<div style=\"display:flex; gap:6px; flex-wrap:wrap; align-items:center; flex-shrink:0;\">"
+          +(wa ? "<button class=\"sm\" onclick=\"window.open('"+wa+"','_blank')\">WhatsApp</button>" : "")
+          +"<button class=\"sm\" onclick=\"abrirMarcarContatado('"+cli.id+"')\">Contatado</button>"
+          +"</div>"
+          +"</div>";
       }).join("")}
     </div>`;
 }
@@ -3215,46 +3194,35 @@ function renderPainelReativacao(){
 function abrirMarcarContatado(clienteId){
   const cli = state.clientes.find(c=>c.id===clienteId);
   if(!cli) return;
-  const wa = whatsappLink(cli.telefone);
-  document.getElementById("modal-content").innerHTML = `
-    <h3>Registrar contato</h3>
-    <div style="font-size:13px; color:var(--muted); margin-bottom:16px;">${cli.nome}${cli.nomeConjuge?" & "+cli.nomeConjuge:""}</div>
-    <div class="field">
-      <label>Data do contato</label>
-      <input id="contato-data" type="date" value="${new Date().toISOString().slice(0,10)}" style="width:100%;">
-    </div>
-    <div class="field">
-      <label>Observação (opcional)</label>
-      <textarea id="contato-obs" placeholder="Ex: perguntou sobre ensaio de família, vai pensar..." rows="3"></textarea>
-    </div>
-    ${temIA() ? `
-      <div style="display:flex; gap:8px; margin-top:-4px; margin-bottom:14px; flex-wrap:wrap;">
-        <button class="ghost sm" onclick="triggerContatoConversaUpload('${clienteId}')">✦ Importar conversa .txt (IA)</button>
-        <button class="ghost sm" onclick="triggerContatoPrintUpload('${clienteId}')">📷 Importar print (IA)</button>
-      </div>
-    ` : ""}
-    <div class="modal-actions">
-      <button class="ghost" onclick="closeModal()">Cancelar</button>
-      <button class="primary" onclick="confirmarContatado('${clienteId}')">Salvar</button>
-    </div>
-  `;
+  document.getElementById("modal-content").innerHTML = "<h3>Registrar contato</h3>"
+    +"<div style=\"font-size:13px; color:var(--muted); margin-bottom:16px;\">"+cli.nome+(cli.nomeConjuge?" & "+cli.nomeConjuge:"")+"</div>"
+    +"<div class=\"field\"><label>Data do contato</label>"
+    +"<input id=\"contato-data\" type=\"date\" value=\""+new Date().toISOString().slice(0,10)+"\" style=\"width:100%;\"></div>"
+    +"<div class=\"field\"><label>Observacao (opcional)</label>"
+    +"<textarea id=\"contato-obs\" placeholder=\"Ex: perguntou sobre ensaio de familia, vai pensar...\" rows=\"3\"></textarea></div>"
+    +(temIA() ? "<div style=\"display:flex; gap:8px; margin-top:-4px; margin-bottom:14px; flex-wrap:wrap;\">"
+      +"<button class=\"ghost sm\" onclick=\"triggerContatoConversaUpload('"+clienteId+"')\">Importar conversa .txt (IA)</button>"
+      +"<button class=\"ghost sm\" onclick=\"triggerContatoPrintUpload('"+clienteId+"')\">Importar print (IA)</button>"
+      +"</div>" : "")
+    +"<div class=\"modal-actions\">"
+    +"<button class=\"ghost\" onclick=\"closeModal()\">Cancelar</button>"
+    +"<button class=\"primary\" onclick=\"confirmarContatado('"+clienteId+"')\">Salvar</button>"
+    +"</div>";
   document.getElementById("modal-backdrop").classList.add("active");
 }
 
 function triggerContatoConversaUpload(clienteId){
   const input = document.createElement("input");
-  input.type = "file"; input.accept = ".txt,text/plain";
-  input.onchange = (e)=> processarContatoConversaTxt(clienteId, e.target.files[0]);
+  input.type="file"; input.accept=".txt,text/plain";
+  input.onchange=(e)=>processarContatoConversaTxt(clienteId,e.target.files[0]);
   input.click();
 }
-
 function triggerContatoPrintUpload(clienteId){
   const input = document.createElement("input");
-  input.type = "file"; input.accept = "image/*";
-  input.onchange = (e)=> processarContatoPrint(clienteId, e.target.files[0]);
+  input.type="file"; input.accept="image/*";
+  input.onchange=(e)=>processarContatoPrint(clienteId,e.target.files[0]);
   input.click();
 }
-
 async function processarContatoConversaTxt(clienteId, file){
   if(!file) return;
   toast("Lendo conversa...");
@@ -3263,36 +3231,34 @@ async function processarContatoConversaTxt(clienteId, file){
     let conversa = (e.target.result||"").replace(/^\uFEFF/,"").trim().slice(0,12000);
     if(!conversa){ toast("Arquivo vazio."); return; }
     toast("Analisando com IA...");
-    const prompt = `Você é assistente de um fotógrafo brasileiro. Leia essa conversa com um cliente e escreva em 2-3 linhas o que aconteceu nesse contato: o cliente demonstrou interesse? perguntou algo? ficou de pensar? respondeu frio? seja direto e objetivo, sem copiar trechos.\n\nConversa:\n${conversa}`;
+    const prompt = "Voce e assistente de um fotografo brasileiro. Leia essa conversa com um cliente e escreva em 2-3 linhas o que aconteceu nesse contato: o cliente demonstrou interesse? perguntou algo? ficou de pensar? respondeu frio? Seja direto e objetivo, sem copiar trechos.\n\nConversa:\n"+conversa;
     const resultado = await callGemini(prompt);
     if(!resultado.texto){ toast("Erro ao analisar."); return; }
     const obs = document.getElementById("contato-obs");
     if(obs) obs.value = resultado.texto.trim();
     toast("Resumo gerado. Confira e salve.");
   };
-  reader.onerror = ()=> toast("Erro ao ler o arquivo.");
-  reader.readAsText(file, "utf-8");
+  reader.onerror=()=>toast("Erro ao ler o arquivo.");
+  reader.readAsText(file,"utf-8");
 }
-
 async function processarContatoPrint(clienteId, file){
   if(!file) return;
   const t = document.getElementById("toast");
-  if(t){ t.textContent = "📷 Analisando print..."; t.style.display="block"; }
+  if(t){ t.textContent="Analisando print..."; t.style.display="block"; }
   const reader = new FileReader();
   reader.onload = async ()=>{
     const base64 = reader.result.split(",")[1];
     const mimeType = file.type||"image/png";
-    const prompt = `Você é assistente de um fotógrafo brasileiro. Analise esse print de conversa com um cliente e escreva em 2-3 linhas o que aconteceu nesse contato: o cliente demonstrou interesse? perguntou algo? ficou de pensar? respondeu frio? Seja direto e objetivo, sem copiar trechos.`;
+    const prompt = "Voce e assistente de um fotografo brasileiro. Analise esse print de conversa com um cliente e escreva em 2-3 linhas o que aconteceu nesse contato: o cliente demonstrou interesse? perguntou algo? ficou de pensar? respondeu frio? Seja direto e objetivo, sem copiar trechos.";
     const resultado = await callGeminiVision(base64, mimeType, prompt);
     if(!resultado.texto){ toast(mensagemErroIA(resultado,"analisar o print")); return; }
     const obs = document.getElementById("contato-obs");
     if(obs) obs.value = resultado.texto.trim();
     toast("Resumo gerado. Confira e salve.");
   };
-  reader.onerror = ()=> toast("Erro ao ler a imagem.");
+  reader.onerror=()=>toast("Erro ao ler a imagem.");
   reader.readAsDataURL(file);
 }
-
 async function confirmarContatado(clienteId){
   const data = document.getElementById("contato-data")?.value;
   const observacao = document.getElementById("contato-obs")?.value.trim()||"";
@@ -3310,7 +3276,6 @@ async function confirmarContatado(clienteId){
     toast("Erro ao salvar. Veja o console.");
   }
 }
-
 async function excluirRegistroContato(clienteId, criadoEm){
   if(!confirm("Excluir este registro de contato?")) return;
   const cli = state.clientes.find(c=>c.id===clienteId);
@@ -3318,35 +3283,35 @@ async function excluirRegistroContato(clienteId, criadoEm){
   const novos = (cli.historicoContatos||[]).filter(c=>c.criadoEm!==criadoEm);
   try{
     await db.collection("clientes").doc(clienteId).update({ historicoContatos: novos });
-    toast("Registro excluído.");
+    toast("Registro excluido.");
     openView("clientes", clienteId);
   }catch(err){
     console.error(err);
     toast("Erro ao excluir.");
   }
 }
-
 function renderHistoricoContatos(cli){
   const historico = [...(cli.historicoContatos||[])].sort((a,b)=>(b.data||"").localeCompare(a.data||""));
   const uc = ultimoContatoCliente(cli.id);
-  return `
-    <div class="view-section-title" style="margin-top:18px;">
-      Contatos registrados
-      ${uc ? `<span style="font-size:11px; color:var(--muted-2); font-weight:400; margin-left:8px;">· último: ${formatDate(uc.data)}</span>` : ""}
-    </div>
-    ${historico.length ? historico.map(c=>`
-      <div class="comentario-item">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-          <div style="flex:1; min-width:0;">
-            <div class="comentario-data">${formatDate(c.data)}${c.criadoEm?" · registrado em "+formatarDataHora(c.criadoEm):""}</div>
-            ${c.observacao ? `<div class="comentario-texto">${escapeHtml(c.observacao)}</div>` : `<div style="font-size:12px;color:var(--muted-2);">Sem observação</div>`}
-          </div>
-          <button class="ghost sm" onclick="excluirRegistroContato('${cli.id}','${c.criadoEm}')">✕</button>
-        </div>
-      </div>`).join("") : `<div style="font-size:13px;color:var(--muted-2);">Nenhum contato registrado ainda.</div>`}
-    <div style="margin-top:10px;">
-      <button class="ghost sm" onclick="abrirMarcarContatado('${cli.id}')">+ Registrar contato</button>
-    </div>`;
+  let html = "<div class=\"view-section-title\" style=\"margin-top:18px;\">Contatos registrados"
+    +(uc ? " <span style=\"font-size:11px; color:var(--muted-2); font-weight:400; margin-left:8px;\">ultimo: "+formatDate(uc.data)+"</span>" : "")
+    +"</div>";
+  if(historico.length){
+    html += historico.map(c=>
+      "<div class=\"comentario-item\">"
+      +"<div style=\"display:flex; justify-content:space-between; align-items:flex-start; gap:8px;\">"
+      +"<div style=\"flex:1; min-width:0;\">"
+      +"<div class=\"comentario-data\">"+formatDate(c.data)+(c.criadoEm?" - registrado em "+formatarDataHora(c.criadoEm):"")+"</div>"
+      +(c.observacao ? "<div class=\"comentario-texto\">"+escapeHtml(c.observacao)+"</div>" : "<div style=\"font-size:12px;color:var(--muted-2);\">Sem observacao</div>")
+      +"</div>"
+      +"<button class=\"ghost sm\" onclick=\"excluirRegistroContato('"+cli.id+"','"+c.criadoEm+"')\">x</button>"
+      +"</div></div>"
+    ).join("");
+  } else {
+    html += "<div style=\"font-size:13px;color:var(--muted-2);\">Nenhum contato registrado ainda.</div>";
+  }
+  html += "<div style=\"margin-top:10px;\"><button class=\"ghost sm\" onclick=\"abrirMarcarContatado('"+cli.id+"')\">+ Registrar contato</button></div>";
+  return html;
 }
 
 function renderDashboard(main){
@@ -3411,8 +3376,6 @@ function renderDashboard(main){
       <div class="value" style="font-size:20px">${proximo ? capitalize((proximo.tipo||"").replace("_"," ")) : "—"}</div>
       <div class="sub">${proximo ? formatDate(proximo.data) + (proximo.horario? " · "+proximo.horario:"") + " · " + nomeRef("clientes",proximo.clienteId) : "Nenhum evento futuro"}</div>
     </div>
-
-    ${renderPainelReativacao()}
 
     ${(()=>{
       const alertas = calcularAlertas();
