@@ -658,6 +658,7 @@ const SCHEMAS = {
     fields: [
       {key:"clienteId", label:"Cliente", type:"ref", ref:"clientes", required:true},
       {key:"tipoInteresse", label:"Interesse em", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"], required:true},
+      {key:"mesPrevisto", label:"Mês previsto (se ainda não sabe a data exata — ex: aguardando cartório, ensaio de gestante)", type:"month"},
       {key:"status", label:"Status da negociação", type:"select", options:["negociacao","fechado","perdido"], triggersRefresh:true},
       {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"], visibleIf: fs=>fs.status==="perdido"},
       {key:"valorProposto", label:"Valor proposto (R$)", type:"number"},
@@ -666,6 +667,7 @@ const SCHEMAS = {
     columns: [
       {key:"clienteId", label:"Cliente", format:v=>nomeRef("clientes",v)},
       {key:"tipoInteresse", label:"Interesse", format:v=>v?capitalize(v.replace("_"," ")):"—"},
+      {key:"mesPrevisto", label:"Mês previsto", format:v=>v?formatarMesAno(v):"—"},
       {key:"status", label:"Status", format:v=>{
         const s = v||"negociacao";
         const sym = {negociacao:"◑", fechado:"✓", perdido:"✕"};
@@ -880,6 +882,12 @@ function formatDate(v){
   if(!v) return "—";
   const [y,m,d] = v.split("-");
   return d ? `${d}/${m}/${y}` : v;
+}
+function formatarMesAno(mesStr){
+  if(!mesStr) return "—";
+  const [y,m] = mesStr.split("-");
+  const nomesMes = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  return `${nomesMes[Number(m)-1]||m}/${y}`;
 }
 function nomeRef(col, id){
   const item = state[col]?.find(i=>i.id===id);
@@ -2044,22 +2052,30 @@ function renderAgendaLista(){
     porMes[chave].push({tipo:"bloqueio", item:b});
   });
 
+  // negociações com mês previsto (sem data exata ainda) e sem evento vinculado —
+  // fica visível mesmo que o mês previsto já tenha passado, pra não perder o registro de que a consulta existe
+  state.negociacoes.filter(n=>n.mesPrevisto && !n.eventoId && n.status!=="perdido").forEach(n=>{
+    const chave = n.mesPrevisto;
+    if(!porMes[chave]) porMes[chave] = [];
+    porMes[chave].push({tipo:"negociacaoSemData", item:n});
+  });
+
   const mesesOrdenados = Object.keys(porMes).sort();
-  if(!mesesOrdenados.length) return `<div class="card"><div class="empty-state">Nenhum evento ou bloqueio futuro cadastrado.</div></div>`;
+  if(!mesesOrdenados.length) return `<div class="card"><div class="empty-state">Nenhum evento, bloqueio ou negociação sem data cadastrado.</div></div>`;
 
   return mesesOrdenados.map(chave=>{
     const [ano, mes] = chave.split("-");
     const titulo = `${MESES[Number(mes)-1]} ${ano}`;
     const isOpen = agendaListaExpandida.has(chave);
     const itens = porMes[chave].sort((a,b)=>{
-      const da = (a.item.data||"")+(a.item.horario||"");
-      const db2 = (b.item.data||"")+(b.item.horario||"");
-      return da.localeCompare(db2);
+      const keyOf = (x)=> x.tipo==="negociacaoSemData" ? "9999" : (x.item.data||"")+(x.item.horario||"");
+      return keyOf(a).localeCompare(keyOf(b));
     });
     const evs = itens.filter(i=>i.tipo==="evento");
     const bloqs = itens.filter(i=>i.tipo==="bloqueio");
+    const negSemData = itens.filter(i=>i.tipo==="negociacaoSemData");
     const totalValor = evs.reduce((s,{item:e})=>s+(Number(e.valorContratado)||0),0);
-    const resumo = `${evs.length} evento${evs.length===1?"":"s"}${bloqs.length?` · ${bloqs.length} bloqueio${bloqs.length===1?"":"s"}`:""}${totalValor?` · ${money(totalValor)}`:""}`;
+    const resumo = `${evs.length} evento${evs.length===1?"":"s"}${bloqs.length?` · ${bloqs.length} bloqueio${bloqs.length===1?"":"s"}`:""}${negSemData.length?` · ${negSemData.length} sem data confirmada`:""}${totalValor?` · ${money(totalValor)}`:""}`;
 
     return `
       <div class="card" style="padding:0; margin-bottom:10px; overflow:hidden;">
@@ -2074,6 +2090,31 @@ function renderAgendaLista(){
         ${isOpen ? `
           <div style="border-top:1px solid var(--border-solid);">
             ${itens.map(({tipo, item})=>{
+              if(tipo==="negociacaoSemData"){
+                const n = item;
+                const cliente = state.clientes.find(c=>c.id===n.clienteId);
+                const wa = cliente ? whatsappLink(cliente.telefone) : null;
+                const mesAtual = new Date().toISOString().slice(0,7);
+                const atrasado = n.mesPrevisto < mesAtual;
+                return `
+                  <div style="display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; border-left:3px solid #eab308;">
+                    <div style="flex:1; min-width:0;">
+                      <div style="font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                        <span>🕓 ${nomeRef("clientes", n.clienteId)}</span>
+                        <span class="pre-chip" style="font-size:10px;">Sem data confirmada</span>
+                        ${atrasado ? `<span style="color:#ef4444; font-size:11px; font-weight:700;">⚠️ mês previsto já passou</span>` : ""}
+                      </div>
+                      <div style="font-size:12px; color:var(--muted-2); margin-top:2px;">
+                        ${n.tipoInteresse ? capitalize(n.tipoInteresse.replace("_"," ")) : "Interesse não informado"} · negociação ${negociacaoStatusLabel(n.status)}
+                      </div>
+                    </div>
+                    <div class="row-actions">
+                      ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
+                      <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
+                      <button class="sm" onclick="criarEventoDeNegociacao('${n.id}')">📆 Criar evento</button>
+                    </div>
+                  </div>`;
+              }
               if(tipo==="bloqueio") return `
                 <div style="display:flex; align-items:center; gap:10px; padding:11px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; background:repeating-linear-gradient(90deg,var(--surface-2) 0px,var(--surface-2) 6px,transparent 6px,transparent 12px);">
                   <div style="flex:1; min-width:0;">
@@ -2559,6 +2600,7 @@ function renderViewNegociacao(neg){
   return `<h3>Negociação · ${cliente?.nome||"—"}</h3>
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${neg.clienteId}');return false;">${nomeRef("clientes",neg.clienteId)}</a>`)}
     ${viewRow("Interesse em", neg.tipoInteresse ? capitalize(neg.tipoInteresse.replace("_"," ")) : "—")}
+    ${neg.mesPrevisto ? viewRow("Mês previsto (sem data definida)", formatarMesAno(neg.mesPrevisto)) : ""}
     ${viewRow("Status", `<span class="badge">${negociacaoStatusLabel(neg.status)}</span>`)}
     ${neg.motivoPerda && neg.status==="perdido" ? viewRow("Motivo da perda", capitalize(neg.motivoPerda.replace("_"," "))) : ""}
     ${viewRow("Valor proposto", neg.valorProposto ? money(neg.valorProposto) : "—")}
