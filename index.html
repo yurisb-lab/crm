@@ -69,6 +69,10 @@
     --shadow-2: 0 12px 26px -12px #00000030;
   }
   *{box-sizing:border-box;}
+  html, body{
+    max-width:100vw;
+    overflow-x:hidden;
+  }
   body{
     margin:0; background:var(--bg); color:var(--text);
     font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;
@@ -229,10 +233,12 @@
   .card{
     background:var(--surface); border:0.5px solid var(--border-solid); border-radius:var(--radius);
     padding:18px 20px; box-shadow:var(--shadow-1);
+    max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;
   }
   .card-featured{
     background:var(--surface-2); border:1px solid var(--amber); border-radius:var(--radius);
     padding:18px 20px; box-shadow:var(--shadow-2);
+    max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;
   }
   .stat-card .label{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:8px; font-weight:600; }
   .stat-card .value{ font-family:'Fraunces',serif; font-size:28px; font-weight:600; letter-spacing:-.01em; }
@@ -932,6 +938,11 @@ function statusRelacionamentoCliente(clienteId){
   return mesesDesde(concluidos[0].data) <= 24 ? "ativo" : "inativo";
 }
 function badgeRelacionamento(clienteId){
+  const cli = state.clientes.find(c=>c.id===clienteId);
+  if(cli?.hibernado){
+    const titulo = cli.hibernadoMotivo ? escapeHtml(cli.hibernadoMotivo) : "Hibernado manualmente";
+    return `<span class="badge" style="border-color:var(--muted-2);color:var(--muted-2);" title="${titulo}">😴 Hibernado</span>`;
+  }
   const s = statusRelacionamentoCliente(clienteId);
   return `<span class="badge" style="border-color:${RELACIONAMENTO_CORES[s]};color:${RELACIONAMENTO_CORES[s]}">${RELACIONAMENTO_LABELS[s]}</span>`;
 }
@@ -1294,7 +1305,7 @@ function renderConfiguracoes(main){
     <div class="card" style="margin-top:16px;">
       <div class="section-title" style="margin-top:0;">Protocolo Reativação de Clientes</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
-        Cole aqui os modelos de mensagem que você usa para reativar clientes parados. Você pode adicionar mais campos se precisar de mais de 3 modelos.
+        Cole aqui os modelos de mensagem que você usa para reativar clientes parados. Você pode adicionar mais campos se precisar de mais de 3 modelos. Use <code>{nome}</code> — ele é substituído automaticamente pelo nome do cliente. Esses modelos aparecem no botão "✦ Mensagem" do painel "Reativar clientes", no Dashboard.
       </div>
       <div id="protocolo-reativacao-container"></div>
       <button class="ghost sm" onclick="adicionarCampoProtocoloReativacao()">+ Adicionar campo</button>
@@ -1556,6 +1567,7 @@ function buildCrmContext(){
       historicoEvs ? `histórico:[${historicoEvs}]` : "",
       comentarios ? `notas:[${comentarios}]` : "",
       c.observacoes ? `obs:[${c.observacoes}]` : "",
+      c.hibernado ? `HIBERNADO (motivo: ${c.hibernadoMotivo||"não informado"}) — não sugerir reativação` : "",
     ].filter(Boolean);
     return partes.join(" | ");
   }).join("\n");
@@ -3343,6 +3355,31 @@ function ultimoContatoCliente(clienteId){
   return [...cli.historicoContatos].sort((a,b)=>(b.data||"").localeCompare(a.data||""))[0];
 }
 
+// valor total já gerado por um cliente (soma de todos os eventos) — usado pra priorizar quem reativar primeiro
+function valorTotalCliente(clienteId){
+  return state.eventos.filter(e=>e.clienteId===clienteId).reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
+}
+
+// "gancho" natural pra puxar assunto: aniversário de filho ou bodas de casamento nos próximos 60 dias
+function proximoGanchoCliente(clienteId){
+  const candidatos = [];
+  state.criancas.filter(c=>c.clientePaiId===clienteId || c.clienteMaeId===clienteId).forEach(f=>{
+    const dias = diasParaAniversario(f.dataNascimento);
+    if(typeof dias==="number" && dias<=60){
+      candidatos.push({ dias, texto:`🎂 ${f.nome} completa ${idadeAtual(f.dataNascimento)+1} anos em ${dias===0?"hoje":dias+" dias"}` });
+    }
+  });
+  const casamento = state.casamentos.find(c=>c.clienteId===clienteId);
+  if(casamento){
+    const dias = diasParaAniversario(casamento.dataCasamento);
+    if(typeof dias==="number" && dias<=60){
+      candidatos.push({ dias, texto:`💍 Bodas de ${idadeAtual(casamento.dataCasamento)+1} anos em ${dias===0?"hoje":dias+" dias"}` });
+    }
+  }
+  candidatos.sort((a,b)=>a.dias-b.dias);
+  return candidatos[0] || null;
+}
+
 function clientesParaReativar(){
   const hoje = new Date().toISOString().slice(0,10);
   const limite12m = new Date(); limite12m.setMonth(limite12m.getMonth()-12);
@@ -3350,6 +3387,8 @@ function clientesParaReativar(){
   const limite90d = new Date(); limite90d.setDate(limite90d.getDate()-90);
   const limite90dStr = limite90d.toISOString().slice(0,10);
   return state.clientes.filter(cli=>{
+    if(cli.hibernado) return false; // hibernado manualmente — nunca aparece aqui
+    if(alertaAdormecido(cli, "reativacao_cliente", hoje)) return false; // adiado manualmente pelo botão "Adiar"
     const temFuturo = state.eventos.some(e=>e.clienteId===cli.id && e.data>=hoje);
     if(temFuturo) return false;
     const uc = ultimoContatoCliente(cli.id);
@@ -3359,6 +3398,9 @@ function clientesParaReativar(){
     const ultimoEv = evs.sort((a,b)=>(b.data||"").localeCompare(a.data||""))[0];
     return ultimoEv.data <= limite12mStr;
   }).sort((a,b)=>{
+    // prioriza quem já gerou mais receita; em empate, quem está há mais tempo sem contato primeiro
+    const diffValor = valorTotalCliente(b.id) - valorTotalCliente(a.id);
+    if(diffValor !== 0) return diffValor;
     const ua = ultimoContatoCliente(a.id);
     const ub = ultimoContatoCliente(b.id);
     if(!ua && !ub) return 0;
@@ -3380,22 +3422,138 @@ function renderPainelReativacao(){
         const evs = state.eventos.filter(e=>e.clienteId===cli.id && e.data).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
         const ultimoEv = evs[0];
         const mesesEv = ultimoEv ? Math.floor((new Date()-new Date(ultimoEv.data+"T00:00:00"))/86400000/30) : null;
-        const ucLabel = uc ? "Ultimo contato: "+formatDate(uc.data) : "Nunca contatado";
+        const ucLabel = uc ? "Último contato: "+formatDate(uc.data) : "Nunca contatado";
         const ucCor = !uc ? "var(--muted-2)" : "var(--muted)";
+        const valorTotal = valorTotalCliente(cli.id);
+        const gancho = proximoGanchoCliente(cli.id);
         return "<div style=\"display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap;\">"
           +"<div style=\"flex:1; min-width:180px;\">"
-          +"<div style=\"font-weight:600; font-size:14px; cursor:pointer;\" onclick=\"openView('clientes','"+cli.id+"')\">"+(cli.nome+(cli.nomeConjuge?" & "+cli.nomeConjuge:""))+"</div>"
-          +"<div style=\"font-size:12px; color:var(--muted); margin-top:3px;\">"+(ultimoEv ? "ultimo evento: "+capitalize((ultimoEv.tipo||"").replace("_"," "))+" - "+formatDate(ultimoEv.data)+(mesesEv?" - ha "+mesesEv+" meses":"") : "sem eventos")+"</div>"
+          +"<div style=\"font-weight:600; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:8px; flex-wrap:wrap;\" onclick=\"openView('clientes','"+cli.id+"')\">"
+            +(cli.nome+(cli.nomeConjuge?" & "+cli.nomeConjuge:""))
+            +(valorTotal>0 ? "<span style=\"font-size:11px; font-weight:600; color:var(--amber-text); background:var(--amber-dim); border-radius:20px; padding:2px 8px;\">"+money(valorTotal)+" gerados</span>" : "")
+          +"</div>"
+          +"<div style=\"font-size:12px; color:var(--muted); margin-top:3px;\">"+(ultimoEv ? "último evento: "+capitalize((ultimoEv.tipo||"").replace("_"," "))+" - "+formatDate(ultimoEv.data)+(mesesEv?" - há "+mesesEv+" meses":"") : "sem eventos")+"</div>"
           +"<div style=\"font-size:11px; color:"+ucCor+"; margin-top:2px;\">"+ucLabel+"</div>"
           +(uc && uc.observacao ? "<div style=\"font-size:12px; color:var(--muted); margin-top:4px; font-style:italic;\">\""+escapeHtml(uc.observacao)+"\"</div>" : "")
+          +(gancho ? "<div style=\"font-size:12px; color:var(--green); margin-top:5px; font-weight:600;\">"+gancho.texto+"</div>" : "")
           +"</div>"
           +"<div style=\"display:flex; gap:6px; flex-wrap:wrap; align-items:center; flex-shrink:0;\">"
           +(wa ? "<button class=\"sm\" onclick=\"window.open('"+wa+"','_blank')\" title=\"WhatsApp\"><i class=\"ti ti-brand-whatsapp\" style=\"color:#25D366;font-size:16px;\"></i></button>" : "")
+          +"<button class=\"sm\" onclick=\"enviarMensagemReativacao('"+cli.id+"')\" title=\"Usar modelo de reativação\">✦ Mensagem</button>"
           +"<button class=\"sm\" onclick=\"abrirMarcarContatado('"+cli.id+"')\">Contatado</button>"
+          +"<button class=\"sm ghost\" onclick=\"hibernarCliente('"+cli.id+"')\" title=\"Não pretendo reativar este cliente\">😴 Hibernar</button>"
+          +"<div style=\"position:relative;\">"
+            +"<button class=\"sm ghost\" onclick=\"toggleMenuAdiarReativacao('"+cli.id+"')\" title=\"Adiar este lembrete\">⋯</button>"
+            +"<div id=\"menu-adiar-"+cli.id+"\" style=\"display:none; position:absolute; right:0; top:32px; background:var(--surface); border:1px solid var(--border-solid); border-radius:8px; box-shadow:var(--shadow-2); z-index:5; padding:6px; min-width:120px;\">"
+              +"<div style=\"font-size:11px; color:var(--muted-2); padding:2px 8px 4px;\">Adiar por:</div>"
+              +[30,60,90].map(d=>"<button class=\"sm ghost\" style=\"display:block; width:100%; text-align:left;\" onclick=\"snoozeAlerta('clientes','"+cli.id+"','reativacao_cliente',"+d+")\">"+d+" dias</button>").join("")
+            +"</div>"
+          +"</div>"
           +"</div>"
           +"</div>";
       }).join("")}
     </div>`;
+}
+
+function toggleMenuAdiarReativacao(clienteId){
+  document.querySelectorAll("[id^='menu-adiar-']").forEach(el=>{
+    if(el.id !== "menu-adiar-"+clienteId) el.style.display="none";
+  });
+  const el = document.getElementById("menu-adiar-"+clienteId);
+  if(el) el.style.display = el.style.display==="none" ? "block" : "none";
+}
+document.addEventListener("click", (e)=>{
+  if(!e.target.closest("[id^='menu-adiar-']") && e.target.getAttribute?.("title")!=="Adiar este lembrete"){
+    document.querySelectorAll("[id^='menu-adiar-']").forEach(el=> el.style.display="none");
+  }
+});
+
+/* ---------- Mensagem de reativação a partir dos modelos salvos em Configurações ---------- */
+function montarMensagensReativacaoDisponiveis(clienteId){
+  const cli = state.clientes.find(c=>c.id===clienteId);
+  const templates = (state.config.protocoloReativacao||[]).filter(t=>t && t.trim());
+  return templates.map(t=> t.replaceAll("{nome}", cli?.nome||""));
+}
+function enviarMensagemReativacao(clienteId){
+  const cli = state.clientes.find(c=>c.id===clienteId);
+  if(!cli) return;
+  const mensagens = montarMensagensReativacaoDisponiveis(clienteId);
+  if(!mensagens.length){ toast("Cadastre ao menos um modelo em Configurações → Protocolo Reativação de Clientes."); return; }
+  if(mensagens.length===1){
+    abrirModalEnvioMensagem(mensagens[0], cli, `Reativação de ${cli.nome}`);
+    return;
+  }
+  abrirEscolherModeloReativacao(clienteId, mensagens);
+}
+function abrirEscolherModeloReativacao(clienteId, mensagens){
+  const cli = state.clientes.find(c=>c.id===clienteId);
+  window._modelosReativacaoTemp = { clienteId, mensagens };
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Escolha um modelo</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">Para ${escapeHtml(cli?.nome||"")}</div>
+    ${mensagens.map((m,i)=>`<div class="view-link-card" style="white-space:pre-wrap; cursor:pointer;" onclick="usarModeloReativacao(${i})">${escapeHtml(m)}</div>`).join("")}
+    <div class="modal-actions"><button class="ghost" onclick="closeModal()">Cancelar</button></div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+function usarModeloReativacao(i){
+  const dados = window._modelosReativacaoTemp;
+  if(!dados) return;
+  const cli = state.clientes.find(c=>c.id===dados.clienteId);
+  const texto = dados.mensagens[i];
+  if(!cli || texto===undefined) return;
+  abrirModalEnvioMensagem(texto, cli, `Reativação de ${cli.nome}`);
+}
+
+/* =========================================================
+   HIBERNAR / REATIVAR CLIENTE
+   Decisão manual e duradoura ("não vou mais tentar reativar"),
+   diferente do "adiar" (temporário) e do status calculado
+   automaticamente (Lead/Ativo/Inativo/Recorrente).
+   ========================================================= */
+function hibernarCliente(clienteId){
+  const cli = state.clientes.find(c=>c.id===clienteId);
+  if(!cli) return;
+  document.getElementById("modal-content").innerHTML = `
+    <h3>😴 Hibernar cliente</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:14px;">
+      ${cli.nome}${cli.nomeConjuge?" & "+cli.nomeConjuge:""} sai do painel de reativação e da lista principal de clientes — até você reativar manualmente.
+    </div>
+    <div class="field"><label>Motivo (opcional)</label>
+      <textarea id="hib-motivo" rows="3" placeholder="Ex: só queria orçamento e sumiu; cliente difícil; mudou de cidade..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="danger" onclick="confirmarHibernarCliente('${clienteId}')">Hibernar cliente</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function confirmarHibernarCliente(clienteId){
+  const motivo = document.getElementById("hib-motivo")?.value.trim() || "";
+  try{
+    await db.collection("clientes").doc(clienteId).update({
+      hibernado: true, hibernadoMotivo: motivo, hibernadoEm: new Date().toISOString()
+    });
+    toast("Cliente hibernado.");
+    closeModal();
+  }catch(err){
+    console.error(err);
+    toast("Erro ao hibernar. Veja o console.");
+  }
+}
+async function reativarClienteHibernado(clienteId){
+  if(!confirm("Reativar este cliente? Ele volta a aparecer na lista principal e pode voltar a aparecer no painel de reativação.")) return;
+  try{
+    await db.collection("clientes").doc(clienteId).update({
+      hibernado: false, hibernadoMotivo: "", hibernadoEm: ""
+    });
+    toast("Cliente reativado.");
+    openView("clientes", clienteId);
+  }catch(err){
+    console.error(err);
+    toast("Erro ao reativar. Veja o console.");
+  }
 }
 
 function abrirMarcarContatado(clienteId){
@@ -4040,6 +4198,8 @@ function renderHistoricoRecibos(){
   `;
 }
 
+const clientesHibernadosExpandido = new Set(); // fica fechada por padrão
+
 function renderCollectionList(col){
   const container = document.getElementById(`collection-list-${col}`);
   if(!container) return;
@@ -4047,6 +4207,8 @@ function renderCollectionList(col){
   const termo = (collectionSearch[col]||"").trim().toLowerCase();
 
   let items = [...state[col]];
+  if(col==="clientes") items = items.filter(c=>!c.hibernado); // some da lista principal — vive na pilha separada
+
   if(termo){
     items = items.filter(item => Object.values(item).some(v=>{
       if(v==null) return false;
@@ -4083,7 +4245,50 @@ function renderCollectionList(col){
         </tbody>
       </table>` : `<div class="empty-state"><div class="serif">Nada encontrado</div>${termo ? "Tente outro termo de busca." : `Cadastre o primeiro ${schema.singular.toLowerCase()} para começar.`}</div>`}
     </div>
+    ${col==="clientes" ? renderPilhaClientesHibernados() : ""}
   `;
+}
+
+function renderPilhaClientesHibernados(){
+  const hibernados = state.clientes.filter(c=>c.hibernado)
+    .sort((a,b)=>(b.hibernadoEm||"").localeCompare(a.hibernadoEm||""));
+  if(!hibernados.length) return "";
+  const isOpen = clientesHibernadosExpandido.has("hibernados");
+  return `
+    <div class="card" style="padding:0; margin-top:14px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;"
+           onclick="togglePilhaClientesHibernados()">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:'Fraunces',serif; font-size:18px; color:var(--muted-2);">${isOpen?"▾":"▸"} 😴 Hibernados</span>
+          <span style="font-size:12px; color:var(--muted);">${hibernados.length} cliente${hibernados.length===1?"":"s"}</span>
+        </div>
+        <span style="font-size:12px; color:var(--muted-2);">${isOpen?"recolher":"expandir"}</span>
+      </div>
+      ${isOpen ? `
+        <div style="border-top:1px solid var(--border-solid); overflow-x:auto;">
+          <table>
+            <thead><tr><th>Nome</th><th>Motivo</th><th>Desde</th><th></th></tr></thead>
+            <tbody>
+              ${hibernados.map(c=>`<tr>
+                <td><a href="#" onclick="openView('clientes','${c.id}');return false;">${c.nome}${c.nomeConjuge?" & "+c.nomeConjuge:""}</a></td>
+                <td style="max-width:260px;">${c.hibernadoMotivo?escapeHtml(c.hibernadoMotivo):"—"}</td>
+                <td>${c.hibernadoEm?formatDate(c.hibernadoEm.slice(0,10)):"—"}</td>
+                <td class="row-actions">
+                  <button class="sm" onclick="openView('clientes','${c.id}')">Ver</button>
+                  <button class="sm" onclick="reativarClienteHibernado('${c.id}')">Reativar</button>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+function togglePilhaClientesHibernados(){
+  if(clientesHibernadosExpandido.has("hibernados")) clientesHibernadosExpandido.delete("hibernados");
+  else clientesHibernadosExpandido.add("hibernados");
+  renderCollectionList("clientes");
 }
 
 function renderEventosExtras(){
@@ -5647,6 +5852,12 @@ function renderViewCliente(cli){
       ${badgeRelacionamento(cli.id)}
       ${ucView ? `<span style="font-size:11px; background:var(--surface-2); border:1px solid var(--border-solid); border-radius:20px; padding:2px 10px; color:var(--muted);">Último contato: ${formatDate(ucView.data)}</span>` : `<span style="font-size:11px; color:var(--muted-2);">Nenhum contato registrado</span>`}
     </div>
+    ${cli.hibernado ? `
+      <div class="card" style="padding:10px 14px; margin-bottom:14px; border-color:var(--muted-2);">
+        <div style="font-size:12px; color:var(--muted-2);">😴 Hibernado em ${formatDate((cli.hibernadoEm||"").slice(0,10))}${cli.hibernadoMotivo ? " — "+escapeHtml(cli.hibernadoMotivo) : ""}</div>
+        <button class="ghost sm" style="margin-top:6px;" onclick="reativarClienteHibernado('${cli.id}')">↩ Reativar cliente</button>
+      </div>
+    ` : `<button class="ghost sm" style="margin-bottom:10px;" onclick="closeModal();setTimeout(()=>hibernarCliente('${cli.id}'),150)">😴 Hibernar cliente</button>`}
     ${temIA() ? `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📷 Atualizar via print ou contato .vcf (IA)</button>` : `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📋 Atualizar via contato .vcf</button>`}
     ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener" title="WhatsApp">${cli.telefone} ↗ <i class="ti ti-brand-whatsapp" style="color:#25D366;"></i></a>` : cli.telefone) : "—")}
     ${viewRow("Cidade", cli.cidade || "—")}
@@ -6229,14 +6440,16 @@ function renderField(f, value){
       </div>`;
   }
   if(f.type==="ref"){
-    const opts = [...(state[f.ref] || [])].sort((a,b)=>{
-      if(f.key==="criancaId" && formState.clienteId){
-        const aLinked = (a.clientePaiId===formState.clienteId || a.clienteMaeId===formState.clienteId) ? 0 : 1;
-        const bLinked = (b.clientePaiId===formState.clienteId || b.clienteMaeId===formState.clienteId) ? 0 : 1;
-        if(aLinked !== bLinked) return aLinked - bLinked;
-      }
-      return (a.nome||a.nomeCasal||"").localeCompare(b.nome||b.nomeCasal||"", "pt-BR");
-    });
+    const opts = [...(state[f.ref] || [])]
+      .filter(o => !(f.ref==="clientes" && o.hibernado && o.id!==value)) // esconde hibernados, exceto o já selecionado
+      .sort((a,b)=>{
+        if(f.key==="criancaId" && formState.clienteId){
+          const aLinked = (a.clientePaiId===formState.clienteId || a.clienteMaeId===formState.clienteId) ? 0 : 1;
+          const bLinked = (b.clientePaiId===formState.clienteId || b.clienteMaeId===formState.clienteId) ? 0 : 1;
+          if(aLinked !== bLinked) return aLinked - bLinked;
+        }
+        return (a.nome||a.nomeCasal||"").localeCompare(b.nome||b.nomeCasal||"", "pt-BR");
+      });
     const isNew = value === "__new__";
     return `<div class="field"><label>${f.label}</label>
       <select id="${id}" onchange="onRefChange('${f.key}','${f.ref}',this.value)" style="width:100%">
