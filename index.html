@@ -3471,19 +3471,44 @@ function desdispensarAvisoEvento(eventoId, dataEvento){
 function renderCardAvisoEvento(e, quando, emoji, urgente){
   const cli = nomeRef("clientes", e.clienteId);
   const tipoLabel = e.tipo==="outro" && e.outroDescricao ? e.outroDescricao : capitalize((e.tipo||"outro").replace("_"," "));
-  const detalhes = [tipoLabel, cli, e.horario?("🕓 "+e.horario):"", e.endereco?("📍 "+e.endereco):""].filter(Boolean).join(" · ");
+  const enderecoHtml = e.endereco
+    ? `<a href="#" onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.endereco)}','_blank');return false;" style="color:inherit; text-decoration:underline; text-decoration-style:dotted;">📍 ${e.endereco}</a>`
+    : "";
+  const detalhes = [tipoLabel, cli, e.horario?("🕓 "+e.horario):"", enderecoHtml].filter(Boolean).join(" · ");
   const preparado = avisoEventoDispensado(e.id, e.data);
   return `
     <div class="aviso-evento-card ${urgente?"urgente":""}" style="${preparado?"opacity:.55;":""}">
       <div>
-        <div class="aviso-evento-titulo">${emoji} Você tem evento ${quando}! ${preparado ? "✓ Já marcado como preparado" : "Tudo preparado?"}</div>
+        <div class="aviso-evento-titulo">${emoji} Você tem evento ${quando}! ${preparado ? "✓ Já marcado como concluído" : "Tudo concluído?"}</div>
         <div class="aviso-evento-detalhe">${detalhes}</div>
       </div>
       <div class="aviso-evento-acoes">
         <button class="sm" onclick="openView('eventos','${e.id}')">Ver evento</button>
-        <button class="sm ghost" onclick="${preparado ? `desdispensarAvisoEvento('${e.id}','${e.data}')` : `dispensarAvisoEvento('${e.id}','${e.data}')`}">${preparado ? "↩ Desmarcar" : "✓ Preparado"}</button>
+        <button class="sm ghost" onclick="${preparado ? `desdispensarAvisoEvento('${e.id}','${e.data}')` : `abrirConfirmacaoConcluido('${e.id}','${e.data}')`}">${preparado ? "↩ Desmarcar" : "✓ Concluído"}</button>
       </div>
     </div>`;
+}
+
+function abrirConfirmacaoConcluido(eventoId, dataEvento){
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Marcar evento como concluído</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:16px;">Isso só esconde o aviso deste evento no Dashboard — não altera o status do evento em si.</div>
+    <div class="field" style="display:flex; align-items:center; gap:10px;">
+      <input type="checkbox" id="confirm-concluido-check" style="width:18px; height:18px;">
+      <label for="confirm-concluido-check" style="margin:0;">Tenho certeza que quero marcar como concluído</label>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="confirmarConcluido('${eventoId}','${dataEvento}')">Confirmar</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+function confirmarConcluido(eventoId, dataEvento){
+  const check = document.getElementById("confirm-concluido-check");
+  if(!check?.checked){ toast("Marque a caixa de confirmação primeiro."); return; }
+  dispensarAvisoEvento(eventoId, dataEvento);
+  closeModal();
 }
 function renderAvisosEventoProximo(){
   const hojeStr = new Date().toISOString().slice(0,10);
