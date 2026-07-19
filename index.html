@@ -596,6 +596,7 @@ function startListeners(){
 const QUICK_FIELDS = {
   clientes: [
     {key:"nome", label:"Nome", type:"text", required:true},
+    {key:"nomeConjuge", label:"Cônjuge / parceiro(a) (se for casamento)", type:"text"},
     {key:"telefone", label:"Telefone", type:"tel"},
     {key:"cidade", label:"Cidade", type:"text"}
   ],
@@ -649,7 +650,7 @@ const SCHEMAS = {
       {key:"observacoes", label:"Observações", type:"textarea"}
     ],
     columns: [
-      {key:"nome", label:"Nome"},
+      {key:"nome", label:"Nome", format:(v,row)=>`<a href="#" onclick="openView('clientes','${row.id}');return false;">${v||"—"}</a>`},
       {key:"telefone", label:"Telefone"},
       {key:"cidade", label:"Cidade"},
       {key:"origem", label:"Origem", format:v=>v?capitalize(v):"—"},
@@ -712,7 +713,7 @@ const SCHEMAS = {
       {key:"observacoes", label:"Observações", type:"textarea"}
     ],
     columns: [
-      {key:"nome", label:"Nome"},
+      {key:"nome", label:"Nome", format:(v,row)=>`<a href="#" onclick="openView('criancas','${row.id}');return false;">${v||"—"}</a>`},
       {key:"_idadeAtual", label:"Idade atual", format:(v,row)=>{
         const idade = idadeAtual(row.dataNascimento);
         if(typeof idade !== "number") return "—";
@@ -768,7 +769,6 @@ const SCHEMAS = {
       {key:"nomeEvento", label:"Nome do evento (opcional, ex: Festinha da Sofia)", type:"text"},
       {key:"endereco", label:"Endereço / Local", type:"text"},
       {key:"clienteId", label:"Cliente responsável", type:"ref", ref:"clientes", required:true},
-      {key:"conjugeEvento", label:"Cônjuge", type:"text", visibleIf: fs=>["casamento_civil","casamento_religioso"].includes(fs.tipo)},
       {key:"criancaId", label:"Criança (opcional)", type:"ref", ref:"criancas", visibleIf: fs=>!["casamento_civil","casamento_religioso"].includes(fs.tipo)},
       {key:"recepcao", label:"Houve recepção?", type:"checkbox", visibleIf: fs=>["casamento_civil","casamento_religioso","batizado"].includes(fs.tipo)},
       {key:"valorTabela", label:"Valor de tabela (R$)", type:"number"},
@@ -786,7 +786,7 @@ const SCHEMAS = {
     columns: [
       {key:"data", label:"Data", format:v=>formatDate(v)},
       {key:"tipo", label:"Tipo", format:(v,row)=> v==="outro" && row.outroDescricao ? `Outro: ${row.outroDescricao}` : (v?capitalize(v.replace("_"," ")):"—")},
-      {key:"clienteId", label:"Cliente", format:v=>nomeRef("clientes",v)},
+      {key:"clienteId", label:"Cliente", format:v=>v?`<a href="#" onclick="openView('clientes','${v}');return false;">${nomeRef("clientes",v)}</a>`:"—"},
       {key:"valorContratado", label:"Valor", format:v=>v?money(v):"—"},
       {key:"status", label:"Status", format:v=>{
         const s = v||'confirmado';
@@ -1145,9 +1145,7 @@ function renderAnoStack(ano, eventosDoAno, schema){
                 <tr>
                   ${schema.columns.map(c=>`<td>${c.format ? c.format(item[c.key],item) : (item[c.key] ?? "—")}</td>`).join("")}
                   <td class="row-actions">
-                    <button class="sm" onclick="openView('eventos','${item.id}')">Ver</button>
                     <button class="sm" onclick="openForm('eventos','${item.id}')">Editar</button>
-                    <button class="sm danger" onclick="deleteDoc('eventos','${item.id}')">Excluir</button>
                   </td>
                 </tr>
               `).join("")}
@@ -1184,8 +1182,34 @@ function renderPage(page){
 
 /* ---------- CONFIGURAÇÕES ---------- */
 let configDraft = {};
+let protocoloReativacaoDraft = [];
+function adicionarCampoProtocoloReativacao(){
+  protocoloReativacaoDraft.push("");
+  renderProtocoloReativacaoLista();
+}
+function removerCampoProtocoloReativacao(i){
+  if(!confirm("Remover este campo? O texto dele será perdido ao salvar.")) return;
+  protocoloReativacaoDraft.splice(i,1);
+  renderProtocoloReativacaoLista();
+}
+function renderProtocoloReativacaoLista(){
+  const container = document.getElementById("protocolo-reativacao-container");
+  if(!container) return;
+  container.innerHTML = protocoloReativacaoDraft.map((texto,i)=>`
+    <div class="field">
+      <label style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Modelo ${i+1}</span>
+        ${protocoloReativacaoDraft.length>1 ? `<button class="ghost sm" style="padding:2px 8px;" onclick="removerCampoProtocoloReativacao(${i})">Remover</button>` : ""}
+      </label>
+      <textarea rows="4" placeholder="Cole aqui a mensagem de reativação..." oninput="protocoloReativacaoDraft[${i}]=this.value">${texto||""}</textarea>
+    </div>
+  `).join("");
+}
 function renderConfiguracoes(main){
   configDraft = { ...state.config, precos: { ...(state.config.precos||{}) } };
+  protocoloReativacaoDraft = Array.isArray(state.config.protocoloReativacao) && state.config.protocoloReativacao.length
+    ? [...state.config.protocoloReativacao]
+    : ["", "", ""];
   const tiposEvento = [
     {key:"aniversario", label:"Aniversário"},
     {key:"batizado", label:"Batizado"},
@@ -1227,6 +1251,15 @@ function renderConfiguracoes(main){
     </div>
 
     <div class="card" style="margin-top:16px;">
+      <div class="section-title" style="margin-top:0;">Protocolo Reativação de Clientes</div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
+        Cole aqui os modelos de mensagem que você usa para reativar clientes parados. Você pode adicionar mais campos se precisar de mais de 3 modelos.
+      </div>
+      <div id="protocolo-reativacao-container"></div>
+      <button class="ghost sm" onclick="adicionarCampoProtocoloReativacao()">+ Adicionar campo</button>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
       <div class="section-title" style="margin-top:0;">Mensagem de aniversário</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
         Escreva a mensagem que você manda quando a criança está perto de fazer aniversário. Use estes campos —
@@ -1263,6 +1296,7 @@ function renderConfiguracoes(main){
       <button class="primary" id="btn-salvar-config" onclick="salvarConfiguracoes()">Salvar</button>
     </div>
   `;
+  renderProtocoloReativacaoLista();
 }
 
 /* =========================================================
@@ -1344,6 +1378,8 @@ async function salvarConfiguracoes(){
 
   const msgCasEl = document.getElementById("msg-casamento");
   if(msgCasEl) configDraft.mensagemCasamento = msgCasEl.value;
+
+  configDraft.protocoloReativacao = [...protocoloReativacaoDraft];
 
   if(btn){ btn.disabled = true; btn.textContent = "Salvando..."; }
   try{
@@ -2140,7 +2176,7 @@ function renderAgendaLista(){
                       </div>
                     </div>
                     <div class="row-actions">
-                      ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
+                      ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
                       <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
                       <button class="sm" onclick="criarEventoDeNegociacao('${n.id}')">📆 Criar evento</button>
                     </div>
@@ -2160,7 +2196,7 @@ function renderAgendaLista(){
                       <div style="font-size:12px; color:var(--muted-2); margin-top:2px;">${formatDate(p.data)}${p.observacoes?" · "+p.observacoes:""}</div>
                     </div>
                     <div class="row-actions">
-                      ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
+                      ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
                       <button class="sm" onclick="${isNeg?`openView('negociacoes','${p.negociacaoId}')`:`abrirPreReservaEditar('${p.id}')`}">${isNeg?"Ver":"Editar"}</button>
                       ${isNeg ? "" : `<button class="sm danger" onclick="removerPreReserva('${p.id}')">Remover</button>`}
                     </div>
@@ -2584,14 +2620,12 @@ function renderPilhaLeads(chave, titulo, itens){
             <thead><tr><th>Nome</th><th>Interesse</th><th>Status</th><th></th></tr></thead>
             <tbody>
               ${itens.map(lead=>`<tr>
-                <td>${lead.nome||"—"}</td>
+                <td><a href="#" onclick="openView('leads','${lead.id}');return false;">${lead.nome||"—"}</a></td>
                 <td>${lead.interesseTipo ? capitalize(lead.interesseTipo.replace("_"," ")) : "—"}</td>
                 <td><span class="badge lead-${lead.status||"negociando"}">${sym[lead.status||"negociando"]||""} ${lbl[lead.status||"negociando"]||capitalize(lead.status||"")}</span></td>
                 <td class="row-actions">
                   ${chave==="ativos" && !lead.clienteId ? `<button class="sm" onclick="converterLeadEmCliente('${lead.id}')">Converter</button>` : ""}
-                  <button class="sm" onclick="openView('leads','${lead.id}')">Ver</button>
                   <button class="sm" onclick="openForm('leads','${lead.id}')">Editar</button>
-                  <button class="sm danger" onclick="deleteDoc('leads','${lead.id}')">Excluir</button>
                 </td>
               </tr>`).join("")}
             </tbody>
@@ -2703,7 +2737,7 @@ function renderViewNegociacao(neg){
       ${historico.map(h=>`<div class="comentario-item"><div class="comentario-data">${formatarDataHora(h.data)}</div><div class="comentario-texto">${negociacaoStatusLabel(h.status)}</div></div>`).join("")}
     ` : ""}
     ${viewActions("negociacoes", neg.id, `
-      ${wa ? `<button class="ghost" onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
+      ${wa ? `<button class="ghost" onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
       ${podeGerarEvento ? `<button class="ghost" onclick="closeModal();criarEventoDeNegociacao('${neg.id}')">📆 Criar evento a partir desta negociação</button>` : ""}
     `)}`;
 }
@@ -2791,15 +2825,13 @@ function renderPilhaProdutos(chave, titulo, itens){
                 const saldo = (Number(p.valorVenda)||0) - totalPagoProduto(p.id);
                 const prazoVencido = p.prazoPrevia && p.prazoPrevia < hoje && chave!=="entregue";
                 return `<tr>
-                  <td>${nomeRef("clientes",p.clienteId)}</td>
-                  <td>${p.produtoNome||"—"}</td>
+                  <td><a href="#" onclick="openView('clientes','${p.clienteId}');return false;">${nomeRef("clientes",p.clienteId)}</a></td>
+                  <td><a href="#" onclick="openView('produtos','${p.id}');return false;">${p.produtoNome||"—"}</a></td>
                   <td>${p.valorVenda?money(p.valorVenda):"—"}</td>
                   <td ${prazoVencido?'style="color:#ef4444;font-weight:700;"':''}>${p.prazoPrevia?formatDate(p.prazoPrevia):"—"}${prazoVencido?" ⚠️":""}</td>
                   <td>${saldo>0 ? `<button class="sm" onclick="abrirBaixaRapidaProduto('${p.id}')">${money(saldo)} → dar baixa</button>` : `<span style="color:var(--muted);">Pago</span>`}</td>
                   <td class="row-actions">
-                    <button class="sm" onclick="openView('produtos','${p.id}')">Ver</button>
                     <button class="sm" onclick="openForm('produtos','${p.id}')">Editar</button>
-                    <button class="sm danger" onclick="deleteDoc('produtos','${p.id}')">Excluir</button>
                   </td>
                 </tr>`;
               }).join("")}
@@ -2882,7 +2914,7 @@ function renderViewProduto(p){
 
   return `<h3>${p.produtoNome||"Produto"} · ${nomeRef("clientes",p.clienteId)}</h3>
     <div class="quick-actions">
-      ${wa ? `<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
+      ${wa ? `<button onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
     </div>
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${p.clienteId}');return false;">${nomeRef("clientes",p.clienteId)}</a>`)}
     ${viewRow("Fornecedor", p.fornecedor||"—")}
@@ -3317,7 +3349,7 @@ function renderPainelReativacao(){
           +(uc && uc.observacao ? "<div style=\"font-size:12px; color:var(--muted); margin-top:4px; font-style:italic;\">\""+escapeHtml(uc.observacao)+"\"</div>" : "")
           +"</div>"
           +"<div style=\"display:flex; gap:6px; flex-wrap:wrap; align-items:center; flex-shrink:0;\">"
-          +(wa ? "<button class=\"sm\" onclick=\"window.open('"+wa+"','_blank')\">WhatsApp</button>" : "")
+          +(wa ? "<button class=\"sm\" onclick=\"window.open('"+wa+"','_blank')\" title=\"WhatsApp\"><i class=\"ti ti-brand-whatsapp\" style=\"color:#25D366;font-size:16px;\"></i></button>" : "")
           +"<button class=\"sm\" onclick=\"abrirMarcarContatado('"+cli.id+"')\">Contatado</button>"
           +"</div>"
           +"</div>";
@@ -3624,7 +3656,7 @@ function renderDashboard(main){
               <td>${c.aprox?"~":""}${c.idade+1} anos</td>
               <td>${c.dias===0?'<b>🎉 Hoje!</b>':c.dias+' dias'}</td>
               <td>${c.vinculo}</td>
-              <td><button class="sm" onclick="enviarMensagemAniversario('${c.id}')">Enviar</button></td>
+              <td><button class="sm" onclick="enviarMensagemAniversario('${c.id}')" title="Enviar mensagem"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button></td>
             </tr>`).join("")}
           </tbody></table>
         </div>` : "";
@@ -3637,7 +3669,7 @@ function renderDashboard(main){
               <td><a href="#" onclick="openView('casamentos','${c.id}');return false;">${c.nome}</a></td>
               <td>${c.idade+1} anos de casados</td>
               <td>${c.dias===0?'<b>🎉 Hoje!</b>':c.dias+' dias'}</td>
-              <td><button class="sm" onclick="enviarMensagemCasamento('${c.id}')">Enviar</button></td>
+              <td><button class="sm" onclick="enviarMensagemCasamento('${c.id}')" title="Enviar mensagem"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button></td>
             </tr>`).join("")}
           </tbody></table>
         </div>` : "";
@@ -3768,13 +3800,12 @@ function renderPilhaFinanceiro(ano, pagamentos){
                 const dataLabel = d ? `${d}/${m}` : p.data||"—";
                 return `<tr>
                   <td>${dataLabel}</td>
-                  <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${cli} · ${tipoEv}</td>
+                  <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ev?`<a href="#" onclick="openView('eventos','${ev.id}');return false;">${cli} · ${tipoEv}</a>`:`${cli} · ${tipoEv}`}</td>
                   <td><b>${money(p.valor)}</b></td>
                   <td>${capitalize(p.forma||"—")}</td>
                   <td>${capitalize(p.tipo||"—")}</td>
                   <td class="row-actions">
                     <button class="sm" onclick="openForm('pagamentos','${p.id}')">Editar</button>
-                    <button class="sm danger" onclick="deleteDoc('pagamentos','${p.id}')">Excluir</button>
                   </td>
                 </tr>`;
               }).join("")}
@@ -4004,10 +4035,7 @@ function renderCollectionList(col){
             <tr>
               ${schema.columns.map(c=>`<td>${c.format ? c.format(item[c.key],item) : (item[c.key] ?? "—")}</td>`).join("")}
               <td class="row-actions">
-                ${(col==="leads" && !item.clienteId) ? `<button class="sm" onclick="converterLeadEmCliente('${item.id}')">Converter</button>` : ""}
-                <button class="sm" onclick="openView('${col}','${item.id}')">Ver</button>
                 <button class="sm" onclick="openForm('${col}','${item.id}')">Editar</button>
-                <button class="sm danger" onclick="deleteDoc('${col}','${item.id}')">Excluir</button>
               </td>
             </tr>
           `).join("")}
@@ -4136,7 +4164,7 @@ function copiarMsgConfirmacao(eventoId){
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">Fechar</button>
       <button class="ghost" onclick="navigator.clipboard.writeText(document.getElementById('msg-confirmacao-txt').value).then(()=>toast('Copiado!'))">Copiar</button>
-      ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent(document.getElementById('msg-confirmacao-txt').value),'_blank')">Enviar WhatsApp</button>` : ""}
+      ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent(document.getElementById('msg-confirmacao-txt').value),'_blank')" title="Enviar WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
     </div>
   `;
   document.getElementById("modal-backdrop").classList.add("active");
@@ -4244,7 +4272,7 @@ function exibirRecibo(ev, recibo){
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">Fechar</button>
       <button class="ghost" onclick="navigator.clipboard.writeText(document.getElementById('recibo-txt').value).then(()=>toast('Recibo copiado!'))">Copiar</button>
-      ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent(document.getElementById('recibo-txt').value),'_blank')">Enviar WhatsApp</button>` : ""}
+      ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent(document.getElementById('recibo-txt').value),'_blank')" title="Enviar WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
     </div>
   `;
   document.getElementById("modal-backdrop").classList.add("active");
@@ -4831,7 +4859,7 @@ function renderViewEvento(ev){
     </div>
 
     <div class="quick-actions">
-      ${wa ? `<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>` : ""}
+      ${wa ? `<button onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
       ${ev.endereco ? `<button onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.endereco)}','_blank')">🗺️ Maps</button>` : ""}
       <button onclick="window.open('${gcalUrl}','_blank')">📅 Google Agenda</button>
       <button onclick="copiarMsgConfirmacao('${ev.id}')">📋 Msg confirmação</button>
@@ -4841,7 +4869,6 @@ function renderViewEvento(ev){
 
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${ev.clienteId}');return false;">${nomeRef("clientes",ev.clienteId)}</a>`)}
     ${ev.nomeEvento ? viewRow("Nome do evento", ev.nomeEvento) : ""}
-    ${ev.conjugeEvento ? viewRow("Cônjuge", ev.conjugeEvento) : ""}
     ${ev.criancaId ? viewRow("Criança", `<a href="#" onclick="openView('criancas','${ev.criancaId}');return false;">${nomeRef("criancas",ev.criancaId)}</a>`) : ""}
     ${ev.casamentoId ? viewRow("Casamento", `<a href="#" onclick="openView('casamentos','${ev.casamentoId}');return false;">${nomeRef("casamentos",ev.casamentoId)}</a>`) : ""}
     ${ev.endereco ? viewRow("Endereço", ev.endereco) : ""}
@@ -5343,7 +5370,7 @@ function montarConteudoAlerta(tipo, item){
         ["Último contato", ults ? formatarDataHora(ults) : "Nenhum registrado"]
       ],
       acoesHtml: `
-        ${wa?`<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>`:""}
+        ${wa?`<button onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>`:""}
         <button onclick="openForm('leads','${item.id}')">✏️ Editar lead</button>
       `
     };
@@ -5362,7 +5389,7 @@ function montarConteudoAlerta(tipo, item){
         ["Entrega prevista", item.dataEntregaPrevista ? formatDate(item.dataEntregaPrevista) : "—"]
       ],
       acoesHtml: `
-        ${wa?`<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>`:""}
+        ${wa?`<button onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>`:""}
         <button onclick="marcarEventoEntregue('${item.id}')">✓ Marcar entregue</button>
       `
     };
@@ -5381,7 +5408,7 @@ function montarConteudoAlerta(tipo, item){
         ["Saldo", money(saldo)]
       ],
       acoesHtml: `
-        ${wa?`<button onclick="window.open('${wa}','_blank')">💬 WhatsApp</button>`:""}
+        ${wa?`<button onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>`:""}
         <button onclick="abrirBaixaRapida('${item.id}')">💰 Dar baixa</button>
       `
     };
@@ -5471,7 +5498,7 @@ function abrirModalEnvioMensagem(textoOriginal, cliente, contexto){
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">Cancelar</button>
       <button class="ghost" onclick="copiarMsgEnvio()">Copiar</button>
-      ${wa ? `<button class="primary" onclick="abrirWhatsapp('${wa}')">Abrir WhatsApp ↗</button>` : `<button class="primary" onclick="copiarMsgEnvio()">Copiar</button>`}
+      ${wa ? `<button class="primary" onclick="abrirWhatsapp('${wa}')" title="Abrir WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : `<button class="primary" onclick="copiarMsgEnvio()">Copiar</button>`}
     </div>
   `;
   document.getElementById("modal-backdrop").classList.add("active");
@@ -5518,7 +5545,7 @@ function renderViewLead(lead){
   const lid = lead.id;
   const cId = lead.clienteId || "";
   const btnC = jaConvertido ? "" : "<button class=\"ghost\" onclick=\"converterLeadEmCliente('" + lid + "')\" >Converter em cliente</button>";
-  const telefoneHtml = lead.telefone ? (wa ? "<a href=\"" + wa + "\" target=\"_blank\" rel=\"noopener\">" + lead.telefone + " ↗ WhatsApp</a>" : lead.telefone) : "—";
+  const telefoneHtml = lead.telefone ? (wa ? "<a href=\"" + wa + "\" target=\"_blank\" rel=\"noopener\" title=\"WhatsApp\">" + lead.telefone + " ↗ <i class=\"ti ti-brand-whatsapp\" style=\"color:#25D366;\"></i></a>" : lead.telefone) : "—";
   const statusHtml = "<span class=\"badge lead-" + s + "\">" + (sym[s]||"") + " " + (lbl[s]||capitalize(s)) + "</span>";
   const vinculoHtml = jaConvertido ? "<a href=\"#\" onclick=\"openView('clientes','" + cId + "');return false;\">" + nomeRef("clientes",cId) + "</a>" : "";
   const btnResumoHtml = temIA() ? "<button class=\"ghost sm\" id=\"btn-resumo-leads-" + lid + "\" onclick=\"gerarResumoCliente('leads','" + lid + "')\" style=\"margin-top:10px;width:100%\">✦ Resumo IA</button>" : "";
@@ -5580,7 +5607,7 @@ function renderViewCliente(cli){
       ${ucView ? `<span style="font-size:11px; background:var(--surface-2); border:1px solid var(--border-solid); border-radius:20px; padding:2px 10px; color:var(--muted);">Último contato: ${formatDate(ucView.data)}</span>` : `<span style="font-size:11px; color:var(--muted-2);">Nenhum contato registrado</span>`}
     </div>
     ${temIA() ? `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📷 Atualizar via print ou contato .vcf (IA)</button>` : `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📋 Atualizar via contato .vcf</button>`}
-    ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener">${cli.telefone} ↗ WhatsApp</a>` : cli.telefone) : "—")}
+    ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener" title="WhatsApp">${cli.telefone} ↗ <i class="ti ti-brand-whatsapp" style="color:#25D366;"></i></a>` : cli.telefone) : "—")}
     ${viewRow("Cidade", cli.cidade || "—")}
     ${viewRow("Origem", cli.origem ? capitalize(cli.origem) : "—")}
     ${viewRow("Indicado por", cli.indicadoPor || "—")}
@@ -6289,16 +6316,11 @@ async function saveDoc(){
     data[f.key] = val ?? (f.type==="tags" ? [] : f.type==="checkbox" ? false : "");
   }
 
-  // atualiza o cônjuge do cliente, se informado no evento de casamento
-  if(col === "eventos" && data.clienteId && data.conjugeEvento){
-    try{ await db.collection("clientes").doc(data.clienteId).update({ nomeConjuge: data.conjugeEvento }); }
-    catch(err){ console.error("[clientes] erro ao atualizar cônjuge:", err); }
-  }
-
   // vincula/cria automaticamente o registro em "Casamentos" para eventos de casamento
+  // (o cônjuge em si vive só no cadastro do Cliente — não é duplicado aqui)
   if(col === "eventos" && (data.tipo==="casamento_civil" || data.tipo==="casamento_religioso") && data.clienteId){
     const cliente = state.clientes.find(c=>c.id===data.clienteId);
-    const conjugeFinal = data.conjugeEvento || cliente?.nomeConjuge || "";
+    const conjugeFinal = cliente?.nomeConjuge || "";
     const existente = state.casamentos.find(c=>c.clienteId===data.clienteId);
     if(existente){
       data.casamentoId = existente.id;
