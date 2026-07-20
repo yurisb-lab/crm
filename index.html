@@ -1113,8 +1113,7 @@ function renderEventosPage(main){
           <option value="">Todos os tipos</option>
           ${todosOsTipos.map(t=>`<option value="${t}" ${eventosFiltroTipo===t?"selected":""}>${capitalize(t.replace("_"," "))}</option>`).join("")}
         </select>
-        ${temIA() ? `<button class="ghost" onclick="criarEventoPorFoto()">📸 Criar por foto (IA)</button>` : ""}
-        <button class="ghost" onclick="triggerLoteFotosUpload()">📸 Criar em lote (fotos)</button>
+        <button class="ghost" onclick="abrirEscolhaCriarPorImagem()">📸 Criar com imagem</button>
         <button class="primary" onclick="openForm('eventos')">+ Novo Evento</button>
       </div>
     </div>
@@ -3227,7 +3226,7 @@ function renderRelatorios(main){
     <div class="page-header"><div><div class="eyebrow">Visão de negócio</div><h2>Relatórios</h2></div></div>
 
     <div class="section-title" style="margin-top:0;">Ano de ${anoAtual}</div>
-    <div class="grid grid-4">
+    <div class="grid grid-4" style="margin-bottom:16px;">
       <div class="card stat-card"><div class="label">Eventos em ${anoAtual}</div><div class="value">${eventosAno.length}</div><div class="sub">${eventosFechadosAno} confirmados · ${eventosEntreguesAno} entregues</div></div>
       <div class="card stat-card"><div class="label">Recebido em ${anoAtual}</div><div class="value" style="font-size:18px;">${money(recebidoAno)}</div><div class="sub">de ${money(contratadoAno)} contratados</div></div>
       <div class="card stat-card"><div class="label">A receber (${anoAtual})</div><div class="value" style="font-size:18px;">${money(pendenteAno)}</div><div class="sub">saldo pendente nos eventos do ano</div></div>
@@ -4790,6 +4789,26 @@ function triggerFotoFesta(eventoId){
   input.accept = "image/*";
   input.onchange = (e)=> processarFotoFesta(eventoId, e.target.files[0]);
   input.click();
+}
+
+/* ---------- CRIAR EVENTO A PARTIR DE IMAGEM (escolha: uma foto via IA ou várias em lote) ---------- */
+function abrirEscolhaCriarPorImagem(){
+  document.getElementById("modal-content").innerHTML = `
+    <h3>📸 Criar evento a partir de imagem</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:16px; line-height:1.5;">Escolha como quer criar o(s) evento(s):</div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button class="secondary" style="text-align:left; padding:14px 16px; height:auto;" onclick="closeModal();setTimeout(()=>criarEventoPorFoto(),200)">
+        <div style="font-weight:600;">Uma foto (IA lê os dados)</div>
+        <div style="font-size:12px; color:var(--muted); margin-top:3px; font-weight:400;">Envia 1 foto e a IA identifica tipo, nome, tema, tags etc.${temIA() ? "" : " — configure a chave Gemini em Configurações para usar."}</div>
+      </button>
+      <button class="secondary" style="text-align:left; padding:14px 16px; height:auto;" onclick="closeModal();setTimeout(()=>triggerLoteFotosUpload(),200)">
+        <div style="font-weight:600;">Várias fotos (criar em lote)</div>
+        <div style="font-size:12px; color:var(--muted); margin-top:3px; font-weight:400;">Agrupa as fotos pela data da câmera (EXIF) e cria um evento por grupo — não usa IA.</div>
+      </button>
+    </div>
+    <div class="modal-actions"><button class="ghost" onclick="closeModal()">Cancelar</button></div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
 }
 
 /* ---------- CRIAR EVENTO A PARTIR DE FOTO (IA) ---------- */
