@@ -5277,6 +5277,164 @@ function telefoneNormalizado(t){
   return d.slice(-8); // últimos 8 dígitos, ignora DDI/DDD pra comparar
 }
 
+/* =========================================================
+   DUPLICIDADE — pontuação de completude, mesclagem de clientes
+   e detecção de eventos duplicados
+   ========================================================= */
+function pontuacaoCompletudeCliente(clienteId){
+  const cli = state.clientes.find(c=>c.id===clienteId);
+  if(!cli) return 0;
+  let pontos = 0;
+  const evs = state.eventos.filter(e=>e.clienteId===clienteId);
+  pontos += evs.length * 5;
+  pontos += evs.filter(e=>["realizado","entregue"].includes(e.status||"")).length * 2;
+  pontos += state.negociacoes.filter(n=>n.clienteId===clienteId).length;
+  pontos += (cli.comentarios||[]).length;
+  pontos += (cli.historicoContatos||[]).length;
+  ["telefone","cidade","origem","indicadoPor","nomeConjuge","observacoes"].forEach(k=>{ if(cli[k]) pontos+=1; });
+  if(valorTotalCliente(clienteId)>0) pontos += 2;
+  return pontos;
+}
+
+function buscarPossiveisDuplicatasCliente(nome, telefone, nomeConjuge, excluirId){
+  if(!nome) return [];
+  return state.clientes
+    .filter(c=>c.id!==excluirId)
+    .map(c=>{
+      const simNome = similaridadeNome(c.nome, nome);
+      const simConjugeDireto = (nomeConjuge && c.nomeConjuge) ? similaridadeNome(c.nomeConjuge, nomeConjuge) : 0;
+      const simCruzada = Math.max(
+        nomeConjuge ? similaridadeNome(c.nome, nomeConjuge) : 0,
+        c.nomeConjuge ? similaridadeNome(c.nomeConjuge, nome) : 0
+      );
+      const mesmoTelefone = !!(telefone && c.telefone && telefoneNormalizado(telefone) && telefoneNormalizado(telefone)===telefoneNormalizado(c.telefone));
+      const score = Math.max(simNome, simConjugeDireto, simCruzada);
+      return { cliente:c, score, mesmoTelefone };
+    })
+    .filter(x=>x.score>=0.6 || x.mesmoTelefone)
+    .sort((a,b)=> (b.mesmoTelefone-a.mesmoTelefone) || (b.score-a.score));
+}
+
+function diasEntreDatas(d1,d2){
+  if(!d1||!d2) return Infinity;
+  return Math.abs((new Date(d1+"T00:00:00") - new Date(d2+"T00:00:00"))/86400000);
+}
+function buscarPossiveisEventosDuplicados(clienteId, tipo, data, excluirId){
+  if(!clienteId || clienteId==="__new__" || !tipo || !data) return [];
+  return state.eventos.filter(e=> e.id!==excluirId && e.clienteId===clienteId && e.tipo===tipo && diasEntreDatas(e.data,data)<=2);
+}
+function encontrarEventosDuplicadosGlobal(){
+  const pares = [];
+  const evs = state.eventos;
+  for(let i=0;i<evs.length;i++){
+    for(let j=i+1;j<evs.length;j++){
+      const a=evs[i], b=evs[j];
+      if(a.clienteId && a.clienteId===b.clienteId && a.tipo && a.tipo===b.tipo && diasEntreDatas(a.data,b.data)<=2){
+        pares.push({a,b});
+      }
+    }
+  }
+  return pares;
+}
+
+async function mesclarClientesDuplicados(idManter, idRemover){
+  if(idManter===idRemover) return;
+  const manter = state.clientes.find(c=>c.id===idManter);
+  const remover = state.clientes.find(c=>c.id===idRemover);
+  if(!manter || !remover) return;
+  try{
+    const tarefas = [];
+    state.eventos.filter(e=>e.clienteId===idRemover).forEach(e=> tarefas.push(db.collection("eventos").doc(e.id).update({clienteId:idManter})));
+    state.negociacoes.filter(n=>n.clienteId===idRemover).forEach(n=> tarefas.push(db.collection("negociacoes").doc(n.id).update({clienteId:idManter})));
+    state.produtos.filter(p=>p.clienteId===idRemover).forEach(p=> tarefas.push(db.collection("produtos").doc(p.id).update({clienteId:idManter})));
+    state.pagamentos.filter(p=>p.clienteId===idRemover).forEach(p=> tarefas.push(db.collection("pagamentos").doc(p.id).update({clienteId:idManter})));
+    state.recibos.filter(r=>r.clienteId===idRemover).forEach(r=> tarefas.push(db.collection("recibos").doc(r.id).update({clienteId:idManter})));
+    state.casamentos.filter(c=>c.clienteId===idRemover).forEach(c=> tarefas.push(db.collection("casamentos").doc(c.id).update({clienteId:idManter})));
+    state.leads.filter(l=>l.clienteId===idRemover).forEach(l=> tarefas.push(db.collection("leads").doc(l.id).update({clienteId:idManter})));
+    state.criancas.filter(c=>c.clientePaiId===idRemover).forEach(c=> tarefas.push(db.collection("criancas").doc(c.id).update({clientePaiId:idManter})));
+    state.criancas.filter(c=>c.clienteMaeId===idRemover).forEach(c=> tarefas.push(db.collection("criancas").doc(c.id).update({clienteMaeId:idManter})));
+    await Promise.all(tarefas);
+
+    const comentariosMesclados = [...(manter.comentarios||[]), ...(remover.comentarios||[])]
+      .sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||""));
+    const contatosMesclados = [...(manter.historicoContatos||[]), ...(remover.historicoContatos||[])]
+      .sort((a,b)=>(a.data||"").localeCompare(b.data||""));
+
+    const updatesManter = { comentarios: comentariosMesclados, historicoContatos: contatosMesclados };
+    ["telefone","cidade","origem","indicadoPor","nomeConjuge","observacoes"].forEach(k=>{
+      if(!manter[k] && remover[k]) updatesManter[k] = remover[k];
+    });
+
+    await db.collection("clientes").doc(idManter).update(updatesManter);
+    await db.collection("clientes").doc(idRemover).delete();
+    toast(`Clientes mesclados. "${remover.nome}" foi excluído.`);
+  }catch(err){
+    console.error(err);
+    toast("Erro ao mesclar clientes. Veja o console.");
+  }
+}
+
+function abrirConfirmacaoMerge(idManter, idRemover){
+  const manter = state.clientes.find(c=>c.id===idManter);
+  const remover = state.clientes.find(c=>c.id===idRemover);
+  if(!manter || !remover) return;
+  const evsRemover = state.eventos.filter(e=>e.clienteId===idRemover).length;
+  const negsRemover = state.negociacoes.filter(n=>n.clienteId===idRemover).length;
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Mesclar clientes</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:14px; line-height:1.6;">
+      Vou manter <b>${escapeHtml(manter.nome)}</b> e excluir <b>${escapeHtml(remover.nome)}</b> definitivamente.<br><br>
+      Antes disso, tudo que está em "${escapeHtml(remover.nome)}" passa para "${escapeHtml(manter.nome)}": ${evsRemover} evento(s), ${negsRemover} negociação(ões), comentários, contatos registrados e filhos vinculados. Campos vazios de "${escapeHtml(manter.nome)}" são completados com os dados de "${escapeHtml(remover.nome)}".
+    </div>
+    <div class="field" style="display:flex; align-items:center; gap:10px;">
+      <input type="checkbox" id="confirm-merge-check" style="width:18px;height:18px;">
+      <label for="confirm-merge-check" style="margin:0;">Tenho certeza — essa ação não pode ser desfeita</label>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="verificarDuplicados()">Cancelar</button>
+      <button class="danger" onclick="confirmarMerge('${idManter}','${idRemover}')">Mesclar e excluir</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function confirmarMerge(idManter, idRemover){
+  const check = document.getElementById("confirm-merge-check");
+  if(!check?.checked){ toast("Marque a caixa de confirmação primeiro."); return; }
+  await mesclarClientesDuplicados(idManter, idRemover);
+  closeModal();
+}
+
+function abrirConfirmacaoDuplicataCliente(alertas){
+  const corpo = alertas.map(a=>`
+    <div class="card" style="padding:10px 14px; margin-bottom:10px;">
+      <div style="font-weight:600; margin-bottom:6px;">"${escapeHtml(a.nomeNovo)}" parece com:</div>
+      ${a.candidatos.map(c=>`<div style="font-size:13px; padding:4px 0;">• ${escapeHtml(c.cliente.nome)}${c.cliente.nomeConjuge?" & "+escapeHtml(c.cliente.nomeConjuge):""} ${c.cliente.telefone?"· "+c.cliente.telefone:""} <span style="color:var(--muted-2);font-size:11px;">(${Math.round(c.score*100)}% parecido${c.mesmoTelefone?", mesmo telefone":""})</span></div>`).join("")}
+    </div>
+  `).join("");
+  document.getElementById("modal-content").innerHTML = `
+    <h3>⚠️ Possível duplicidade de cliente</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:12px;">Antes de salvar, confira se não é a mesma pessoa já cadastrada.</div>
+    ${corpo}
+    <div class="modal-actions">
+      <button class="ghost" onclick="renderFormularioModal()">Voltar e revisar</button>
+      <button class="primary" onclick="saveDoc(true)">Salvar mesmo assim</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+function abrirConfirmacaoDuplicataEvento(dups){
+  document.getElementById("modal-content").innerHTML = `
+    <h3>⚠️ Possível evento duplicado</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:12px;">Já existe evento do mesmo tipo, com data próxima, para este cliente:</div>
+    ${dups.map(e=>`<div class="view-link-card" onclick="openView('eventos','${e.id}')">${capitalize((e.tipo||"").replace("_"," "))} · ${formatDate(e.data)} · ${statusLabel(e.status||"confirmado")}</div>`).join("")}
+    <div class="modal-actions">
+      <button class="ghost" onclick="renderFormularioModal()">Voltar e revisar</button>
+      <button class="primary" onclick="saveDoc(true)">Salvar mesmo assim</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
 async function verificarDuplicados(){
   const clientes = state.clientes;
   const pares = [];
@@ -5287,33 +5445,55 @@ async function verificarDuplicados(){
       const telA = telefoneNormalizado(a.telefone), telB = telefoneNormalizado(b.telefone);
       const mesmoTelefone = telA && telB && telA===telB;
       if(simNome>=0.78 || mesmoTelefone){
-        pares.push({ a, b, simNome, mesmoTelefone });
+        pares.push({ a, b, simNome, mesmoTelefone, scoreA: pontuacaoCompletudeCliente(a.id), scoreB: pontuacaoCompletudeCliente(b.id) });
       }
     }
   }
   pares.sort((x,y)=> (y.mesmoTelefone-x.mesmoTelefone) || (y.simNome-x.simNome));
 
+  const eventosDuplicados = encontrarEventosDuplicadosGlobal();
+
   document.getElementById("modal-content").innerHTML = `
     <h3>Verificar duplicados</h3>
+
+    <div class="view-section-title" style="margin-top:0;">Clientes (${pares.length})</div>
     <div style="font-size:13px; color:var(--muted); margin-bottom:12px;">
-      ${pares.length ? `Encontrei ${pares.length} par(es) que podem ser a mesma pessoa.` : "Nenhum possível duplicado encontrado — comparando nomes parecidos e telefones iguais."}
+      ${pares.length ? `Encontrei ${pares.length} par(es) que podem ser a mesma pessoa. Sugiro manter quem tem mais histórico.` : "Nenhum possível duplicado encontrado — comparando nomes parecidos e telefones iguais."}
     </div>
     <div id="duplicados-lista">
-      ${pares.map((p,i)=>`
+      ${pares.map(p=>{
+        const manter = p.scoreA>=p.scoreB ? p.a : p.b;
+        const remover = p.scoreA>=p.scoreB ? p.b : p.a;
+        return `
         <div class="view-link-card" style="cursor:default;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
             <div>
-              <div><a href="#" onclick="openView('clientes','${p.a.id}');return false;">${p.a.nome}</a> ${p.a.telefone?`· ${p.a.telefone}`:""}</div>
-              <div style="margin-top:4px;"><a href="#" onclick="openView('clientes','${p.b.id}');return false;">${p.b.nome}</a> ${p.b.telefone?`· ${p.b.telefone}`:""}</div>
+              <div><a href="#" onclick="openView('clientes','${p.a.id}');return false;">${escapeHtml(p.a.nome)}</a> ${p.a.telefone?`· ${p.a.telefone}`:""} <span style="font-size:11px;color:var(--muted-2);">(pontuação ${p.scoreA})</span></div>
+              <div style="margin-top:4px;"><a href="#" onclick="openView('clientes','${p.b.id}');return false;">${escapeHtml(p.b.nome)}</a> ${p.b.telefone?`· ${p.b.telefone}`:""} <span style="font-size:11px;color:var(--muted-2);">(pontuação ${p.scoreB})</span></div>
             </div>
             <div style="font-size:11px; color:var(--muted-2); text-align:right;">
               ${p.mesmoTelefone?"mesmo telefone<br>":""}${Math.round(p.simNome*100)}% nome parecido
             </div>
           </div>
+          <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+            <button class="sm" onclick="abrirConfirmacaoMerge('${manter.id}','${remover.id}')">Mesclar — manter "${escapeHtml(manter.nome)}"</button>
+          </div>
         </div>
-      `).join("")}
+      `;}).join("")}
     </div>
     ${pares.length && temIA() ? `<button class="ghost" style="margin-top:10px;" onclick="analisarDuplicadosIA()">✦ Pedir opinião da IA</button><div class="ai-box" id="ai-duplicados" style="display:none;"></div>` : ""}
+
+    <div class="view-section-title">Eventos (${eventosDuplicados.length})</div>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+      ${eventosDuplicados.length ? "Mesmo cliente, mesmo tipo, com datas a até 2 dias de diferença:" : "Nenhum possível evento duplicado encontrado."}
+    </div>
+    ${eventosDuplicados.map(({a,b})=>`
+      <div class="view-link-card" style="cursor:default;">
+        <div><a href="#" onclick="openView('eventos','${a.id}');return false;">${capitalize((a.tipo||"").replace("_"," "))} · ${formatDate(a.data)} · ${escapeHtml(nomeRef("clientes",a.clienteId))}</a></div>
+        <div style="margin-top:4px;"><a href="#" onclick="openView('eventos','${b.id}');return false;">${capitalize((b.tipo||"").replace("_"," "))} · ${formatDate(b.data)} · ${escapeHtml(nomeRef("clientes",b.clienteId))}</a></div>
+      </div>
+    `).join("")}
+
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">Fechar</button>
     </div>
@@ -6232,10 +6412,6 @@ function openForm(col, id){
     formState.dataPedido = new Date().toISOString().slice(0,10);
   }
 
-  const showMarkPaid = col==="eventos" && existing && (Number(existing.valorContratado)||0) > totalPago(id);
-
-  const podeUsarPrint = !existing && (col==="leads" || col==="eventos") && temIA();
-
   // bloqueia edição se o evento estiver com cadeado
   if(col==="eventos" && existing && existing.bloqueado){
     document.getElementById("modal-content").innerHTML = `
@@ -6246,6 +6422,17 @@ function openForm(col, id){
     document.getElementById("modal-backdrop").classList.add("active");
     return;
   }
+
+  renderFormularioModal();
+}
+
+function renderFormularioModal(){
+  const col = formState._col;
+  const id = formState._id;
+  const schema = SCHEMAS[col];
+  const existing = id ? state[col].find(i=>i.id===id) : null;
+  const showMarkPaid = col==="eventos" && existing && (Number(existing.valorContratado)||0) > totalPago(id);
+  const podeUsarPrint = !existing && (col==="leads" || col==="eventos") && temIA();
 
   document.getElementById("modal-content").innerHTML = `
     <h3>${existing ? "Editar" : "Novo"} ${schema.singular}</h3>
@@ -6517,11 +6704,45 @@ function renderQuickNew(fKey, ref){
 }
 
 
-async function saveDoc(){
+async function saveDoc(ignorarDuplicatas=false){
   const col = formState._col;
   const id = formState._id;
   const schema = SCHEMAS[col];
   const existing = id ? state[col].find(i=>i.id===id) : null;
+
+  if(!ignorarDuplicatas){
+    const alertasDuplicataCliente = [];
+    if(col==="clientes" && !id){
+      const cands = buscarPossiveisDuplicatasCliente(formState.nome, formState.telefone, formState.nomeConjuge, null);
+      if(cands.length && (cands[0].score>=0.85 || cands[0].mesmoTelefone)){
+        alertasDuplicataCliente.push({ nomeNovo: formState.nome, candidatos: cands.slice(0,3) });
+      }
+    }
+    for(const f of camposVisiveis(schema)){
+      if(f.type==="ref" && f.ref==="clientes" && formState[f.key]==="__new__"){
+        const quick = formState[`_quickNew_${f.key}`]||{};
+        if(quick.nome){
+          const cands = buscarPossiveisDuplicatasCliente(quick.nome, quick.telefone, "", null);
+          if(cands.length && (cands[0].score>=0.85 || cands[0].mesmoTelefone)){
+            alertasDuplicataCliente.push({ nomeNovo: quick.nome, candidatos: cands.slice(0,3) });
+          }
+        }
+      }
+    }
+    if(alertasDuplicataCliente.length){
+      abrirConfirmacaoDuplicataCliente(alertasDuplicataCliente);
+      return;
+    }
+
+    if(col==="eventos" && formState.clienteId && formState.tipo && formState.data){
+      const dupsEvento = buscarPossiveisEventosDuplicados(formState.clienteId, formState.tipo, formState.data, id);
+      if(dupsEvento.length){
+        abrirConfirmacaoDuplicataEvento(dupsEvento);
+        return;
+      }
+    }
+  }
+
   const data = {};
 
   for(const f of camposVisiveis(schema)){
