@@ -2249,6 +2249,7 @@ function renderAgendaLista(){
                     </div>
                     <div class="row-actions">
                       ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
+                      <button class="sm" onclick="abrirCriarEventoDePreReserva('${p.id}')">📆 Criar evento</button>
                       <button class="sm" onclick="${isNeg?`openView('negociacoes','${p.negociacaoId}')`:`abrirPreReservaEditar('${p.id}')`}">${isNeg?"Ver":"Editar"}</button>
                       ${isNeg ? "" : `<button class="sm danger" onclick="removerPreReserva('${p.id}')">Remover</button>`}
                     </div>
@@ -2395,6 +2396,7 @@ function abrirDiaCal(iso){
                 ${p.telefone ? ` · ${p.telefone}` : ""}
               </div>
               <div class="row-actions">
+                <button class="sm" onclick="closeModal();setTimeout(()=>abrirCriarEventoDePreReserva('${p.id}'),200)">📆 Criar evento</button>
                 <button class="sm" onclick="${editarAction}">${isNeg?"Ver negociação":"Editar"}</button>
                 ${isNeg ? "" : `<button class="sm danger" onclick="removerPreReserva('${p.id}')">Remover</button>`}
               </div>
@@ -2751,6 +2753,7 @@ function renderPilhaNegociacoes(chave, titulo, itens){
                 <td>${n.valorProposto?money(n.valorProposto):"—"}</td>
                 <td class="row-actions">
                   <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
+                  ${!n.eventoId && n.status!=="perdido" ? `<button class="sm" onclick="criarEventoDeNegociacao('${n.id}')">📆 Criar evento</button>` : ""}
                   <button class="sm" onclick="openForm('negociacoes','${n.id}')">Editar</button>
                   <button class="sm danger" onclick="deleteDoc('negociacoes','${n.id}')">Excluir</button>
                 </td>
@@ -2773,7 +2776,7 @@ function renderViewNegociacao(neg){
   const cliente = state.clientes.find(c=>c.id===neg.clienteId);
   const wa = cliente ? whatsappLink(cliente.telefone) : null;
   const historico = Array.isArray(neg.historicoStatus) ? [...neg.historicoStatus].sort((a,b)=>(a.data||"").localeCompare(b.data||"")) : [];
-  const podeGerarEvento = neg.status==="fechado" && !neg.eventoId;
+  const podeGerarEvento = !neg.eventoId && neg.status!=="perdido";
 
   return `<h3>Negociação · ${cliente?.nome||"—"}</h3>
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${neg.clienteId}');return false;">${nomeRef("clientes",neg.clienteId)}</a>`)}
@@ -2824,6 +2827,108 @@ function criarEventoDeNegociacao(negId){
     refreshFormFields();
     toast("Campos preenchidos a partir da negociação. Confira e complete a data antes de salvar.", 4500);
   }, 100);
+}
+
+/* ---------- Criar evento a partir de uma pré-reserva (interessado avulso ou negociação) ----------
+   Se a pré-reserva já estiver vinculada a uma negociação, reaproveita o fluxo de
+   criarEventoDeNegociacao. Se for um "interessado" avulso (lead ou nome livre),
+   pede pra escolher/criar o cliente antes de abrir o formulário de evento. */
+function abrirCriarEventoDePreReserva(preReservaId){
+  const p = state.prereservas.find(x=>x.id===preReservaId);
+  if(!p) return;
+  if(p.negociacaoId){ criarEventoDeNegociacao(p.negociacaoId); return; }
+
+  const leadVinculado = p.leadId ? state.leads.find(l=>l.id===p.leadId) : null;
+  // se o lead já foi convertido em cliente, usa esse cliente direto
+  if(leadVinculado?.clienteId){
+    closeModal();
+    openForm("eventos");
+    setTimeout(()=>{
+      formState.clienteId = leadVinculado.clienteId;
+      formState.data = p.data;
+      formState._preReservaId = p.id;
+      autoSelecionarCriancaVinculada(leadVinculado.clienteId);
+      refreshFormFields();
+      toast("Campos preenchidos a partir da pré-reserva. Complete o tipo de evento antes de salvar.", 4500);
+    }, 150);
+    return;
+  }
+
+  const nomeBusca = leadVinculado?.nome || p.nome || "";
+  const telefoneBusca = leadVinculado?.telefone || p.telefone || "";
+  const candidatos = nomeBusca ? buscarCandidatosCliente(nomeBusca) : [];
+  const clientesOrdenados = [...state.clientes].filter(c=>!c.hibernado && !candidatos.some(cd=>cd.id===c.id))
+    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+
+  window._preReservaEventoTemp = { preReservaId, nomeSugerido: nomeBusca, telefoneSugerido: telefoneBusca };
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>📆 Criar evento a partir da pré-reserva</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:14px;">
+      Data: <b>${formatDate(p.data)}</b>${nomeBusca?" · "+escapeHtml(nomeBusca):""}${p.observacoes?"<br>"+escapeHtml(p.observacoes):""}
+    </div>
+    <div class="field">
+      <label>Cliente</label>
+      <select id="pre-evento-cliente" onchange="onPreEventoClienteChange(this.value)">
+        <option value="">— selecione —</option>
+        <option value="__new__" ${!candidatos.length?"selected":""}>+ Cadastrar novo cliente${nomeBusca?": \""+escapeHtml(nomeBusca)+"\"":""}</option>
+        ${candidatos.map((c,i)=>`<option value="${c.id}" ${i===0 && c.score>=0.85?"selected":""}>${escapeHtml(c.nome)} (${Math.round(c.score*100)}% parecido)</option>`).join("")}
+        ${clientesOrdenados.map(c=>`<option value="${c.id}">${escapeHtml(c.nomeConjuge?c.nome+" & "+c.nomeConjuge:c.nome)}</option>`).join("")}
+      </select>
+    </div>
+    <div id="pre-evento-novo-cliente"></div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="continuarCriarEventoDePreReserva()">Continuar</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+  onPreEventoClienteChange(document.getElementById("pre-evento-cliente").value);
+}
+
+function onPreEventoClienteChange(valor){
+  const container = document.getElementById("pre-evento-novo-cliente");
+  if(!container) return;
+  if(valor === "__new__"){
+    const dados = window._preReservaEventoTemp || {};
+    container.innerHTML = `
+      <div class="field"><label>Nome do novo cliente</label><input id="pre-evento-novo-nome" type="text" value="${escapeHtml(dados.nomeSugerido||"")}"></div>
+      <div class="field"><label>Telefone (opcional)</label><input id="pre-evento-novo-tel" type="tel" value="${escapeHtml(dados.telefoneSugerido||"")}"></div>
+    `;
+  } else {
+    container.innerHTML = "";
+  }
+}
+
+async function continuarCriarEventoDePreReserva(){
+  const dados = window._preReservaEventoTemp;
+  if(!dados) return;
+  const p = state.prereservas.find(x=>x.id===dados.preReservaId);
+  if(!p) return;
+  const valor = document.getElementById("pre-evento-cliente")?.value;
+  if(!valor){ toast("Selecione o cliente."); return; }
+
+  let clienteId = valor;
+  if(valor === "__new__"){
+    const nome = document.getElementById("pre-evento-novo-nome")?.value.trim();
+    const telefone = document.getElementById("pre-evento-novo-tel")?.value.trim();
+    if(!nome){ toast("Informe o nome do novo cliente."); return; }
+    try{
+      const ref = await db.collection("clientes").add({ nome, telefone: telefone||"", criadoEm: new Date().toISOString() });
+      clienteId = ref.id;
+    }catch(err){ console.error(err); toast("Erro ao criar o cliente. Veja o console."); return; }
+  }
+
+  closeModal();
+  openForm("eventos");
+  setTimeout(()=>{
+    formState.clienteId = clienteId;
+    formState.data = p.data;
+    formState._preReservaId = p.id;
+    autoSelecionarCriancaVinculada(clienteId);
+    refreshFormFields();
+    toast("Campos preenchidos a partir da pré-reserva. Complete o tipo de evento antes de salvar.", 4500);
+  }, 150);
 }
 
 /* =========================================================
@@ -3339,7 +3444,10 @@ function renderNegociacoesAbertasDashboard(){
           <td>${n.tipoInteresse?capitalize(n.tipoInteresse.replace("_"," ")):"—"}</td>
           <td><span class="badge">${sym[n.status||"negociacao"]||""} ${negociacaoStatusLabel(n.status)}</span></td>
           <td>${n.valorProposto?money(n.valorProposto):"—"}</td>
-          <td class="row-actions"><button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button></td>
+          <td class="row-actions">
+            <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
+            ${!n.eventoId ? `<button class="sm" onclick="criarEventoDeNegociacao('${n.id}')">📆 Criar evento</button>` : ""}
+          </td>
         </tr>`).join("")}
       </tbody></table>
     </div>`;
@@ -6899,6 +7007,10 @@ async function saveDoc(ignorarDuplicatas=false){
           if(negAtualizada) await sincronizarPreReservaNegociacao(formState._negociacaoId, { ...negAtualizada, eventoId: novoRef.id });
         }
         catch(err){ console.error("[negociacoes] erro ao vincular evento:", err); }
+      }
+      if(col === "eventos" && formState._preReservaId){
+        try{ await db.collection("prereservas").doc(formState._preReservaId).delete(); }
+        catch(err){ console.error("[prereservas] erro ao remover após criar evento:", err); }
       }
       toast(`${schema.singular} criado.`);
     }
