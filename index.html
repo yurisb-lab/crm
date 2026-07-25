@@ -507,7 +507,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <!-- exifr: leitura de metadados EXIF das fotos (data real da câmera) -->
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
 
@@ -526,7 +525,6 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
-const storage = firebase.storage();
 // modo de feedback público: acessado por um link enviado ao cliente, sem necessidade de login
 const MODO_FEEDBACK = new URLSearchParams(location.search).get("feedback")==="1";
 // Persistência offline: garante que gravações pendentes (ex: salvar configurações)
@@ -7140,7 +7138,28 @@ let feedbackMediaRecorder = null;
 let feedbackRecChunks = [];
 let feedbackRecTimer = null;
 let feedbackRecSegundos = 0;
+// os áudios vão embutidos (base64) dentro do próprio documento do Firestore — sem Storage, sem cartão.
+// mas cada documento do Firestore tem limite de 1MB, então mantemos uma margem de segurança.
+const FEEDBACK_LIMITE_BYTES = 900000; // ~900KB de folga sob o limite de 1MB por documento
 
+function blobParaDataURL(blob){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+function estimarTamanhoTotalFeedback(){
+  let total = 0;
+  for(const item of FEEDBACK_ITENS){
+    const st = feedbackRespostaState[item.key];
+    if(!st) continue;
+    if(st.modo==="audio" && st.blob) total += st.blob.size * 1.37; // overhead aproximado da codificação base64
+    if(st.modo==="texto" && st.valor) total += st.valor.length;
+  }
+  return total;
+}
 function formatarMMSS(seg){
   const m = Math.floor(seg/60), s = seg%60;
   return `${m}:${String(s).padStart(2,"0")}`;
@@ -7195,7 +7214,9 @@ async function iniciarGravacaoFeedback(key){
   try{
     const stream = await navigator.mediaDevices.getUserMedia({audio:true});
     feedbackRecChunks = [];
-    feedbackMediaRecorder = new MediaRecorder(stream);
+    let opcoes = { audioBitsPerSecond: 24000 }; // qualidade de voz, arquivo bem mais leve
+    try{ feedbackMediaRecorder = new MediaRecorder(stream, opcoes); }
+    catch(e){ feedbackMediaRecorder = new MediaRecorder(stream); } // navegador não aceitou as opções — usa o padrão
     feedbackMediaRecorder.ondataavailable = e=>{ if(e.data.size>0) feedbackRecChunks.push(e.data); };
     feedbackMediaRecorder.onstop = ()=>{
       const blob = new Blob(feedbackRecChunks, {type: feedbackMediaRecorder.mimeType || "audio/webm"});
@@ -7206,6 +7227,9 @@ async function iniciarGravacaoFeedback(key){
       st.duracaoSeg = feedbackRecSegundos;
       st.url = URL.createObjectURL(blob);
       rerenderFeedbackPergunta(key);
+      if(estimarTamanhoTotalFeedback() > FEEDBACK_LIMITE_BYTES){
+        toast("Suas respostas estão ficando grandes. Regrave essa mais curta ou troque alguma para texto antes de enviar.", 6000);
+      }
     };
     feedbackMediaRecorder.start();
     feedbackRecSegundos = 0;
@@ -7243,7 +7267,8 @@ function iniciarFeedbackPublico(){
 
   const contextoEl = document.getElementById("fb-contexto");
   const partes = [tipoCtx ? capitalize(tipoCtx.replace("_"," ")) : "", nomeCtx, dataCtx ? formatDate(dataCtx) : ""].filter(Boolean);
-  contextoEl.textContent = partes.length ? partes.join(" · ") : "Sua opinião ajuda demais o trabalho do Yuri!";
+  contextoEl.innerHTML = (partes.length ? escapeHtml(partes.join(" · ")) : "Sua opinião ajuda demais o trabalho do Yuri!")
+    + `<br><span style="font-size:12px; color:var(--muted-2);">🎙️ Nos áudios, prefira respostas de até 1 minuto.</span>`;
 
   const nomeWrap = document.getElementById("fb-nome-wrap");
   if(!clienteId && !eventoId){
@@ -7263,26 +7288,28 @@ async function enviarFeedbackPublico(){
     if(!nomeInformado){ toast("Informe seu nome antes de enviar."); return; }
   }
 
+  if(estimarTamanhoTotalFeedback() > FEEDBACK_LIMITE_BYTES){
+    toast("Suas respostas em áudio estão grandes demais pra enviar. Regrave alguma mais curta ou troque para texto.", 6000);
+    return;
+  }
+
   const btn = document.getElementById("btn-enviar-feedback");
   if(btn){ btn.disabled = true; btn.textContent = "Enviando..."; }
 
   try{
-    const feedbackId = db.collection("feedbacks").doc().id;
     const respostas = {};
     for(const item of FEEDBACK_ITENS){
       const st = feedbackRespostaState[item.key] || {modo:"texto"};
       if(st.modo==="audio" && st.blob){
-        const ref = storage.ref(`feedbacks/${feedbackId}/${item.key}.webm`);
-        await ref.put(st.blob);
-        const url = await ref.getDownloadURL();
-        respostas[item.key] = { tipo:"audio", url, duracaoSeg: st.duracaoSeg||0 };
+        const dataUrl = await blobParaDataURL(st.blob);
+        respostas[item.key] = { tipo:"audio", url: dataUrl, duracaoSeg: st.duracaoSeg||0 };
       } else {
         const el = document.getElementById(`fb-texto-${item.key}`);
         const valor = el ? el.value.trim() : (st.valor||"").trim();
         respostas[item.key] = { tipo:"texto", valor };
       }
     }
-    await db.collection("feedbacks").doc(feedbackId).set({
+    await db.collection("feedbacks").add({
       eventoId, clienteId, nomeInformado,
       contextoNome: feedbackParams.get("nome") ? decodeURIComponent(feedbackParams.get("nome")) : "",
       contextoData: feedbackParams.get("data") || "",
@@ -7299,7 +7326,10 @@ async function enviarFeedbackPublico(){
     `;
   }catch(err){
     console.error("[feedback] erro ao enviar:", err);
-    toast("Erro ao enviar. Tente novamente.");
+    const msgErro = (err && err.code==="invalid-argument") || (err && /longer than/i.test(err.message||""))
+      ? "As respostas ficaram grandes demais para enviar (áudios longos). Regrave alguma mais curta ou troque para texto."
+      : "Erro ao enviar. Tente novamente.";
+    toast(msgErro, 6000);
     if(btn){ btn.disabled=false; btn.textContent="Enviar feedback"; }
   }
 }
