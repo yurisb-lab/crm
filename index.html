@@ -485,6 +485,18 @@
   </div>
 </div>
 
+<div id="feedback-screen" style="display:none; min-height:100vh; background:var(--bg); padding:40px 16px 60px;">
+  <div style="max-width:520px; margin:0 auto;">
+    <div class="eyebrow">Estúdio · Feedback</div>
+    <h1 style="font-size:26px; margin:0 0 6px;">Como foi sua experiência?</h1>
+    <div id="fb-contexto" style="font-size:13px; color:var(--muted); margin-bottom:24px;"></div>
+    <div id="fb-nome-wrap"></div>
+    <div id="fb-perguntas"></div>
+    <div id="fb-livre-wrap"></div>
+    <button class="primary" id="btn-enviar-feedback" style="width:100%; padding:14px; font-size:15px;" onclick="enviarFeedbackPublico()">Enviar feedback</button>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="modal-backdrop">
   <div class="modal" id="modal-content"></div>
 </div>
@@ -495,6 +507,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <!-- exifr: leitura de metadados EXIF das fotos (data real da câmera) -->
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
 
@@ -513,6 +526,9 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
+const storage = firebase.storage();
+// modo de feedback público: acessado por um link enviado ao cliente, sem necessidade de login
+const MODO_FEEDBACK = new URLSearchParams(location.search).get("feedback")==="1";
 // Persistência offline: garante que gravações pendentes (ex: salvar configurações)
 // não se percam se a página for fechada/recarregada antes da confirmação do servidor.
 db.enablePersistence({ synchronizeTabs: true }).catch(err=>{
@@ -524,7 +540,7 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err=>{
    STATE
    ========================================================= */
 const state = {
-  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], produtos: [], pagamentos: [], recibos: [], bloqueios: [], negociacoes: [], prereservas: [],
+  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], produtos: [], pagamentos: [], recibos: [], bloqueios: [], negociacoes: [], prereservas: [], feedbacks: [],
   config: {},
   currentPage: "dashboard"
 };
@@ -592,6 +608,7 @@ function doLogin(){
 function doLogout(){ auth.signOut(); }
 
 auth.onAuthStateChanged(user=>{
+  if(MODO_FEEDBACK) return; // página pública de feedback não depende de login
   if(user){
     document.getElementById("login-screen").style.display = "none";
     document.getElementById("app").classList.add("active");
@@ -610,7 +627,7 @@ auth.onAuthStateChanged(user=>{
    FIRESTORE LIVE LISTENERS
    ========================================================= */
 function startListeners(){
-  ["leads","clientes","criancas","casamentos","eventos","produtos","pagamentos","recibos","bloqueios","negociacoes","prereservas"].forEach(col=>{
+  ["leads","clientes","criancas","casamentos","eventos","produtos","pagamentos","recibos","bloqueios","negociacoes","prereservas","feedbacks"].forEach(col=>{
     const unsub = db.collection(col).onSnapshot(
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
@@ -1055,6 +1072,7 @@ const NAV_ITEMS = [
   {key:"criancas",      label:"Aniversariantes", child:true},
   {key:"casamentos",    label:"Casamentos", child:true},
   {key:"produtos",      label:"Produtos"},
+  {key:"feedbacks",     label:"Feedbacks"},
   {key:"pagamentos",    label:"Financeiro"},
   {key:"relatorios",    label:"Relatórios"},
   {key:"configuracoes", label:"Configurações"}
@@ -1069,6 +1087,7 @@ const NAV_ICONS = {
   criancas:      `<i class="ti ti-cake"></i>`,
   casamentos:    `<i class="ti ti-heart"></i>`,
   produtos:      `<i class="ti ti-package"></i>`,
+  feedbacks:     `<i class="ti ti-message-star"></i>`,
   pagamentos:    `<i class="ti ti-wallet"></i>`,
   relatorios:    `<i class="ti ti-chart-bar"></i>`,
   conversar:     `<i class="ti ti-sparkles"></i>`,
@@ -1225,6 +1244,7 @@ function renderPage(page){
   if(page==="leads") return renderLeadsPage(main);
   if(page==="negociacoes") return renderNegociacoesPage(main);
   if(page==="produtos") return renderProdutosPage(main);
+  if(page==="feedbacks") return renderFeedbacksPage(main);
   if(page==="relatorios") return renderRelatorios(main);
   if(page==="conversar") return renderConversar(main);
   if(page==="configuracoes") return renderConfiguracoes(main);
@@ -2249,7 +2269,6 @@ function renderAgendaLista(){
                     </div>
                     <div class="row-actions">
                       ${wa ? `<button class="sm" onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
-                      <button class="sm" onclick="abrirCriarEventoDePreReserva('${p.id}')">📆 Criar evento</button>
                       <button class="sm" onclick="${isNeg?`openView('negociacoes','${p.negociacaoId}')`:`abrirPreReservaEditar('${p.id}')`}">${isNeg?"Ver":"Editar"}</button>
                       ${isNeg ? "" : `<button class="sm danger" onclick="removerPreReserva('${p.id}')">Remover</button>`}
                     </div>
@@ -2396,7 +2415,6 @@ function abrirDiaCal(iso){
                 ${p.telefone ? ` · ${p.telefone}` : ""}
               </div>
               <div class="row-actions">
-                <button class="sm" onclick="closeModal();setTimeout(()=>abrirCriarEventoDePreReserva('${p.id}'),200)">📆 Criar evento</button>
                 <button class="sm" onclick="${editarAction}">${isNeg?"Ver negociação":"Editar"}</button>
                 ${isNeg ? "" : `<button class="sm danger" onclick="removerPreReserva('${p.id}')">Remover</button>`}
               </div>
@@ -2753,7 +2771,6 @@ function renderPilhaNegociacoes(chave, titulo, itens){
                 <td>${n.valorProposto?money(n.valorProposto):"—"}</td>
                 <td class="row-actions">
                   <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
-                  ${!n.eventoId && n.status!=="perdido" ? `<button class="sm" onclick="criarEventoDeNegociacao('${n.id}')">📆 Criar evento</button>` : ""}
                   <button class="sm" onclick="openForm('negociacoes','${n.id}')">Editar</button>
                   <button class="sm danger" onclick="deleteDoc('negociacoes','${n.id}')">Excluir</button>
                 </td>
@@ -2776,7 +2793,7 @@ function renderViewNegociacao(neg){
   const cliente = state.clientes.find(c=>c.id===neg.clienteId);
   const wa = cliente ? whatsappLink(cliente.telefone) : null;
   const historico = Array.isArray(neg.historicoStatus) ? [...neg.historicoStatus].sort((a,b)=>(a.data||"").localeCompare(b.data||"")) : [];
-  const podeGerarEvento = !neg.eventoId && neg.status!=="perdido";
+  const podeGerarEvento = neg.status==="fechado" && !neg.eventoId;
 
   return `<h3>Negociação · ${cliente?.nome||"—"}</h3>
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${neg.clienteId}');return false;">${nomeRef("clientes",neg.clienteId)}</a>`)}
@@ -2827,108 +2844,6 @@ function criarEventoDeNegociacao(negId){
     refreshFormFields();
     toast("Campos preenchidos a partir da negociação. Confira e complete a data antes de salvar.", 4500);
   }, 100);
-}
-
-/* ---------- Criar evento a partir de uma pré-reserva (interessado avulso ou negociação) ----------
-   Se a pré-reserva já estiver vinculada a uma negociação, reaproveita o fluxo de
-   criarEventoDeNegociacao. Se for um "interessado" avulso (lead ou nome livre),
-   pede pra escolher/criar o cliente antes de abrir o formulário de evento. */
-function abrirCriarEventoDePreReserva(preReservaId){
-  const p = state.prereservas.find(x=>x.id===preReservaId);
-  if(!p) return;
-  if(p.negociacaoId){ criarEventoDeNegociacao(p.negociacaoId); return; }
-
-  const leadVinculado = p.leadId ? state.leads.find(l=>l.id===p.leadId) : null;
-  // se o lead já foi convertido em cliente, usa esse cliente direto
-  if(leadVinculado?.clienteId){
-    closeModal();
-    openForm("eventos");
-    setTimeout(()=>{
-      formState.clienteId = leadVinculado.clienteId;
-      formState.data = p.data;
-      formState._preReservaId = p.id;
-      autoSelecionarCriancaVinculada(leadVinculado.clienteId);
-      refreshFormFields();
-      toast("Campos preenchidos a partir da pré-reserva. Complete o tipo de evento antes de salvar.", 4500);
-    }, 150);
-    return;
-  }
-
-  const nomeBusca = leadVinculado?.nome || p.nome || "";
-  const telefoneBusca = leadVinculado?.telefone || p.telefone || "";
-  const candidatos = nomeBusca ? buscarCandidatosCliente(nomeBusca) : [];
-  const clientesOrdenados = [...state.clientes].filter(c=>!c.hibernado && !candidatos.some(cd=>cd.id===c.id))
-    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
-
-  window._preReservaEventoTemp = { preReservaId, nomeSugerido: nomeBusca, telefoneSugerido: telefoneBusca };
-
-  document.getElementById("modal-content").innerHTML = `
-    <h3>📆 Criar evento a partir da pré-reserva</h3>
-    <div style="font-size:13px; color:var(--muted); margin-bottom:14px;">
-      Data: <b>${formatDate(p.data)}</b>${nomeBusca?" · "+escapeHtml(nomeBusca):""}${p.observacoes?"<br>"+escapeHtml(p.observacoes):""}
-    </div>
-    <div class="field">
-      <label>Cliente</label>
-      <select id="pre-evento-cliente" onchange="onPreEventoClienteChange(this.value)">
-        <option value="">— selecione —</option>
-        <option value="__new__" ${!candidatos.length?"selected":""}>+ Cadastrar novo cliente${nomeBusca?": \""+escapeHtml(nomeBusca)+"\"":""}</option>
-        ${candidatos.map((c,i)=>`<option value="${c.id}" ${i===0 && c.score>=0.85?"selected":""}>${escapeHtml(c.nome)} (${Math.round(c.score*100)}% parecido)</option>`).join("")}
-        ${clientesOrdenados.map(c=>`<option value="${c.id}">${escapeHtml(c.nomeConjuge?c.nome+" & "+c.nomeConjuge:c.nome)}</option>`).join("")}
-      </select>
-    </div>
-    <div id="pre-evento-novo-cliente"></div>
-    <div class="modal-actions">
-      <button class="ghost" onclick="closeModal()">Cancelar</button>
-      <button class="primary" onclick="continuarCriarEventoDePreReserva()">Continuar</button>
-    </div>
-  `;
-  document.getElementById("modal-backdrop").classList.add("active");
-  onPreEventoClienteChange(document.getElementById("pre-evento-cliente").value);
-}
-
-function onPreEventoClienteChange(valor){
-  const container = document.getElementById("pre-evento-novo-cliente");
-  if(!container) return;
-  if(valor === "__new__"){
-    const dados = window._preReservaEventoTemp || {};
-    container.innerHTML = `
-      <div class="field"><label>Nome do novo cliente</label><input id="pre-evento-novo-nome" type="text" value="${escapeHtml(dados.nomeSugerido||"")}"></div>
-      <div class="field"><label>Telefone (opcional)</label><input id="pre-evento-novo-tel" type="tel" value="${escapeHtml(dados.telefoneSugerido||"")}"></div>
-    `;
-  } else {
-    container.innerHTML = "";
-  }
-}
-
-async function continuarCriarEventoDePreReserva(){
-  const dados = window._preReservaEventoTemp;
-  if(!dados) return;
-  const p = state.prereservas.find(x=>x.id===dados.preReservaId);
-  if(!p) return;
-  const valor = document.getElementById("pre-evento-cliente")?.value;
-  if(!valor){ toast("Selecione o cliente."); return; }
-
-  let clienteId = valor;
-  if(valor === "__new__"){
-    const nome = document.getElementById("pre-evento-novo-nome")?.value.trim();
-    const telefone = document.getElementById("pre-evento-novo-tel")?.value.trim();
-    if(!nome){ toast("Informe o nome do novo cliente."); return; }
-    try{
-      const ref = await db.collection("clientes").add({ nome, telefone: telefone||"", criadoEm: new Date().toISOString() });
-      clienteId = ref.id;
-    }catch(err){ console.error(err); toast("Erro ao criar o cliente. Veja o console."); return; }
-  }
-
-  closeModal();
-  openForm("eventos");
-  setTimeout(()=>{
-    formState.clienteId = clienteId;
-    formState.data = p.data;
-    formState._preReservaId = p.id;
-    autoSelecionarCriancaVinculada(clienteId);
-    refreshFormFields();
-    toast("Campos preenchidos a partir da pré-reserva. Complete o tipo de evento antes de salvar.", 4500);
-  }, 150);
 }
 
 /* =========================================================
@@ -3444,10 +3359,7 @@ function renderNegociacoesAbertasDashboard(){
           <td>${n.tipoInteresse?capitalize(n.tipoInteresse.replace("_"," ")):"—"}</td>
           <td><span class="badge">${sym[n.status||"negociacao"]||""} ${negociacaoStatusLabel(n.status)}</span></td>
           <td>${n.valorProposto?money(n.valorProposto):"—"}</td>
-          <td class="row-actions">
-            <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
-            ${!n.eventoId ? `<button class="sm" onclick="criarEventoDeNegociacao('${n.id}')">📆 Criar evento</button>` : ""}
-          </td>
+          <td class="row-actions"><button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button></td>
         </tr>`).join("")}
       </tbody></table>
     </div>`;
@@ -5237,6 +5149,7 @@ function renderViewEvento(ev){
       <button onclick="window.open('${gcalUrl}','_blank')">📅 Google Agenda</button>
       <button onclick="copiarMsgConfirmacao('${ev.id}')">📋 Msg confirmação</button>
       <button onclick="abrirGerarRecibo('${ev.id}')">🧾 Gerar recibo</button>
+      <button onclick="closeModal();setTimeout(()=>gerarELinkFeedback('evento','${ev.id}'),150)">📝 Pedir feedback</button>
       ${temIA() ? `<button onclick="triggerFotoFesta('${ev.id}')">📸 Ler foto da festa</button>` : ""}
     </div>
 
@@ -6166,6 +6079,7 @@ function renderViewCliente(cli){
       </div>
     ` : `<button class="ghost sm" style="margin-bottom:10px;" onclick="closeModal();setTimeout(()=>hibernarCliente('${cli.id}'),150)">😴 Hibernar cliente</button>`}
     ${temIA() ? `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📷 Atualizar via print ou contato .vcf (IA)</button>` : `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📋 Atualizar via contato .vcf</button>`}
+    <button class="ghost sm" style="margin-bottom:10px;" onclick="closeModal();setTimeout(()=>gerarELinkFeedback('cliente','${cli.id}'),150)">📝 Pedir feedback</button>
     ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener" title="WhatsApp">${cli.telefone} ↗ <i class="ti ti-brand-whatsapp" style="color:#25D366;"></i></a>` : cli.telefone) : "—")}
     ${viewRow("Cidade", cli.cidade || "—")}
     ${viewRow("Origem", cli.origem ? capitalize(cli.origem) : "—")}
@@ -7008,10 +6922,6 @@ async function saveDoc(ignorarDuplicatas=false){
         }
         catch(err){ console.error("[negociacoes] erro ao vincular evento:", err); }
       }
-      if(col === "eventos" && formState._preReservaId){
-        try{ await db.collection("prereservas").doc(formState._preReservaId).delete(); }
-        catch(err){ console.error("[prereservas] erro ao remover após criar evento:", err); }
-      }
       toast(`${schema.singular} criado.`);
     }
     closeModal();
@@ -7025,6 +6935,379 @@ async function deleteDoc(col, id){
   if(!confirm("Tem certeza que deseja excluir?")) return;
   await db.collection(col).doc(id).delete();
   toast("Excluído.");
+}
+
+/* =========================================================
+   FEEDBACKS — link público (sem login) + revisão no CRM
+   ========================================================= */
+const FEEDBACK_PERGUNTAS = [
+  {key:"q1", texto:"O que te levou a contratar o serviço?"},
+  {key:"q2", texto:"O que você mais gostou no dia da sessão e no atendimento?"},
+  {key:"q3", texto:"Como você avalia a qualidade das fotos entregues?"},
+  {key:"q4", texto:"Tem algo que poderíamos melhorar?"},
+  {key:"q5", texto:"Você indicaria nosso trabalho para um amigo ou familiar? Por quê?"}
+];
+const FEEDBACK_ITENS = [...FEEDBACK_PERGUNTAS, {key:"livre", texto:"Quer deixar mais alguma coisa?", opcional:true}];
+
+/* ---------- Geração do link (dentro do CRM, autenticado) ---------- */
+function abrirEscolhaGerarLinkFeedback(){
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Gerar link de feedback</h3>
+    <div style="font-size:13px; color:var(--muted); margin-bottom:16px;">Escolha como vincular este link:</div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button class="secondary" style="text-align:left; padding:12px 16px; height:auto;" onclick="closeModal();setTimeout(()=>abrirSelecionarEventoParaFeedback(),200)">
+        <div style="font-weight:600;">Vincular a um evento</div>
+        <div style="font-size:12px; color:var(--muted); margin-top:3px; font-weight:400;">O link já identifica o cliente e o evento automaticamente.</div>
+      </button>
+      <button class="secondary" style="text-align:left; padding:12px 16px; height:auto;" onclick="closeModal();setTimeout(()=>abrirSelecionarClienteParaFeedback(),200)">
+        <div style="font-weight:600;">Vincular a um cliente</div>
+        <div style="font-size:12px; color:var(--muted); margin-top:3px; font-weight:400;">Sem evento específico, só o cliente já identificado.</div>
+      </button>
+      <button class="secondary" style="text-align:left; padding:12px 16px; height:auto;" onclick="closeModal();gerarELinkFeedback('avulso')">
+        <div style="font-weight:600;">Link avulso</div>
+        <div style="font-size:12px; color:var(--muted); margin-top:3px; font-weight:400;">Sem vínculo — o próprio cliente informa o nome ao responder.</div>
+      </button>
+    </div>
+    <div class="modal-actions"><button class="ghost" onclick="closeModal()">Cancelar</button></div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+function abrirSelecionarEventoParaFeedback(){
+  const eventosOrdenados = [...state.eventos].sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Selecione o evento</h3>
+    <div class="field"><select id="select-evento-feedback" style="width:100%;">
+      <option value="">— selecione —</option>
+      ${eventosOrdenados.map(e=>`<option value="${e.id}">${capitalize((e.tipo||"").replace("_"," "))} · ${formatDate(e.data)} · ${nomeRef("clientes",e.clienteId)}</option>`).join("")}
+    </select></div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="gerarLinkFeedbackDeEvento()">Gerar link</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+function gerarLinkFeedbackDeEvento(){
+  const id = document.getElementById("select-evento-feedback")?.value;
+  if(!id){ toast("Selecione um evento."); return; }
+  gerarELinkFeedback("evento", id);
+}
+function abrirSelecionarClienteParaFeedback(){
+  const clientesOrdenados = [...state.clientes].filter(c=>!c.hibernado).sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Selecione o cliente</h3>
+    <div class="field"><select id="select-cliente-feedback" style="width:100%;">
+      <option value="">— selecione —</option>
+      ${clientesOrdenados.map(c=>`<option value="${c.id}">${c.nome}</option>`).join("")}
+    </select></div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="gerarLinkFeedbackDeCliente()">Gerar link</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+function gerarLinkFeedbackDeCliente(){
+  const id = document.getElementById("select-cliente-feedback")?.value;
+  if(!id){ toast("Selecione um cliente."); return; }
+  gerarELinkFeedback("cliente", id);
+}
+function gerarELinkFeedback(tipo, id){
+  const base = location.origin + location.pathname;
+  const params = new URLSearchParams();
+  params.set("feedback","1");
+  let cliente = null;
+  if(tipo==="evento"){
+    const ev = state.eventos.find(e=>e.id===id);
+    if(!ev) return;
+    cliente = state.clientes.find(c=>c.id===ev.clienteId);
+    params.set("e", ev.id);
+    if(ev.clienteId) params.set("c", ev.clienteId);
+    if(ev.tipo) params.set("tipo", ev.tipo);
+    if(ev.data) params.set("data", ev.data);
+    params.set("nome", encodeURIComponent(cliente ? nomeRef("clientes",ev.clienteId) : ""));
+  } else if(tipo==="cliente"){
+    cliente = state.clientes.find(c=>c.id===id);
+    if(!cliente) return;
+    params.set("c", cliente.id);
+    params.set("nome", encodeURIComponent(nomeRef("clientes",cliente.id)));
+  }
+  const url = `${base}?${params.toString()}`;
+  mostrarLinkFeedbackGerado(url, cliente?.telefone||"");
+}
+function mostrarLinkFeedbackGerado(url, telefoneCliente){
+  const wa = whatsappLink(telefoneCliente);
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Link de feedback gerado</h3>
+    <div class="field"><input type="text" readonly value="${url}" style="width:100%;" onclick="this.select()"></div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Fechar</button>
+      <button class="ghost" onclick="navigator.clipboard.writeText('${url}').then(()=>toast('Link copiado!'))">Copiar</button>
+      ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent('Oi! Poderia responder um rapidinho feedback sobre nosso trabalho? '+'${url}'),'_blank')" title="Enviar WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+/* ---------- Página Feedbacks (revisão, dentro do CRM) ---------- */
+function renderFeedbacksPage(main){
+  main.innerHTML = `
+    <div class="page-header">
+      <div><div class="eyebrow">Relacionamento</div><h2>Feedbacks</h2></div>
+      <div class="page-actions">
+        <button class="primary" onclick="abrirEscolhaGerarLinkFeedback()">+ Gerar link</button>
+      </div>
+    </div>
+    <div id="feedbacks-lista"></div>
+  `;
+  renderListaFeedbacks();
+}
+function renderListaFeedbacks(){
+  const container = document.getElementById("feedbacks-lista");
+  if(!container) return;
+  const lista = [...state.feedbacks].sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+  if(!lista.length){
+    container.innerHTML = `<div class="card"><div class="empty-state"><div class="serif">Nenhum feedback recebido ainda</div>Gere um link e envie pro cliente.</div></div>`;
+    return;
+  }
+  container.innerHTML = lista.map(renderCardFeedback).join("");
+}
+function renderCardFeedback(fb){
+  const evento = fb.eventoId ? state.eventos.find(e=>e.id===fb.eventoId) : null;
+  const nomeExibido = fb.clienteId ? nomeRef("clientes", fb.clienteId) : (fb.nomeInformado || fb.contextoNome || "Não identificado");
+  const precisaVincular = !fb.clienteId;
+  const clientesOrdenados = [...state.clientes].filter(c=>!c.hibernado).sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+
+  const perguntasHtml = FEEDBACK_ITENS.map(item=>{
+    const r = fb.respostas?.[item.key];
+    if(!r || (r.tipo==="texto" && !r.valor)) return "";
+    const conteudo = r.tipo==="audio"
+      ? `<audio controls src="${r.url}" style="width:100%; height:36px; margin-top:4px;"></audio>`
+      : `<div style="font-size:13px; margin-top:4px;">${escapeHtml(r.valor)}</div>`;
+    return `<div style="margin-bottom:12px;"><div style="font-size:12px; color:var(--muted-2);">${item.texto}</div>${conteudo}</div>`;
+  }).join("");
+
+  return `
+    <div class="card" style="margin-bottom:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:600; font-size:14px;">${escapeHtml(nomeExibido)}</div>
+          <div style="font-size:12px; color:var(--muted-2);">${formatarDataHora(fb.criadoEm)}${evento ? " · "+capitalize((evento.tipo||"").replace("_"," "))+" · "+formatDate(evento.data) : ""}</div>
+        </div>
+        ${!fb.revisado ? `<span class="badge" style="border-color:var(--amber); color:var(--amber-text);">Novo</span>` : ""}
+      </div>
+      ${perguntasHtml || `<div style="font-size:13px;color:var(--muted-2);">Sem respostas preenchidas.</div>`}
+      ${precisaVincular ? `
+        <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+          <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Vincular a um cliente cadastrado</label>
+          <div style="display:flex; gap:8px;">
+            <select id="vincular-fb-${fb.id}" style="flex:1;">
+              <option value="">— selecione —</option>
+              ${clientesOrdenados.map(c=>`<option value="${c.id}">${c.nome}</option>`).join("")}
+            </select>
+            <button class="sm" onclick="vincularFeedbackCliente('${fb.id}')">Vincular</button>
+          </div>
+        </div>
+      ` : ""}
+      <div class="row-actions" style="margin-top:10px;">
+        ${!fb.revisado ? `<button class="sm ghost" onclick="marcarFeedbackRevisado('${fb.id}')">Marcar como lido</button>` : ""}
+        <button class="sm danger" onclick="excluirFeedback('${fb.id}')">Excluir</button>
+      </div>
+    </div>
+  `;
+}
+async function vincularFeedbackCliente(feedbackId){
+  const select = document.getElementById(`vincular-fb-${feedbackId}`);
+  const clienteId = select?.value;
+  if(!clienteId){ toast("Selecione um cliente."); return; }
+  try{ await db.collection("feedbacks").doc(feedbackId).update({ clienteId }); toast("Feedback vinculado ao cliente."); }
+  catch(err){ console.error(err); toast("Erro ao vincular."); }
+}
+async function marcarFeedbackRevisado(feedbackId){
+  try{ await db.collection("feedbacks").doc(feedbackId).update({ revisado: true }); }
+  catch(err){ console.error(err); toast("Erro ao atualizar."); }
+}
+async function excluirFeedback(feedbackId){
+  if(!confirm("Excluir este feedback? Essa ação não pode ser desfeita.")) return;
+  try{ await db.collection("feedbacks").doc(feedbackId).delete(); toast("Feedback excluído."); }
+  catch(err){ console.error(err); toast("Erro ao excluir."); }
+}
+
+/* ---------- Formulário público (sem login) ---------- */
+let feedbackParams = null;
+let feedbackRespostaState = {};
+let feedbackMediaRecorder = null;
+let feedbackRecChunks = [];
+let feedbackRecTimer = null;
+let feedbackRecSegundos = 0;
+
+function formatarMMSS(seg){
+  const m = Math.floor(seg/60), s = seg%60;
+  return `${m}:${String(s).padStart(2,"0")}`;
+}
+function renderFeedbackPergunta(item){
+  const st = feedbackRespostaState[item.key] || (feedbackRespostaState[item.key] = {modo:"texto"});
+  const modo = st.modo || "texto";
+  const isLivre = item.key === "livre";
+  return `
+    <div class="card" style="margin-bottom:16px;">
+      ${isLivre
+        ? `<div style="font-weight:600; margin-bottom:2px;">${item.texto}</div><div style="font-size:12px; color:var(--muted-2); margin-bottom:12px;">Opcional — um recado, elogio, ou qualquer coisa que não perguntamos acima.</div>`
+        : `<div style="font-size:15px; margin-bottom:14px; line-height:1.5;">${item.texto}</div>`}
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <button type="button" class="${modo==="texto"?"secondary":"ghost"} sm" style="flex:1;" onclick="toggleModoFeedback('${item.key}','texto')"><i class="ti ti-pencil"></i> Escrever</button>
+        <button type="button" class="${modo==="audio"?"secondary":"ghost"} sm" style="flex:1;" onclick="toggleModoFeedback('${item.key}','audio')"><i class="ti ti-microphone"></i> Gravar áudio</button>
+      </div>
+      ${modo==="texto"
+        ? `<textarea id="fb-texto-${item.key}" placeholder="Escreva sua resposta aqui..." oninput="feedbackRespostaState['${item.key}'].valor=this.value">${escapeHtml(st.valor||"")}</textarea>`
+        : renderFeedbackAudioArea(item.key, st)}
+    </div>
+  `;
+}
+function renderFeedbackAudioArea(key, st){
+  if(st.gravando){
+    return `<div style="display:flex; align-items:center; gap:10px; background:var(--surface-2); border:1px solid var(--border-solid); border-radius:8px; padding:12px 14px;">
+      <div style="width:10px; height:10px; border-radius:50%; background:var(--danger); flex-shrink:0;"></div>
+      <div style="flex:1; font-size:13px; color:var(--muted);">Gravando...</div>
+      <div id="fb-timer-${key}" style="font-size:13px; color:var(--muted);">0:00 / 2:00</div>
+      <button type="button" class="sm danger" onclick="pararGravacaoFeedback('${key}')">Parar</button>
+    </div>`;
+  }
+  if(st.url){
+    return `<div style="display:flex; align-items:center; gap:10px;">
+      <audio controls src="${st.url}" style="flex:1; height:36px;"></audio>
+    </div>
+    <button type="button" class="ghost sm" style="margin-top:8px;" onclick="regravarFeedback('${key}')">↺ Regravar</button>`;
+  }
+  return `<button type="button" class="secondary sm" onclick="iniciarGravacaoFeedback('${key}')"><i class="ti ti-microphone"></i> Começar a gravar</button>`;
+}
+function rerenderFeedbackPergunta(key){
+  const item = FEEDBACK_ITENS.find(i=>i.key===key);
+  const el = document.getElementById(`fb-card-${key}`);
+  if(el && item) el.outerHTML = `<div id="fb-card-${key}">${renderFeedbackPergunta(item)}</div>`;
+}
+function toggleModoFeedback(key, modo){
+  feedbackRespostaState[key] = feedbackRespostaState[key] || {};
+  feedbackRespostaState[key].modo = modo;
+  rerenderFeedbackPergunta(key);
+}
+async function iniciarGravacaoFeedback(key){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    feedbackRecChunks = [];
+    feedbackMediaRecorder = new MediaRecorder(stream);
+    feedbackMediaRecorder.ondataavailable = e=>{ if(e.data.size>0) feedbackRecChunks.push(e.data); };
+    feedbackMediaRecorder.onstop = ()=>{
+      const blob = new Blob(feedbackRecChunks, {type: feedbackMediaRecorder.mimeType || "audio/webm"});
+      stream.getTracks().forEach(t=>t.stop());
+      const st = feedbackRespostaState[key];
+      st.gravando = false;
+      st.blob = blob;
+      st.duracaoSeg = feedbackRecSegundos;
+      st.url = URL.createObjectURL(blob);
+      rerenderFeedbackPergunta(key);
+    };
+    feedbackMediaRecorder.start();
+    feedbackRecSegundos = 0;
+    const st = feedbackRespostaState[key] || (feedbackRespostaState[key] = {modo:"audio"});
+    st.gravando = true;
+    rerenderFeedbackPergunta(key);
+    feedbackRecTimer = setInterval(()=>{
+      feedbackRecSegundos++;
+      const el = document.getElementById(`fb-timer-${key}`);
+      if(el) el.textContent = `${formatarMMSS(feedbackRecSegundos)} / 2:00`;
+      if(feedbackRecSegundos>=120) pararGravacaoFeedback(key);
+    },1000);
+  }catch(err){
+    console.error("[feedback] erro ao acessar microfone:", err);
+    toast("Não foi possível acessar o microfone. Verifique a permissão do navegador.");
+  }
+}
+function pararGravacaoFeedback(key){
+  clearInterval(feedbackRecTimer);
+  if(feedbackMediaRecorder && feedbackMediaRecorder.state!=="inactive") feedbackMediaRecorder.stop();
+}
+function regravarFeedback(key){
+  const st = feedbackRespostaState[key];
+  if(st){ st.blob=null; st.url=null; }
+  rerenderFeedbackPergunta(key);
+}
+
+function iniciarFeedbackPublico(){
+  feedbackParams = new URLSearchParams(location.search);
+  const nomeCtx = feedbackParams.get("nome") ? decodeURIComponent(feedbackParams.get("nome")) : "";
+  const dataCtx = feedbackParams.get("data") || "";
+  const tipoCtx = feedbackParams.get("tipo") || "";
+  const clienteId = feedbackParams.get("c") || "";
+  const eventoId = feedbackParams.get("e") || "";
+
+  const contextoEl = document.getElementById("fb-contexto");
+  const partes = [tipoCtx ? capitalize(tipoCtx.replace("_"," ")) : "", nomeCtx, dataCtx ? formatDate(dataCtx) : ""].filter(Boolean);
+  contextoEl.textContent = partes.length ? partes.join(" · ") : "Sua opinião ajuda demais o trabalho do Yuri!";
+
+  const nomeWrap = document.getElementById("fb-nome-wrap");
+  if(!clienteId && !eventoId){
+    nomeWrap.innerHTML = `<div class="field"><label>Seu nome</label><input id="fb-seu-nome" type="text" placeholder="Como podemos te identificar?"></div>`;
+  }
+
+  document.getElementById("fb-perguntas").innerHTML = FEEDBACK_PERGUNTAS.map(item=>`<div id="fb-card-${item.key}">${renderFeedbackPergunta(item)}</div>`).join("");
+  document.getElementById("fb-livre-wrap").innerHTML = `<div id="fb-card-livre">${renderFeedbackPergunta(FEEDBACK_ITENS.find(i=>i.key==="livre"))}</div>`;
+}
+
+async function enviarFeedbackPublico(){
+  const clienteId = feedbackParams.get("c") || "";
+  const eventoId = feedbackParams.get("e") || "";
+  let nomeInformado = "";
+  if(!clienteId && !eventoId){
+    nomeInformado = document.getElementById("fb-seu-nome")?.value.trim() || "";
+    if(!nomeInformado){ toast("Informe seu nome antes de enviar."); return; }
+  }
+
+  const btn = document.getElementById("btn-enviar-feedback");
+  if(btn){ btn.disabled = true; btn.textContent = "Enviando..."; }
+
+  try{
+    const feedbackId = db.collection("feedbacks").doc().id;
+    const respostas = {};
+    for(const item of FEEDBACK_ITENS){
+      const st = feedbackRespostaState[item.key] || {modo:"texto"};
+      if(st.modo==="audio" && st.blob){
+        const ref = storage.ref(`feedbacks/${feedbackId}/${item.key}.webm`);
+        await ref.put(st.blob);
+        const url = await ref.getDownloadURL();
+        respostas[item.key] = { tipo:"audio", url, duracaoSeg: st.duracaoSeg||0 };
+      } else {
+        const el = document.getElementById(`fb-texto-${item.key}`);
+        const valor = el ? el.value.trim() : (st.valor||"").trim();
+        respostas[item.key] = { tipo:"texto", valor };
+      }
+    }
+    await db.collection("feedbacks").doc(feedbackId).set({
+      eventoId, clienteId, nomeInformado,
+      contextoNome: feedbackParams.get("nome") ? decodeURIComponent(feedbackParams.get("nome")) : "",
+      contextoData: feedbackParams.get("data") || "",
+      respostas,
+      criadoEm: new Date().toISOString(),
+      revisado: false
+    });
+    document.getElementById("feedback-screen").innerHTML = `
+      <div style="max-width:520px; margin:80px auto; text-align:center; padding:0 16px;">
+        <div style="font-size:40px; margin-bottom:14px;">✅</div>
+        <h1 style="font-size:24px; margin-bottom:8px;">Obrigado pelo feedback!</h1>
+        <div style="color:var(--muted); font-size:14px;">Sua resposta foi enviada com sucesso.</div>
+      </div>
+    `;
+  }catch(err){
+    console.error("[feedback] erro ao enviar:", err);
+    toast("Erro ao enviar. Tente novamente.");
+    if(btn){ btn.disabled=false; btn.textContent="Enviar feedback"; }
+  }
+}
+
+if(MODO_FEEDBACK){
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("feedback-screen").style.display = "block";
+  iniciarFeedbackPublico();
 }
 </script>
 </body>
