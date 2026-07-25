@@ -491,8 +491,8 @@
 
 <div id="feedback-screen" style="display:none; min-height:100vh; background:var(--bg); padding:40px 16px 60px;">
   <div id="fb-content-wrap" class="fb-fade" style="max-width:520px; margin:0 auto;">
-    <div class="eyebrow">Estúdio · Feedback</div>
-    <h1 style="font-size:26px; margin:0 0 6px;">Como foi sua experiência?</h1>
+    <div class="eyebrow" style="text-align:center;">Feedback - Yuri Silva Fotografias</div>
+    <h1 style="font-size:26px; margin:0 0 6px; text-align:center;">Como foi sua experiência?</h1>
     <div id="fb-contexto" style="font-size:13px; color:var(--muted); margin-bottom:24px;"></div>
     <div id="fb-nome-wrap"></div>
     <div id="fb-perguntas"></div>
@@ -7348,9 +7348,9 @@ async function enviarFeedbackPublico(){
 
     const wrap = document.getElementById("fb-content-wrap");
     const telaSucessoHtml = `
-      <div style="text-align:center; padding:60px 0 20px;">
-        <div style="font-size:40px; margin-bottom:14px;">✅</div>
-        <div style="font-size:15px; line-height:1.7; white-space:pre-wrap;">${escapeHtml(mensagemFinal)}</div>
+      <div style="position:relative; text-align:center; padding:70px 24px 40px; min-height:320px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+        <img src="apple-touch-icon.png" alt="" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:320px; height:320px; object-fit:contain; opacity:0.4; pointer-events:none; z-index:0;">
+        <div class="serif" style="position:relative; z-index:1; font-size:20px; line-height:1.8; font-weight:500; white-space:pre-wrap;">${escapeHtml(mensagemFinal)}</div>
       </div>
     `;
     if(wrap){
