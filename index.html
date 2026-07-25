@@ -6244,6 +6244,48 @@ async function callGeminiVision(base64Data, mimeType, prompt, tentativa=0){
   }
 }
 
+async function callGeminiAudio(base64Data, mimeType, prompt, tentativa=0){
+  const key = state.config?.geminiKey || "";
+  if(!key) return { erro: "Nenhuma chave Gemini configurada." };
+  try{
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL_PADRAO}:generateContent?key=${key}`, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ contents:[{ parts:[
+        { inline_data:{ mime_type: mimeType, data: base64Data } },
+        { text: prompt }
+      ]}]})
+    });
+    const data = await res.json();
+    if(!res.ok){
+      const msg = data?.error?.message || `Erro HTTP ${res.status}`;
+      console.error("[gemini-audio] erro da API:", msg, data);
+      const segundos = parseRetryAfter(msg);
+      if(segundos && tentativa===0){
+        toast(`Limite de requisições atingido. Retentando em ${segundos}s automaticamente...`, (segundos+3)*1000);
+        await new Promise(r=>setTimeout(r, segundos*1000));
+        return callGeminiAudio(base64Data, mimeType, prompt, 1);
+      }
+      if(ehErroSobrecarga(msg) && tentativa<RETRY_SOBRECARGA_SEGUNDOS.length){
+        const espera = RETRY_SOBRECARGA_SEGUNDOS[tentativa];
+        toast(`Os servidores do Gemini estão com alta demanda no momento. Tentando de novo em ${espera}s (tentativa ${tentativa+1}/${RETRY_SOBRECARGA_SEGUNDOS.length})...`, (espera+3)*1000);
+        await new Promise(r=>setTimeout(r, espera*1000));
+        return callGeminiAudio(base64Data, mimeType, prompt, tentativa+1);
+      }
+      return { erro: msg, segundosRetry: segundos, sobrecarregado: ehErroSobrecarga(msg) };
+    }
+    const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if(!texto){
+      console.error("[gemini-audio] resposta sem texto:", data);
+      return { erro: "A IA não retornou texto." };
+    }
+    return { texto };
+  }catch(err){
+    console.error("[gemini-audio] erro de rede:", err);
+    return { erro: "Falha de conexão com o Gemini." };
+  }
+}
+
 function triggerPrintUpload(col){
   const input = document.createElement("input");
   input.type = "file";
@@ -7090,7 +7132,9 @@ function renderCardFeedback(fb){
     const r = fb.respostas?.[item.key];
     if(!r || (r.tipo==="texto" && !r.valor)) return "";
     const conteudo = r.tipo==="audio"
-      ? `<audio controls src="${r.url}" style="width:100%; height:36px; margin-top:4px;"></audio>`
+      ? `<audio controls src="${r.url}" style="width:100%; height:36px; margin-top:4px;"></audio>
+         ${temIA() ? `<button class="ghost sm" style="margin-top:6px;" onclick="event.stopPropagation();transcreverAudioFeedback('${fb.id}','${item.key}')">✦ Transcrever com IA</button>
+         <div id="transcricao-${fb.id}-${item.key}" style="font-size:13px; margin-top:6px; color:var(--muted);"></div>` : ""}`
       : `<div style="font-size:13px; margin-top:4px;">${escapeHtml(r.valor)}</div>`;
     return `<div style="margin-bottom:12px;"><div style="font-size:12px; color:var(--muted-2);">${item.texto}</div>${conteudo}</div>`;
   }).join("");
@@ -7145,6 +7189,18 @@ async function excluirFeedback(feedbackId){
   if(!confirm("Excluir este feedback? Essa ação não pode ser desfeita.")) return;
   try{ await db.collection("feedbacks").doc(feedbackId).delete(); toast("Feedback excluído."); }
   catch(err){ console.error(err); toast("Erro ao excluir."); }
+}
+async function transcreverAudioFeedback(fbId, key){
+  const fb = state.feedbacks.find(f=>f.id===fbId);
+  const r = fb?.respostas?.[key];
+  if(!r || r.tipo!=="audio") return;
+  if(!temIA()){ toast("Configure a chave Gemini em Configurações."); return; }
+  const box = document.getElementById(`transcricao-${fbId}-${key}`);
+  if(box) box.textContent = "Transcrevendo...";
+  const [meta, base64] = (r.url||"").split(",");
+  const mimeType = meta?.match(/data:(.*);base64/)?.[1] || "audio/webm";
+  const resultado = await callGeminiAudio(base64, mimeType, "Transcreva este áudio em português. Retorne apenas o texto transcrito, sem comentários.");
+  if(box) box.textContent = resultado.texto || mensagemErroIA(resultado, "transcrever o áudio");
 }
 
 /* ---------- Formulário público (sem login) ---------- */
@@ -7348,9 +7404,8 @@ async function enviarFeedbackPublico(){
 
     const wrap = document.getElementById("fb-content-wrap");
     const telaSucessoHtml = `
-      <div style="position:relative; text-align:center; padding:70px 24px 40px; min-height:320px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
-        <img src="apple-touch-icon.png" alt="" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:320px; height:320px; object-fit:contain; opacity:0.4; pointer-events:none; z-index:0;">
-        <div class="serif" style="position:relative; z-index:1; font-size:20px; line-height:1.8; font-weight:500; white-space:pre-wrap;">${escapeHtml(mensagemFinal)}</div>
+      <div style="text-align:center; padding:70px 24px 40px; min-height:320px; display:flex; align-items:center; justify-content:center;">
+        <div class="serif" style="font-size:20px; line-height:1.8; font-weight:500; white-space:pre-wrap;">${escapeHtml(mensagemFinal)}</div>
       </div>
     `;
     if(wrap){
