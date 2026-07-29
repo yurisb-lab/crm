@@ -429,6 +429,9 @@
   }
   .fab-novo-evento:hover{ transform:scale(1.06); }
   .fab-novo-evento i{ font-size:24px; line-height:1; }
+  .fab-novo-evento.fab-inline{
+    position:static; margin:18px auto 4px; display:flex;
+  }
   @media (max-width:600px){
     .fab-novo-evento{ bottom:22px; right:18px; width:52px; height:52px; }
   }
@@ -3820,10 +3823,6 @@ function renderDashboard(main){
       <div><div class="eyebrow">Visão geral</div><h2>Dashboard</h2></div>
     </div>
 
-    <button class="fab-novo-evento" onclick="openForm('eventos')" title="Novo evento" aria-label="Novo evento">
-      <i class="ti ti-plus"></i>
-    </button>
-
     ${renderAvisosEventoProximo()}
 
     ${(()=>{
@@ -3863,6 +3862,10 @@ function renderDashboard(main){
     })()}
 
     <div style="margin-top:20px;">${renderCardMeta()}</div>
+
+    <button class="fab-novo-evento fab-inline" onclick="openForm('eventos')" title="Novo evento" aria-label="Novo evento">
+      <i class="ti ti-plus"></i>
+    </button>
 
     ${renderLeadsNegociandoDashboard()}
 
@@ -6635,7 +6638,8 @@ function abrirBaixaRapida(eventoId){
   const ev = state.eventos.find(e=>e.id===eventoId);
   if(!ev) return;
   const saldo = (Number(ev.valorContratado)||0) - totalPago(eventoId);
-  formState = { _baixaEventoId: eventoId, valor: saldo, data: ev.data || new Date().toISOString().slice(0,10), forma: "pix", tipo: saldo===(Number(ev.valorContratado)||0) ? "saldo" : "parcela" };
+  const jaTemPagamento = totalPago(eventoId) > 0;
+  formState = { _baixaEventoId: eventoId, valor: saldo, data: new Date().toISOString().slice(0,10), forma: "pix", tipo: !jaTemPagamento ? "entrada" : (saldo===(Number(ev.valorContratado)||0) ? "saldo" : "parcela") };
 
   document.getElementById("modal-content").innerHTML = `
     <h3>Dar baixa — ${capitalize((ev.tipo||"").replace("_"," "))} · ${nomeRef("clientes",ev.clienteId)}</h3>
@@ -7000,9 +7004,14 @@ async function saveDoc(ignorarDuplicatas=false){
       if(col === "negociacoes") await sincronizarPreReservaNegociacao(novoRef.id, { ...data, eventoId:"" });
       if(col === "eventos" && formState._negociacaoId){
         try{
-          await db.collection("negociacoes").doc(formState._negociacaoId).update({ eventoId: novoRef.id });
+          const negAtual = state.negociacoes.find(n=>n.id===formState._negociacaoId);
+          const historicoNeg = negAtual && Array.isArray(negAtual.historicoStatus) ? [...negAtual.historicoStatus] : [];
+          if(!negAtual || (negAtual.status||"negociacao")!=="fechado"){
+            historicoNeg.push({ status:"fechado", data: new Date().toISOString() });
+          }
+          await db.collection("negociacoes").doc(formState._negociacaoId).update({ eventoId: novoRef.id, status: "fechado", historicoStatus: historicoNeg });
           const negAtualizada = state.negociacoes.find(n=>n.id===formState._negociacaoId);
-          if(negAtualizada) await sincronizarPreReservaNegociacao(formState._negociacaoId, { ...negAtualizada, eventoId: novoRef.id });
+          if(negAtualizada) await sincronizarPreReservaNegociacao(formState._negociacaoId, { ...negAtualizada, status:"fechado", eventoId: novoRef.id });
         }
         catch(err){ console.error("[negociacoes] erro ao vincular evento:", err); }
       }
