@@ -421,6 +421,17 @@
     position:fixed; bottom:24px; right:24px; background:var(--surface-2); border:1px solid var(--amber);
     color:var(--text); padding:12px 18px; border-radius:8px; font-size:13px; z-index:99; display:none;
   }
+  .fab-novo-evento{
+    position:fixed; bottom:28px; right:24px; width:56px; height:56px; border-radius:50%;
+    background:var(--amber); color:#fff; border:none; display:flex; align-items:center; justify-content:center;
+    font-size:24px; box-shadow:var(--shadow-2, 0 4px 14px rgba(0,0,0,.25)); cursor:pointer; z-index:45;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .fab-novo-evento:hover{ transform:scale(1.06); }
+  .fab-novo-evento i{ font-size:24px; line-height:1; }
+  @media (max-width:600px){
+    .fab-novo-evento{ bottom:22px; right:18px; width:52px; height:52px; }
+  }
 
   /* ---- TRANSIÇÃO SUAVE DA TELA DE FEEDBACK (form -> agradecimento) ---- */
   .fb-fade{ transition: opacity .35s ease, transform .35s ease; }
@@ -3807,10 +3818,11 @@ function renderDashboard(main){
   main.innerHTML = `
     <div class="page-header">
       <div><div class="eyebrow">Visão geral</div><h2>Dashboard</h2></div>
-      <div class="page-actions">
-        <button class="primary" onclick="openForm('eventos')" title="Novo evento">+ Novo Evento</button>
-      </div>
     </div>
+
+    <button class="fab-novo-evento" onclick="openForm('eventos')" title="Novo evento" aria-label="Novo evento">
+      <i class="ti ti-plus"></i>
+    </button>
 
     ${renderAvisosEventoProximo()}
 
