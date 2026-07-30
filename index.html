@@ -475,7 +475,7 @@
 
 <!-- ============ APP ============ -->
 <div id="app">
-  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebarMobile()"></div>
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
   <aside id="sidebar">
     <div class="brand">
       <div class="eyebrow">Estúdio</div>
@@ -485,16 +485,16 @@
     <div class="sidebar-footer">
       <div class="footer-row">
         <span id="user-email"></span>
-        <button class="theme-toggle ghost" id="theme-toggle-btn" onclick="toggleTheme()" title="Alternar tema">🌙</button>
+        <button class="theme-toggle ghost" id="theme-toggle-btn" title="Alternar tema">🌙</button>
       </div>
-      <button class="ghost" style="width:100%; margin-top:8px;" onclick="doLogout()">Sair</button>
+      <button class="ghost" id="btn-logout" style="width:100%; margin-top:8px;">Sair</button>
     </div>
   </aside>
   <div style="flex:1; min-width:0;">
     <div id="mobile-topbar">
-      <button class="ghost" onclick="openSidebarMobile()">☰ Menu</button>
+      <button class="ghost" id="btn-open-sidebar-mobile">☰ Menu</button>
       <span class="brand-mini">Estúdio · CRM</span>
-      <button class="theme-toggle ghost" onclick="toggleTheme()" title="Alternar tema">🌙</button>
+      <button class="theme-toggle ghost" id="theme-toggle-btn-mobile" title="Alternar tema">🌙</button>
     </div>
     <main id="main"></main>
   </div>
@@ -581,6 +581,21 @@ function closeSidebarMobile(){
   document.getElementById("sidebar-backdrop").classList.remove("open");
 }
 updateThemeIcon();
+
+/**
+ * Botões fixos do "chrome" da página (menu, tema, sair) — sempre presentes
+ * no HTML desde o carregamento, nunca recriados dinamicamente. Por isso dá
+ * pra ligar aqui, uma vez só, com addEventListener em vez de onclick="" no
+ * HTML. Fatia inicial e propositalmente pequena de uma limpeza maior (os
+ * outros onclick="" do app, que são gerados dinamicamente linha a linha em
+ * listas de clientes/eventos, precisam de delegação de evento — técnica
+ * diferente — e ficam pra uma passada futura, separada desta).
+ */
+document.getElementById("theme-toggle-btn")?.addEventListener("click", toggleTheme);
+document.getElementById("theme-toggle-btn-mobile")?.addEventListener("click", toggleTheme);
+document.getElementById("btn-logout")?.addEventListener("click", doLogout);
+document.getElementById("btn-open-sidebar-mobile")?.addEventListener("click", openSidebarMobile);
+document.getElementById("sidebar-backdrop")?.addEventListener("click", closeSidebarMobile);
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
@@ -2076,6 +2091,13 @@ async function enviarMensagemChat(){
   if(!texto) return;
   if(input) input.value = "";
 
+  // Trava o botão de envio enquanto a IA responde — mesmo padrão já usado em
+  // outras ações da IA no app (briefing, resumo, variações). Sem isso, dava
+  // pra clicar "Enviar" várias vezes seguidas e mandar a mesma mensagem
+  // repetida enquanto a resposta anterior ainda não tinha voltado.
+  const btnEnviar = document.querySelector(".chat-input-row button");
+  if(btnEnviar){ btnEnviar.disabled = true; btnEnviar.textContent = "Enviando..."; }
+
   chatHistory.push({ role:"user", content:texto });
 
   const msgs = document.getElementById("chat-messages");
@@ -2139,8 +2161,7 @@ Regras importantes:
     msgs.scrollTop = msgs.scrollHeight;
   }
   rerenderAcoesPendentesIA();
-  const btn = document.querySelector(".chat-input-row button");
-  if(btn) btn.disabled = false;
+  if(btnEnviar){ btnEnviar.disabled = false; btnEnviar.textContent = "Enviar"; }
 
   salvarChatHistoricoRemoto();
 }
@@ -5047,6 +5068,10 @@ Instruções por campo:
     // a data do EXIF (metadado real da câmera) tem prioridade sobre qualquer estimativa da IA
     if(dataExif) dados.dataCapturaExif = dataExif;
     dados._dataFonte = dataExif ? "exif" : (dados.dataCapturaExif ? "ia" : null);
+    // Fecha o aviso "Analisando a foto..." — sem isso ele ficava preso na tela
+    // ao abrir o modal de confirmação, porque esse caminho de sucesso nunca
+    // chamava toast() (que é quem some com ele sozinho).
+    if(t) t.style.display = "none";
     abrirConfirmacaoFotoFesta(eventoId, dados);
   };
   reader.readAsDataURL(file);
@@ -6386,6 +6411,9 @@ Se não conseguir identificar um campo com confiança, deixe vazio (string vazia
       toast("Não consegui interpretar os dados extraídos. Veja o console.");
       return;
     }
+    // Mesmo motivo do processarFotoFesta: fecha o aviso "Lendo a imagem..."
+    // antes do modal, já que esse caminho de sucesso nunca chama toast().
+    if(t) t.style.display = "none";
     abrirConfirmacaoPrintCliente(clienteId, dados);
   };
   reader.readAsDataURL(file);
