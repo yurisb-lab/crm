@@ -1164,6 +1164,7 @@ function renderEventosPage(main){
           ${todosOsTipos.map(t=>`<option value="${t}" ${eventosFiltroTipo===t?"selected":""}>${capitalize(t.replace("_"," "))}</option>`).join("")}
         </select>
         <button class="ghost" onclick="abrirEscolhaCriarPorImagem()">📸 Criar com imagem</button>
+        <button class="ghost" onclick="abrirExportarEventosPDF()">📄 Exportar PDF</button>
         <button class="primary" onclick="openForm('eventos')">+ Novo Evento</button>
       </div>
     </div>
@@ -3963,7 +3964,6 @@ function renderCollectionPage(main, col){
         <input type="text" id="busca-${col}" placeholder="Buscar..." value="${collectionSearch[col]||""}"
           oninput="collectionSearch['${col}']=this.value; renderCollectionList('${col}');" style="width:160px;">
         ${col==="clientes" ? `<button class="ghost" onclick="verificarDuplicados()">Verificar duplicados</button>` : ""}
-        ${col==="eventos" ? `<button class="ghost" onclick="abrirExportarEventosPDF()">📄 Exportar PDF</button>` : ""}
         <button class="primary" onclick="openForm('${col}')">+ Novo ${schema.singular}</button>
       </div>
     </div>
