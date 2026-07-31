@@ -524,6 +524,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <!-- exifr: leitura de metadados EXIF das fotos (data real da câmera) -->
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+<!-- jsPDF + autoTable: geração do relatório de eventos em PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
 <script>
 /* =========================================================
@@ -3960,12 +3963,155 @@ function renderCollectionPage(main, col){
         <input type="text" id="busca-${col}" placeholder="Buscar..." value="${collectionSearch[col]||""}"
           oninput="collectionSearch['${col}']=this.value; renderCollectionList('${col}');" style="width:160px;">
         ${col==="clientes" ? `<button class="ghost" onclick="verificarDuplicados()">Verificar duplicados</button>` : ""}
+        ${col==="eventos" ? `<button class="ghost" onclick="abrirExportarEventosPDF()">📄 Exportar PDF</button>` : ""}
         <button class="primary" onclick="openForm('${col}')">+ Novo ${schema.singular}</button>
       </div>
     </div>
     <div id="collection-list-${col}"></div>
   `;
   renderCollectionList(col);
+}
+
+/* =========================================================
+   EXPORTAR EVENTOS EM PDF
+   ========================================================= */
+const EXPORT_EVENTOS_CAMPOS = [
+  {key:"data",               label:"Data de realização",  default:true,  get:e=>formatDate(e.data)},
+  {key:"tipo",                label:"Tipo de evento",      default:true,  get:e=> e.tipo==="outro" && e.outroDescricao ? `Outro: ${e.outroDescricao}` : (e.tipo?capitalize(e.tipo.replace("_"," ")):"—")},
+  {key:"nomeEvento",          label:"Nome do evento",      default:false, get:e=>e.nomeEvento||"—"},
+  {key:"cliente",             label:"Cliente",             default:true,  get:e=>nomeRef("clientes",e.clienteId)},
+  {key:"endereco",            label:"Endereço / local",    default:false, get:e=>e.endereco||"—"},
+  {key:"horario",             label:"Horário",             default:false, get:e=>e.horario||"—"},
+  {key:"status",              label:"Status",              default:true,  get:e=>statusLabel(e.status||"confirmado")},
+  {key:"fotoLida",            label:"Checado por foto",    default:true,  get:e=>e.fotoLida?"Sim":"Não"},
+  {key:"valorContratado",     label:"Valor contratado",    default:true,  get:e=>money(e.valorContratado)},
+  {key:"valorPago",           label:"Valor pago",          default:true,  get:e=>money(totalPago(e.id))},
+  {key:"saldo",               label:"Saldo",               default:false, get:e=>money((Number(e.valorContratado)||0) - totalPago(e.id))},
+  {key:"dataEntregaPrevista", label:"Entrega prevista",    default:false, get:e=>formatDate(e.dataEntregaPrevista)},
+  {key:"dataEntregaReal",     label:"Entrega realizada",   default:false, get:e=>formatDate(e.dataEntregaReal)},
+  {key:"tags",                label:"Tags",                default:false, get:e=>(e.tags||[]).join(", ")||"—"}
+];
+const EXPORT_EVENTOS_ORDENACAO = [
+  {key:"data",            label:"Data de realização", value:e=>e.data||""},
+  {key:"tipo",            label:"Tipo de evento",     value:e=>e.tipo||""},
+  {key:"cliente",         label:"Cliente (nome)",     value:e=>nomeRef("clientes",e.clienteId)},
+  {key:"status",          label:"Status",             value:e=>e.status||""},
+  {key:"valorContratado", label:"Valor contratado",   value:e=>Number(e.valorContratado)||0},
+  {key:"valorPago",       label:"Valor pago",         value:e=>totalPago(e.id)}
+];
+let exportEventosConfig = null;
+
+function abrirExportarEventosPDF(){
+  const anos = [...new Set(state.eventos.map(e=>(e.data||"").slice(0,4)).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+  exportEventosConfig = {
+    colunas: new Set(EXPORT_EVENTOS_CAMPOS.filter(c=>c.default).map(c=>c.key)),
+    ordenarPor: "data",
+    direcao: 1,
+    filtroAno: "",
+    filtroStatus: ""
+  };
+  renderExportarEventosModal(anos);
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+function renderExportarEventosModal(anos){
+  const cfg = exportEventosConfig;
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Exportar eventos em PDF</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">Escolha o período, a ordenação e as colunas do relatório.</div>
+
+    <div class="field-row">
+      <div class="field"><label>Ano</label>
+        <select onchange="exportEventosConfig.filtroAno=this.value" style="width:100%">
+          <option value="">Todos</option>
+          ${anos.map(a=>`<option value="${a}" ${cfg.filtroAno===a?"selected":""}>${a}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Status</label>
+        <select onchange="exportEventosConfig.filtroStatus=this.value" style="width:100%">
+          <option value="">Todos</option>
+          ${["confirmado","realizado","entregue"].map(s=>`<option value="${s}" ${cfg.filtroStatus===s?"selected":""}>${statusLabel(s)}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field"><label>Ordenar por</label>
+        <select onchange="exportEventosConfig.ordenarPor=this.value" style="width:100%">
+          ${EXPORT_EVENTOS_ORDENACAO.map(o=>`<option value="${o.key}" ${cfg.ordenarPor===o.key?"selected":""}>${o.label}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Direção</label>
+        <select onchange="exportEventosConfig.direcao=Number(this.value)" style="width:100%">
+          <option value="1" ${cfg.direcao===1?"selected":""}>Crescente</option>
+          <option value="-1" ${cfg.direcao===-1?"selected":""}>Decrescente</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Colunas no PDF</label>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; margin-top:6px;">
+        ${EXPORT_EVENTOS_CAMPOS.map(c=>`
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="export-col-${c.key}" ${cfg.colunas.has(c.key)?"checked":""}
+              onchange="this.checked ? exportEventosConfig.colunas.add('${c.key}') : exportEventosConfig.colunas.delete('${c.key}')"
+              style="width:16px; height:16px;">
+            <label for="export-col-${c.key}" style="margin:0; font-size:13px;">${c.label}</label>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="gerarPdfEventos()">Gerar PDF</button>
+    </div>
+  `;
+}
+
+function gerarPdfEventos(){
+  const cfg = exportEventosConfig;
+  const colunas = EXPORT_EVENTOS_CAMPOS.filter(c=>cfg.colunas.has(c.key));
+  if(!colunas.length){ toast("Selecione ao menos uma coluna."); return; }
+  if(!window.jspdf){ toast("Não foi possível carregar o gerador de PDF. Verifique sua conexão."); return; }
+
+  let items = [...state.eventos];
+  if(cfg.filtroAno) items = items.filter(e=>(e.data||"").startsWith(cfg.filtroAno));
+  if(cfg.filtroStatus) items = items.filter(e=>(e.status||"confirmado")===cfg.filtroStatus);
+  if(!items.length){ toast("Nenhum evento encontrado com esses filtros."); return; }
+
+  const ordenacao = EXPORT_EVENTOS_ORDENACAO.find(o=>o.key===cfg.ordenarPor) || EXPORT_EVENTOS_ORDENACAO[0];
+  items.sort((a,b)=> compararValores(ordenacao.value(a), ordenacao.value(b)) * cfg.direcao);
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: colunas.length>5 ? "landscape" : "portrait", unit:"pt" });
+
+  const subtitulo = [
+    cfg.filtroAno ? `Ano: ${cfg.filtroAno}` : "Todos os anos",
+    cfg.filtroStatus ? `Status: ${statusLabel(cfg.filtroStatus)}` : null,
+    `Ordenado por ${ordenacao.label.toLowerCase()} (${cfg.direcao===1?"crescente":"decrescente"})`,
+    `Gerado em ${formatDate(new Date().toISOString().slice(0,10))}`
+  ].filter(Boolean).join("  ·  ");
+
+  doc.setFontSize(16);
+  doc.text("Lista de eventos", 40, 40);
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text(subtitulo, 40, 58);
+
+  doc.autoTable({
+    startY: 72,
+    head: [colunas.map(c=>c.label)],
+    body: items.map(e=> colunas.map(c=> String(c.get(e)))),
+    styles: { fontSize: 8, cellPadding: 5 },
+    headStyles: { fillColor: [201,138,63] },
+    margin: { left: 40, right: 40 }
+  });
+
+  doc.save(`eventos-${new Date().toISOString().slice(0,10)}.pdf`);
+  toast("PDF gerado.");
+  closeModal();
 }
 
 /* =========================================================
