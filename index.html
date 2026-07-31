@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Estúdio · CRM</title>
+<title>Yuri · CRM</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="favicon-32.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" id="theme-color-meta" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="CRM Estúdio">
+<meta name="apple-mobile-web-app-title" content="Yuri CRM">
 <script>
   // aplica o tema salvo antes da pintura, pra evitar flash
   document.documentElement.setAttribute("data-theme", localStorage.getItem("crm-theme") || "dark");
@@ -464,7 +464,7 @@
 <!-- ============ LOGIN ============ -->
 <div id="login-screen">
   <div class="login-card">
-    <div class="eyebrow">Estúdio</div>
+    <div class="eyebrow">Yuri Fotos</div>
     <h1>Acessar o CRM</h1>
     <div class="field"><label>E-mail</label><input id="login-email" type="email" placeholder="seu@email.com"></div>
     <div class="field"><label>Senha</label><input id="login-pass" type="password" placeholder="••••••••"></div>
@@ -475,26 +475,26 @@
 
 <!-- ============ APP ============ -->
 <div id="app">
-  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebarMobile()"></div>
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
   <aside id="sidebar">
     <div class="brand">
-      <div class="eyebrow">Estúdio</div>
+      <div class="eyebrow">Yuri Fotos</div>
       <h1>CRM</h1>
     </div>
     <nav id="nav"></nav>
     <div class="sidebar-footer">
       <div class="footer-row">
         <span id="user-email"></span>
-        <button class="theme-toggle ghost" id="theme-toggle-btn" onclick="toggleTheme()" title="Alternar tema">🌙</button>
+        <button class="theme-toggle ghost" id="theme-toggle-btn" title="Alternar tema">🌙</button>
       </div>
-      <button class="ghost" style="width:100%; margin-top:8px;" onclick="doLogout()">Sair</button>
+      <button class="ghost" id="btn-logout" style="width:100%; margin-top:8px;">Sair</button>
     </div>
   </aside>
   <div style="flex:1; min-width:0;">
     <div id="mobile-topbar">
-      <button class="ghost" onclick="openSidebarMobile()">☰ Menu</button>
-      <span class="brand-mini">Estúdio · CRM</span>
-      <button class="theme-toggle ghost" onclick="toggleTheme()" title="Alternar tema">🌙</button>
+      <button class="ghost" id="btn-open-sidebar-mobile">☰ Menu</button>
+      <span class="brand-mini">Yuri · CRM</span>
+      <button class="theme-toggle ghost" id="theme-toggle-btn-mobile" title="Alternar tema">🌙</button>
     </div>
     <main id="main"></main>
   </div>
@@ -524,6 +524,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <!-- exifr: leitura de metadados EXIF das fotos (data real da câmera) -->
 <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+<!-- jsPDF + autoTable: geração do relatório de eventos em PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
 <script>
 /* =========================================================
@@ -581,6 +584,21 @@ function closeSidebarMobile(){
   document.getElementById("sidebar-backdrop").classList.remove("open");
 }
 updateThemeIcon();
+
+/**
+ * Botões fixos do "chrome" da página (menu, tema, sair) — sempre presentes
+ * no HTML desde o carregamento, nunca recriados dinamicamente. Por isso dá
+ * pra ligar aqui, uma vez só, com addEventListener em vez de onclick="" no
+ * HTML. Fatia inicial e propositalmente pequena de uma limpeza maior (os
+ * outros onclick="" do app, que são gerados dinamicamente linha a linha em
+ * listas de clientes/eventos, precisam de delegação de evento — técnica
+ * diferente — e ficam pra uma passada futura, separada desta).
+ */
+document.getElementById("theme-toggle-btn")?.addEventListener("click", toggleTheme);
+document.getElementById("theme-toggle-btn-mobile")?.addEventListener("click", toggleTheme);
+document.getElementById("btn-logout")?.addEventListener("click", doLogout);
+document.getElementById("btn-open-sidebar-mobile")?.addEventListener("click", openSidebarMobile);
+document.getElementById("sidebar-backdrop")?.addEventListener("click", closeSidebarMobile);
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
@@ -2076,6 +2094,13 @@ async function enviarMensagemChat(){
   if(!texto) return;
   if(input) input.value = "";
 
+  // Trava o botão de envio enquanto a IA responde — mesmo padrão já usado em
+  // outras ações da IA no app (briefing, resumo, variações). Sem isso, dava
+  // pra clicar "Enviar" várias vezes seguidas e mandar a mesma mensagem
+  // repetida enquanto a resposta anterior ainda não tinha voltado.
+  const btnEnviar = document.querySelector(".chat-input-row button");
+  if(btnEnviar){ btnEnviar.disabled = true; btnEnviar.textContent = "Enviando..."; }
+
   chatHistory.push({ role:"user", content:texto });
 
   const msgs = document.getElementById("chat-messages");
@@ -2139,8 +2164,7 @@ Regras importantes:
     msgs.scrollTop = msgs.scrollHeight;
   }
   rerenderAcoesPendentesIA();
-  const btn = document.querySelector(".chat-input-row button");
-  if(btn) btn.disabled = false;
+  if(btnEnviar){ btnEnviar.disabled = false; btnEnviar.textContent = "Enviar"; }
 
   salvarChatHistoricoRemoto();
 }
@@ -3939,12 +3963,155 @@ function renderCollectionPage(main, col){
         <input type="text" id="busca-${col}" placeholder="Buscar..." value="${collectionSearch[col]||""}"
           oninput="collectionSearch['${col}']=this.value; renderCollectionList('${col}');" style="width:160px;">
         ${col==="clientes" ? `<button class="ghost" onclick="verificarDuplicados()">Verificar duplicados</button>` : ""}
+        ${col==="eventos" ? `<button class="ghost" onclick="abrirExportarEventosPDF()">📄 Exportar PDF</button>` : ""}
         <button class="primary" onclick="openForm('${col}')">+ Novo ${schema.singular}</button>
       </div>
     </div>
     <div id="collection-list-${col}"></div>
   `;
   renderCollectionList(col);
+}
+
+/* =========================================================
+   EXPORTAR EVENTOS EM PDF
+   ========================================================= */
+const EXPORT_EVENTOS_CAMPOS = [
+  {key:"data",               label:"Data de realização",  default:true,  get:e=>formatDate(e.data)},
+  {key:"tipo",                label:"Tipo de evento",      default:true,  get:e=> e.tipo==="outro" && e.outroDescricao ? `Outro: ${e.outroDescricao}` : (e.tipo?capitalize(e.tipo.replace("_"," ")):"—")},
+  {key:"nomeEvento",          label:"Nome do evento",      default:false, get:e=>e.nomeEvento||"—"},
+  {key:"cliente",             label:"Cliente",             default:true,  get:e=>nomeRef("clientes",e.clienteId)},
+  {key:"endereco",            label:"Endereço / local",    default:false, get:e=>e.endereco||"—"},
+  {key:"horario",             label:"Horário",             default:false, get:e=>e.horario||"—"},
+  {key:"status",              label:"Status",              default:true,  get:e=>statusLabel(e.status||"confirmado")},
+  {key:"fotoLida",            label:"Checado por foto",    default:true,  get:e=>e.fotoLida?"Sim":"Não"},
+  {key:"valorContratado",     label:"Valor contratado",    default:true,  get:e=>money(e.valorContratado)},
+  {key:"valorPago",           label:"Valor pago",          default:true,  get:e=>money(totalPago(e.id))},
+  {key:"saldo",               label:"Saldo",               default:false, get:e=>money((Number(e.valorContratado)||0) - totalPago(e.id))},
+  {key:"dataEntregaPrevista", label:"Entrega prevista",    default:false, get:e=>formatDate(e.dataEntregaPrevista)},
+  {key:"dataEntregaReal",     label:"Entrega realizada",   default:false, get:e=>formatDate(e.dataEntregaReal)},
+  {key:"tags",                label:"Tags",                default:false, get:e=>(e.tags||[]).join(", ")||"—"}
+];
+const EXPORT_EVENTOS_ORDENACAO = [
+  {key:"data",            label:"Data de realização", value:e=>e.data||""},
+  {key:"tipo",            label:"Tipo de evento",     value:e=>e.tipo||""},
+  {key:"cliente",         label:"Cliente (nome)",     value:e=>nomeRef("clientes",e.clienteId)},
+  {key:"status",          label:"Status",             value:e=>e.status||""},
+  {key:"valorContratado", label:"Valor contratado",   value:e=>Number(e.valorContratado)||0},
+  {key:"valorPago",       label:"Valor pago",         value:e=>totalPago(e.id)}
+];
+let exportEventosConfig = null;
+
+function abrirExportarEventosPDF(){
+  const anos = [...new Set(state.eventos.map(e=>(e.data||"").slice(0,4)).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+  exportEventosConfig = {
+    colunas: new Set(EXPORT_EVENTOS_CAMPOS.filter(c=>c.default).map(c=>c.key)),
+    ordenarPor: "data",
+    direcao: 1,
+    filtroAno: "",
+    filtroStatus: ""
+  };
+  renderExportarEventosModal(anos);
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+function renderExportarEventosModal(anos){
+  const cfg = exportEventosConfig;
+  document.getElementById("modal-content").innerHTML = `
+    <h3>Exportar eventos em PDF</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">Escolha o período, a ordenação e as colunas do relatório.</div>
+
+    <div class="field-row">
+      <div class="field"><label>Ano</label>
+        <select onchange="exportEventosConfig.filtroAno=this.value" style="width:100%">
+          <option value="">Todos</option>
+          ${anos.map(a=>`<option value="${a}" ${cfg.filtroAno===a?"selected":""}>${a}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Status</label>
+        <select onchange="exportEventosConfig.filtroStatus=this.value" style="width:100%">
+          <option value="">Todos</option>
+          ${["confirmado","realizado","entregue"].map(s=>`<option value="${s}" ${cfg.filtroStatus===s?"selected":""}>${statusLabel(s)}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field"><label>Ordenar por</label>
+        <select onchange="exportEventosConfig.ordenarPor=this.value" style="width:100%">
+          ${EXPORT_EVENTOS_ORDENACAO.map(o=>`<option value="${o.key}" ${cfg.ordenarPor===o.key?"selected":""}>${o.label}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Direção</label>
+        <select onchange="exportEventosConfig.direcao=Number(this.value)" style="width:100%">
+          <option value="1" ${cfg.direcao===1?"selected":""}>Crescente</option>
+          <option value="-1" ${cfg.direcao===-1?"selected":""}>Decrescente</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Colunas no PDF</label>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 14px; margin-top:6px;">
+        ${EXPORT_EVENTOS_CAMPOS.map(c=>`
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="export-col-${c.key}" ${cfg.colunas.has(c.key)?"checked":""}
+              onchange="this.checked ? exportEventosConfig.colunas.add('${c.key}') : exportEventosConfig.colunas.delete('${c.key}')"
+              style="width:16px; height:16px;">
+            <label for="export-col-${c.key}" style="margin:0; font-size:13px;">${c.label}</label>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="gerarPdfEventos()">Gerar PDF</button>
+    </div>
+  `;
+}
+
+function gerarPdfEventos(){
+  const cfg = exportEventosConfig;
+  const colunas = EXPORT_EVENTOS_CAMPOS.filter(c=>cfg.colunas.has(c.key));
+  if(!colunas.length){ toast("Selecione ao menos uma coluna."); return; }
+  if(!window.jspdf){ toast("Não foi possível carregar o gerador de PDF. Verifique sua conexão."); return; }
+
+  let items = [...state.eventos];
+  if(cfg.filtroAno) items = items.filter(e=>(e.data||"").startsWith(cfg.filtroAno));
+  if(cfg.filtroStatus) items = items.filter(e=>(e.status||"confirmado")===cfg.filtroStatus);
+  if(!items.length){ toast("Nenhum evento encontrado com esses filtros."); return; }
+
+  const ordenacao = EXPORT_EVENTOS_ORDENACAO.find(o=>o.key===cfg.ordenarPor) || EXPORT_EVENTOS_ORDENACAO[0];
+  items.sort((a,b)=> compararValores(ordenacao.value(a), ordenacao.value(b)) * cfg.direcao);
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: colunas.length>5 ? "landscape" : "portrait", unit:"pt" });
+
+  const subtitulo = [
+    cfg.filtroAno ? `Ano: ${cfg.filtroAno}` : "Todos os anos",
+    cfg.filtroStatus ? `Status: ${statusLabel(cfg.filtroStatus)}` : null,
+    `Ordenado por ${ordenacao.label.toLowerCase()} (${cfg.direcao===1?"crescente":"decrescente"})`,
+    `Gerado em ${formatDate(new Date().toISOString().slice(0,10))}`
+  ].filter(Boolean).join("  ·  ");
+
+  doc.setFontSize(16);
+  doc.text("Lista de eventos", 40, 40);
+  doc.setFontSize(9);
+  doc.setTextColor(120);
+  doc.text(subtitulo, 40, 58);
+
+  doc.autoTable({
+    startY: 72,
+    head: [colunas.map(c=>c.label)],
+    body: items.map(e=> colunas.map(c=> String(c.get(e)))),
+    styles: { fontSize: 8, cellPadding: 5 },
+    headStyles: { fillColor: [201,138,63] },
+    margin: { left: 40, right: 40 }
+  });
+
+  doc.save(`eventos-${new Date().toISOString().slice(0,10)}.pdf`);
+  toast("PDF gerado.");
+  closeModal();
 }
 
 /* =========================================================
@@ -5047,6 +5214,10 @@ Instruções por campo:
     // a data do EXIF (metadado real da câmera) tem prioridade sobre qualquer estimativa da IA
     if(dataExif) dados.dataCapturaExif = dataExif;
     dados._dataFonte = dataExif ? "exif" : (dados.dataCapturaExif ? "ia" : null);
+    // Fecha o aviso "Analisando a foto..." — sem isso ele ficava preso na tela
+    // ao abrir o modal de confirmação, porque esse caminho de sucesso nunca
+    // chamava toast() (que é quem some com ele sozinho).
+    if(t) t.style.display = "none";
     abrirConfirmacaoFotoFesta(eventoId, dados);
   };
   reader.readAsDataURL(file);
@@ -6399,6 +6570,9 @@ Se não conseguir identificar um campo com confiança, deixe vazio (string vazia
       toast("Não consegui interpretar os dados extraídos. Veja o console.");
       return;
     }
+    // Mesmo motivo do processarFotoFesta: fecha o aviso "Lendo a imagem..."
+    // antes do modal, já que esse caminho de sucesso nunca chama toast().
+    if(t) t.style.display = "none";
     abrirConfirmacaoPrintCliente(clienteId, dados);
   };
   reader.readAsDataURL(file);
