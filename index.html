@@ -4115,6 +4115,167 @@ function gerarPdfEventos(){
 }
 
 /* =========================================================
+   FINANCEIRO — RELATÓRIO DO MÊS (destaque) + AVALIAÇÃO COM IA
+   ========================================================= */
+function statsFinanceiroMes(anoMes){
+  const eventosMes = state.eventos.filter(e=>(e.data||"").startsWith(anoMes));
+  const pagamentosMes = state.pagamentos.filter(p=>(p.data||"").startsWith(anoMes));
+  const recebido = pagamentosMes.reduce((s,p)=>s+(Number(p.valor)||0),0);
+  const contratado = eventosMes.reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
+  const pendente = eventosMes.reduce((s,e)=>s+Math.max((Number(e.valorContratado)||0)-totalPago(e.id),0),0);
+  return {
+    anoMes, eventos: eventosMes.length, recebido, contratado, pendente,
+    ticketMedio: eventosMes.length ? contratado/eventosMes.length : 0,
+  };
+}
+function refMes(offsetMeses){
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth()+offsetMeses);
+  return { chave: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`, mes: d.getMonth(), ano: d.getFullYear() };
+}
+
+function renderRelatorioMesFinanceiro(){
+  const meta = parseValorConfig(state.config?.metaMensal);
+  const refAtual = refMes(0);
+  const refAnterior = refMes(-1);
+  const atual = statsFinanceiroMes(refAtual.chave);
+  const anterior = statsFinanceiroMes(refAnterior.chave);
+
+  const pctAtual = meta ? Math.round(atual.recebido/meta*100) : null;
+  const pctAnterior = meta ? Math.round(anterior.recebido/meta*100) : null;
+  const corAtual = pctAtual===null ? "var(--muted-2)" : pctAtual>=100 ? "#22c55e" : pctAtual>=70 ? "#3b82f6" : pctAtual>=40 ? "#eab308" : "#ef4444";
+  const variacao = anterior.recebido>0 ? ((atual.recebido-anterior.recebido)/anterior.recebido*100) : null;
+
+  return `
+    <div class="section-title" style="margin-top:0;">📅 ${MESES[refAtual.mes]} de ${refAtual.ano} — mês atual</div>
+    <div class="card-featured" style="margin-bottom:20px;">
+      <div class="grid grid-4">
+        <div class="stat-card">
+          <div class="label">Recebido</div>
+          <div class="value" style="font-size:24px; color:#22c55e;">${money(atual.recebido)}</div>
+          <div class="sub">${meta ? `${pctAtual}% da meta de ${money(meta)}` : `Defina uma meta em Configurações`}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Contratado no mês</div>
+          <div class="value" style="font-size:22px;">${money(atual.contratado)}</div>
+          <div class="sub">${atual.eventos} evento${atual.eventos===1?"":"s"}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">A receber (saldo do mês)</div>
+          <div class="value" style="font-size:22px;">${money(atual.pendente)}</div>
+          <div class="sub">ticket médio: ${money(atual.ticketMedio)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Vs. mês anterior</div>
+          <div class="value" style="font-size:22px; color:${variacao===null?"var(--muted)":variacao>=0?"#22c55e":"#ef4444"};">${variacao===null?"—":`${variacao>=0?"+":""}${variacao.toFixed(0)}%`}</div>
+          <div class="sub">${money(anterior.recebido)} recebidos em ${MESES[refAnterior.mes]}</div>
+        </div>
+      </div>
+      ${meta ? `
+        <div style="margin-top:16px; height:8px; border-radius:6px; background:var(--border-solid); overflow:hidden;">
+          <div style="height:100%; width:${Math.min(pctAtual,100)}%; background:${corAtual}; transition:.6s ease;"></div>
+        </div>
+      ` : ""}
+    </div>
+
+    <div class="section-title">${MESES[refAnterior.mes]} de ${refAnterior.ano} — mês anterior</div>
+    <div class="grid grid-4" style="margin-bottom:10px;">
+      <div class="card stat-card"><div class="label">Recebido</div><div class="value" style="font-size:19px;">${money(anterior.recebido)}</div>${meta?`<div class="sub">${pctAnterior}% da meta</div>`:""}</div>
+      <div class="card stat-card"><div class="label">Contratado</div><div class="value" style="font-size:19px;">${money(anterior.contratado)}</div><div class="sub">${anterior.eventos} evento${anterior.eventos===1?"":"s"}</div></div>
+      <div class="card stat-card"><div class="label">A receber</div><div class="value" style="font-size:19px;">${money(anterior.pendente)}</div></div>
+      <div class="card stat-card"><div class="label">Ticket médio</div><div class="value" style="font-size:19px;">${money(anterior.ticketMedio)}</div></div>
+    </div>
+
+    ${renderAvaliacaoMesIA(refAnterior, anterior, meta, pctAnterior)}
+  `;
+}
+
+function renderAvaliacaoMesIA(ref, stats, meta, pct){
+  const bateuMeta = meta ? stats.recebido >= meta : null;
+  return `
+    <div class="section-title">🤖 Avaliação do mês com IA</div>
+    <div class="card" style="margin-bottom:24px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div style="font-size:13px; color:var(--muted); max-width:520px;">
+          ${meta
+            ? (bateuMeta
+                ? `${MESES[ref.mes]} bateu a meta (${money(stats.recebido)} de ${money(meta)}). Peça pra IA sugerir como manter o ritmo.`
+                : `${MESES[ref.mes]} ficou ${money(meta-stats.recebido)} abaixo da meta (${pct}%). Peça pra IA uma análise dos possíveis motivos e ideias práticas pra melhorar.`)
+            : `Defina uma meta mensal em Configurações pra poder avaliar se o mês bateu ou não a meta.`}
+        </div>
+        ${temIA() ? `<button class="ghost" id="btn-avaliar-mes" onclick="avaliarMesComIA('${ref.chave}')">✦ Avaliar o mês com IA</button>` : `<span style="font-size:12px; color:var(--muted-2);">Configure a chave Gemini em Configurações para usar a IA.</span>`}
+      </div>
+      <div class="ai-box" id="ai-avaliacao-mes" style="display:none;"></div>
+    </div>
+  `;
+}
+
+async function avaliarMesComIA(anoMes){
+  const btn = document.getElementById("btn-avaliar-mes");
+  const box = document.getElementById("ai-avaliacao-mes");
+  if(!box) return;
+  if(!temIA()){ toast("Configure a chave Gemini em Configurações para usar a IA."); return; }
+  if(btn){ btn.disabled = true; btn.textContent = "Analisando..."; }
+  box.style.display = "block";
+  box.innerHTML = `<div class="ai-label">Analisando o mês...</div>`;
+
+  const meta = parseValorConfig(state.config?.metaMensal);
+  const [ano, mes] = anoMes.split("-");
+  const nomeMes = `${MESES[Number(mes)-1]} de ${ano}`;
+
+  const eventosMes = state.eventos.filter(e=>(e.data||"").startsWith(anoMes));
+  const recebido = state.pagamentos.filter(p=>(p.data||"").startsWith(anoMes)).reduce((s,p)=>s+(Number(p.valor)||0),0);
+  const contratado = eventosMes.reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
+
+  // recebido dos últimos 6 meses (até o mês avaliado), pra IA enxergar a tendência
+  const tendencia = [];
+  for(let i=5;i>=0;i--){
+    const d = new Date(Number(ano), Number(mes)-1-i, 1);
+    const chave = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    const v = state.pagamentos.filter(p=>(p.data||"").startsWith(chave)).reduce((s,p)=>s+(Number(p.valor)||0),0);
+    tendencia.push(`${MESES[d.getMonth()]}/${d.getFullYear()}: ${money(v)}`);
+  }
+
+  const eventosCtx = eventosMes.map(e=>
+    `${capitalize((e.tipo||"outro").replace("_"," "))} · ${formatDate(e.data)} · status:${statusLabel(e.status||"confirmado")} · valor:${money(e.valorContratado)} · cliente:${nomeRef("clientes",e.clienteId)}`
+  ).join("\n");
+
+  const motivosPerdaMes = {};
+  state.leads.filter(l=>l.status==="perdido").forEach(l=>{
+    const chave = l.motivoPerda || "não informado";
+    motivosPerdaMes[chave] = (motivosPerdaMes[chave]||0)+1;
+  });
+  const motivosLabel = {outro_fotografo:"Fechou com outro fotógrafo", achou_caro:"Achou caro", cancelou_festa:"Cancelou a festa", nao_respondeu:"Não respondeu", outro:"Outro motivo", "não informado":"Não informado"};
+  const motivosCtx = Object.entries(motivosPerdaMes).map(([m,n])=>`${motivosLabel[m]||m}: ${n}`).join(", ");
+
+  const prompt = `Você é um consultor de negócios especializado em fotografia de eventos sociais, ajudando o fotógrafo Yuri Silva (Yuri Silva Fotografias, Pacatuba/CE, Brasil) a entender o resultado financeiro do mês.
+
+MÊS AVALIADO: ${nomeMes}
+META MENSAL: ${meta ? money(meta) : "não definida"}
+RECEBIDO NO MÊS: ${money(recebido)}
+CONTRATADO (novos eventos fechados no mês): ${money(contratado)}
+RESULTADO: ${meta ? (recebido>=meta ? `bateu a meta (excedente de ${money(recebido-meta)})` : `NÃO bateu a meta — faltaram ${money(meta-recebido)}`) : "sem meta definida"}
+
+EVENTOS DO MÊS (${eventosMes.length}):
+${eventosCtx || "Nenhum evento neste mês."}
+
+TENDÊNCIA DE RECEBIMENTO DOS ÚLTIMOS 6 MESES:
+${tendencia.join("\n")}
+
+MOTIVOS DE PERDA DE LEADS NO HISTÓRICO GERAL (${state.leads.filter(l=>l.status==="perdido").length} leads perdidos): ${motivosCtx || "nenhum registrado"}
+
+Escreva uma análise curta e direta (6 a 8 linhas) sobre prováveis motivos do resultado do mês (bom ou ruim) com base nos dados acima. Depois liste de 3 a 5 sugestões práticas e específicas — nada genérico — pra melhorar o faturamento nos próximos meses (pense em ações reais pra um fotógrafo de eventos sociais: reativação de clientes parados, promoções pontuais, upsell de produtos/álbuns, sazonalidade, follow-up de leads parados, etc). Linguagem direta e informal, sem enrolação, sem markdown.`;
+
+  const resultado = await callGemini(prompt);
+  box.innerHTML = resultado.texto
+    ? `<div class="ai-label">📊 Avaliação de ${nomeMes}</div>${escapeHtml(resultado.texto).replace(/\n/g,"<br>")}`
+    : `<div class="ai-label">Erro</div>${mensagemErroIA(resultado, "avaliar o mês")}`;
+
+  if(btn){ btn.disabled = false; btn.textContent = "✦ Avaliar o mês com IA"; }
+}
+
+/* =========================================================
    FINANCEIRO — PILHAS POR ANO
    ========================================================= */
 const financeiroExpandido = new Set([String(new Date().getFullYear())]);
@@ -4161,7 +4322,12 @@ function renderFinanceiroPage(main){
       </div>
     </div>
 
-    <div class="section-title" style="margin-top:0;">📆 Eventos</div>
+    ${renderRelatorioMesFinanceiro()}
+
+    <div class="section-title">📊 Meses anteriores do ano — para consulta</div>
+    ${renderFaturamentoPorMes()}
+
+    <div class="section-title">📆 Eventos — histórico completo</div>
     <div class="grid grid-3" style="margin-bottom:20px;">
       <div class="card stat-card"><div class="label">Total recebido (geral)</div><div class="value" style="font-size:19px">${money(totalRecebido)}</div></div>
       <div class="card stat-card"><div class="label">A receber (saldo pendente)</div><div class="value" style="font-size:19px;">${money(totalPendente)}</div></div>
@@ -4181,7 +4347,6 @@ function renderFinanceiroPage(main){
     ${anosProdutos.length ? anosProdutos.map(ano=>renderPilhaFinanceiroProdutos(ano, porAnoProdutos[ano])).join("") :
       `<div class="card"><div class="empty-state"><div class="serif">Nenhum pagamento de produto registrado</div>Registre pedidos em Produtos e dê baixa nos pagamentos por lá.</div></div>`}
 
-    ${renderFaturamentoPorMes()}
     ${renderHistoricoRecibos()}
   `;
 }
@@ -4328,7 +4493,6 @@ function renderFaturamentoPorMes(){
   const anos = Object.keys(anosMap).sort().reverse();
 
   return `
-    <div class="section-title">Faturamento por mês</div>
     ${anos.map(ano=>{
       const isOpen = fatExpandido.has(ano);
       const meses = Object.keys(anosMap[ano]).sort().reverse();
