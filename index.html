@@ -278,6 +278,9 @@
   .badge.lead-negociando{ background:var(--amber-dim); color:var(--amber-text); border-color:var(--amber); }
   .badge.lead-convertido{ background:var(--green-dim); color:var(--green); border-color:var(--green); }
   .badge.lead-perdido{ background:var(--danger-dim); color:var(--danger); border-color:var(--danger); text-decoration:line-through; }
+  .badge.lead-temp-quente{ background:var(--danger-dim); color:var(--danger); border-color:var(--danger); }
+  .badge.lead-temp-morno{ background:var(--amber-dim); color:var(--amber-text); border-color:var(--amber); }
+  .badge.lead-temp-frio{ background:var(--accent-2-dim); color:var(--accent-2); border-color:var(--accent-2); }
   .badge.negociacao-negociacao{ background:var(--amber-dim); color:var(--amber-text); border-color:var(--amber); }
   .badge.negociacao-fechado{ background:var(--green-dim); color:var(--green); border-color:var(--green); }
   .badge.negociacao-perdido{ background:var(--danger-dim); color:var(--danger); border-color:var(--danger); }
@@ -718,6 +721,7 @@ const SCHEMAS = {
       {key:"origem", label:"Como chegou até você", type:"select", options:["instagram","indicacao","google","igreja","outro"]},
       {key:"interesseTipo", label:"Interesse em", type:"select", options:["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"]},
       {key:"status", label:"Status", type:"select", options:["negociando","convertido","perdido"]},
+      {key:"temperatura", label:"Temperatura (IA)", type:"select", options:["quente","morno","frio"]},
       {key:"motivoPerda", label:"Motivo da perda (se perdido)", type:"select", options:["outro_fotografo","achou_caro","cancelou_festa","nao_respondeu","outro"]},
       {key:"observacoes", label:"Observações", type:"textarea"}
     ],
@@ -730,6 +734,12 @@ const SCHEMAS = {
         const sym = {negociando:"◑", convertido:"✓", perdido:"✕"};
         const lbl = {negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
         return `<span class="badge lead-${s}">${sym[s]||""} ${lbl[s]||capitalize(s)}</span>`;
+      }},
+      {key:"temperatura", label:"Temperatura", format:v=>{
+        if(!v) return "—";
+        const sym = {quente:"🔥", morno:"🌤️", frio:"❄️"};
+        const lbl = {quente:"Quente", morno:"Morno", frio:"Frio"};
+        return `<span class="badge lead-temp-${v}">${sym[v]||""} ${lbl[v]||capitalize(v)}</span>`;
       }}
     ]
   },
@@ -2198,7 +2208,7 @@ const AGENTES_IA = [
     nome: "Agente Comercial",
     icone: "ti-headset",
     tagline: "Atendimento, qualificação de leads e vendas humanizadas.",
-    skills: ["qualificar_lead", "gerar_orcamento"]
+    skills: ["aniversarios_bodas"]
   },
   {
     key: "conteudo",
@@ -2206,52 +2216,24 @@ const AGENTES_IA = [
     icone: "ti-pencil",
     tagline: "Copy para Instagram, anúncios e roteiros.",
     skills: ["copy_anuncios", "roteiro_carrossel"]
-  },
-  {
-    key: "sucesso_cliente",
-    nome: "Agente de Sucesso do Cliente",
-    icone: "ti-heart-handshake",
-    tagline: "Pós-venda, envio de contratos e coleta de depoimentos.",
-    skills: ["gerar_contrato", "pedido_de_feedback"]
   }
 ];
 
 const PERSONA_BASE_IA = "Você faz parte do time de assistentes de IA da Yuri Silva Fotografias, fotógrafo de eventos sociais (aniversário, batizado, casamento, ensaio) em Pacatuba/CE, Brasil. Escreva sempre em português do Brasil, em tom humano e caloroso — nunca robótico ou genérico. Nunca invente dados que não foram informados.";
 
 const SKILLS_IA = {
-  qualificar_lead: {
-    label: "Qualificar lead",
-    icone: "🎯",
-    descricao: "Classifica o interesse de um lead e sugere a próxima mensagem.",
+  aniversarios_bodas: {
+    label: "Aniversários e bodas (60 dias)",
+    icone: "🎂",
+    descricao: "Gera uma mensagem personalizada para aniversariantes e bodas dos próximos 60 dias.",
     montarPrompt(v){
-      return `${PERSONA_BASE_IA} Você é o Agente Comercial, especialista em qualificação de leads e vendas humanizadas.
+      return `${PERSONA_BASE_IA} Você é o Agente Comercial, especialista em relacionamento com clientes.
 
-Analise o lead abaixo e responda em português, de forma direta:
-1) Classificação: QUENTE, MORNO ou FRIO (com uma linha justificando).
-2) Pontos de atenção (o que pode travar essa venda).
-3) Sugestão de próxima mensagem para enviar a esse lead (pronta para copiar e colar no WhatsApp, tom humanizado, sem parecer script).
+Escreva uma mensagem calorosa e personalizada de ${v.tipo==="crianca" ? "aniversário" : "bodas/aniversário de casamento"} para enviar via WhatsApp. Não use um tom de "mensagem em massa" — soe genuíno e específico para esta pessoa/casal.
 
-Nome do lead: ${v.nome || "não informado"}
-Como chegou até nós: ${v.origem || "não informado"}
-Interesse em: ${v.interesseTipo || "não informado"}
-O que o cliente disse / resumo da conversa: ${v.mensagem || "nenhuma informação adicional"}`;
-    }
-  },
-  gerar_orcamento: {
-    label: "Gerar orçamento",
-    icone: "💰",
-    descricao: "Monta uma proposta comercial com os itens do catálogo, pronta para enviar.",
-    montarPrompt(v){
-      return `${PERSONA_BASE_IA} Você é o Agente Comercial, especialista em vendas humanizadas.
-
-Escreva uma mensagem de orçamento para enviar a um cliente, calorosa e persuasiva, SEM inventar valores — use exatamente os itens e valores abaixo (já calculados), apenas organize-os de forma clara e convide o cliente a fechar.
-
-Cliente: ${v.nome || "cliente"}
-Tipo de evento: ${v.tipoEvento || "não informado"}
-Itens do orçamento:
-${v.itensTexto}
-Valor total: ${v.totalTexto}
-Observações adicionais: ${v.observacoes || "nenhuma"}`;
+${v.tipo==="crianca"
+  ? `Criança: ${v.nome}\nVai completar: ${v.idade} anos\nData: em ${v.dias} dia(s)\nResponsável/cliente vinculado: ${v.vinculo||"não informado"}`
+  : `Casal: ${v.nome}\nVai completar: ${v.idade} anos de casados\nData: em ${v.dias} dia(s)\nCliente vinculado: ${v.vinculo||"não informado"}`}`;
     }
   },
   copy_anuncios: {
@@ -2281,40 +2263,6 @@ Crie o roteiro de um carrossel com ${v.numSlides || 6} slides sobre o tema abaix
 Tema do carrossel: ${v.tema || "não informado"}
 Objetivo: ${v.objetivo || "não informado"}
 Observações: ${v.observacoes || "nenhuma"}`;
-    }
-  },
-  gerar_contrato: {
-    label: "Gerar contrato",
-    icone: "📄",
-    descricao: "Monta a minuta de um contrato de prestação de serviços fotográficos.",
-    montarPrompt(v){
-      return `${PERSONA_BASE_IA} Você é o Agente de Sucesso do Cliente, especialista em pós-venda e formalização de contratos.
-
-Redija a minuta de um CONTRATO DE PRESTAÇÃO DE SERVIÇOS FOTOGRÁFICOS entre o fotógrafo Yuri Silva (contratado) e o cliente abaixo (contratante), em português claro e objetivo, incluindo: qualificação das partes, objeto do contrato, data e local do evento, valor total e forma de pagamento, prazo e forma de entrega, cláusula de cancelamento/reagendamento e direitos de uso de imagem, e espaço para assinatura de ambas as partes.
-Ao final, inclua uma observação de que esta é uma minuta gerada por IA e deve ser revisada por um advogado antes do uso oficial.
-
-Contratante: ${v.nomeCliente || "não informado"}
-Tipo de evento: ${v.tipoEvento || "não informado"}
-Data do evento: ${v.dataEvento || "não informada"}
-Local: ${v.local || "não informado"}
-Valor total: ${v.valor || "não informado"}
-Forma de pagamento: ${v.formaPagamento || "não informada"}
-Prazo de entrega: ${v.prazoEntrega || "45 dias após o evento"}`;
-    }
-  },
-  pedido_de_feedback: {
-    label: "Pedido de feedback",
-    icone: "⭐",
-    descricao: "Gera uma mensagem calorosa pedindo depoimento, já com o link de feedback.",
-    montarPrompt(v){
-      return `${PERSONA_BASE_IA} Você é o Agente de Sucesso do Cliente, especialista em pós-venda e coleta de depoimentos.
-
-Escreva uma mensagem curta e calorosa pedindo para o cliente abaixo deixar um feedback/depoimento sobre o trabalho, incluindo o link informado ao final da mensagem (não altere o link).
-
-Cliente: ${v.nomeCliente || "cliente"}
-Evento realizado: ${v.tipoEvento || "não informado"}
-Tom: ${v.tom || "caloroso e breve"}
-Link de feedback (inclua exatamente como está): ${v.link}`;
     }
   }
 };
@@ -2361,12 +2309,9 @@ function renderCardAgenteIA(agente){
 
 function abrirFerramentaIA(skillKey){
   const abrir = {
-    qualificar_lead: abrirModalQualificarLead,
-    gerar_orcamento: abrirModalGerarOrcamento,
+    aniversarios_bodas: abrirModalAniversariosBodas,
     copy_anuncios: abrirModalCopyAnuncios,
-    roteiro_carrossel: abrirModalRoteiroCarrossel,
-    gerar_contrato: abrirModalGerarContrato,
-    pedido_de_feedback: abrirModalPedidoFeedback
+    roteiro_carrossel: abrirModalRoteiroCarrossel
   }[skillKey];
   if(abrir) abrir();
 }
@@ -2400,108 +2345,6 @@ async function executarSkillIA(skillKey, valores, extraBotoesHtml){
 }
 function copiarResultadoIA(){
   navigator.clipboard.writeText(window._resultadoIA||"").then(()=>toast("Copiado!")).catch(()=>toast("Não foi possível copiar."));
-}
-
-/* ---------- Qualificar lead ---------- */
-function abrirModalQualificarLead(){
-  const leadsAbertos = [...state.leads].filter(l=>!["convertido","perdido"].includes(l.status||"negociando")).sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
-  document.getElementById("modal-content").innerHTML = `
-    <h3>🎯 Qualificar lead</h3>
-    <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">${SKILLS_IA.qualificar_lead.descricao}</div>
-    <div class="field"><label>Lead cadastrado (opcional — preenche os campos abaixo)</label>
-      <select id="qlead-select" onchange="preencherQualificarLead()">
-        <option value="">— preencher manualmente —</option>
-        ${leadsAbertos.map(l=>`<option value="${l.id}">${l.nome}</option>`).join("")}
-      </select>
-    </div>
-    <div class="field"><label>Nome do lead</label><input type="text" id="qlead-nome"></div>
-    <div class="field"><label>Como chegou até você</label>
-      <select id="qlead-origem">
-        <option value="">—</option>
-        ${["instagram","indicacao","google","igreja","outro"].map(o=>`<option value="${o}">${capitalize(o)}</option>`).join("")}
-      </select>
-    </div>
-    <div class="field"><label>Interesse em</label>
-      <select id="qlead-interesse">
-        <option value="">—</option>
-        ${["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"].map(o=>`<option value="${o}">${capitalize(o.replace("_"," "))}</option>`).join("")}
-      </select>
-    </div>
-    <div class="field"><label>O que o cliente disse / resumo da conversa</label>
-      <textarea id="qlead-mensagem" rows="4" placeholder="Ex: perguntou o valor do pacote de casamento e disse que vai decidir com o noivo..."></textarea>
-    </div>
-    <button class="primary" id="btn-gerar-ia" onclick="gerarQualificarLead()">✦ Qualificar lead com IA</button>
-    <div id="resultado-ia-container"></div>
-    <div class="modal-actions"><button class="ghost" onclick="closeModal()">Fechar</button></div>
-  `;
-  document.getElementById("modal-backdrop").classList.add("active");
-}
-function preencherQualificarLead(){
-  const id = document.getElementById("qlead-select")?.value;
-  const lead = state.leads.find(l=>l.id===id);
-  if(!lead) return;
-  document.getElementById("qlead-nome").value = lead.nome||"";
-  document.getElementById("qlead-origem").value = lead.origem||"";
-  document.getElementById("qlead-interesse").value = lead.interesseTipo||"";
-  document.getElementById("qlead-mensagem").value = lead.observacoes||"";
-}
-async function gerarQualificarLead(){
-  const v = {
-    nome: document.getElementById("qlead-nome")?.value.trim(),
-    origem: document.getElementById("qlead-origem")?.value,
-    interesseTipo: document.getElementById("qlead-interesse")?.value,
-    mensagem: document.getElementById("qlead-mensagem")?.value.trim()
-  };
-  if(!v.nome && !v.mensagem){ toast("Informe ao menos o nome ou o resumo da conversa."); return; }
-  await executarSkillIA("qualificar_lead", v);
-}
-
-/* ---------- Gerar orçamento ---------- */
-function abrirModalGerarOrcamento(){
-  const catalogo = (state.config?.catalogoProdutos||[]).filter(p=>p.nome);
-  document.getElementById("modal-content").innerHTML = `
-    <h3>💰 Gerar orçamento</h3>
-    <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">${SKILLS_IA.gerar_orcamento.descricao}</div>
-    <div class="field"><label>Cliente / lead</label><input type="text" id="orc-nome" placeholder="Nome do cliente"></div>
-    <div class="field"><label>Tipo de evento</label>
-      <select id="orc-tipo">
-        <option value="">—</option>
-        ${["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"].map(o=>`<option value="${o}">${capitalize(o.replace("_"," "))}</option>`).join("")}
-      </select>
-    </div>
-    <div class="field"><label>Itens do catálogo</label>
-      ${catalogo.length ? catalogo.map((p,i)=>`
-        <label style="display:flex; align-items:center; gap:8px; font-weight:400; margin-bottom:4px;">
-          <input type="checkbox" class="orc-item" value="${i}"> ${p.nome} — ${money(p.venda)}
-        </label>
-      `).join("") : `<div style="font-size:12px; color:var(--muted-2);">Nenhum produto no catálogo — cadastre em Configurações → Catálogo de Produtos.</div>`}
-    </div>
-    <div class="field"><label>Valor avulso adicional (R$, opcional)</label><input type="number" id="orc-avulso" placeholder="0"></div>
-    <div class="field"><label>Observações</label><textarea id="orc-obs" rows="3" placeholder="Ex: desconto de 10% por indicação..."></textarea></div>
-    <button class="primary" id="btn-gerar-ia" onclick="gerarOrcamentoIA()">✦ Gerar orçamento com IA</button>
-    <div id="resultado-ia-container"></div>
-    <div class="modal-actions"><button class="ghost" onclick="closeModal()">Fechar</button></div>
-  `;
-  document.getElementById("modal-backdrop").classList.add("active");
-}
-async function gerarOrcamentoIA(){
-  const catalogo = (state.config?.catalogoProdutos||[]).filter(p=>p.nome);
-  const selecionados = [...document.querySelectorAll(".orc-item:checked")].map(el=>catalogo[Number(el.value)]).filter(Boolean);
-  const avulso = Number(document.getElementById("orc-avulso")?.value)||0;
-  if(!selecionados.length && !avulso){ toast("Selecione ao menos um item do catálogo ou informe um valor."); return; }
-  const total = selecionados.reduce((s,p)=>s+(Number(p.venda)||0),0) + avulso;
-  const itensTexto = [
-    ...selecionados.map(p=>`- ${p.nome}: ${money(p.venda)}`),
-    avulso ? `- Item avulso: ${money(avulso)}` : ""
-  ].filter(Boolean).join("\n");
-  const v = {
-    nome: document.getElementById("orc-nome")?.value.trim(),
-    tipoEvento: document.getElementById("orc-tipo")?.value ? capitalize(document.getElementById("orc-tipo").value.replace("_"," ")) : "",
-    itensTexto,
-    totalTexto: money(total),
-    observacoes: document.getElementById("orc-obs")?.value.trim()
-  };
-  await executarSkillIA("gerar_orcamento", v);
 }
 
 /* ---------- Copy para anúncios ---------- */
@@ -2572,139 +2415,45 @@ async function gerarRoteiroCarrosselIA(){
   await executarSkillIA("roteiro_carrossel", v);
 }
 
-/* ---------- Gerar contrato ---------- */
-function abrirModalGerarContrato(){
-  const clientes = [...state.clientes].filter(c=>!c.hibernado).sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+/* ---------- Aniversários e bodas (60 dias) ---------- */
+function abrirModalAniversariosBodas(preSelect){
+  const criancas60 = state.criancas.map(c=>({id:c.id, tipo:"crianca", nome:c.nome, vinculo:nomeRef("clientes", c.clientePaiId||c.clienteMaeId), dias:diasParaAniversario(c.dataNascimento), idade:idadeAtual(c.dataNascimento)+1}))
+    .filter(c=>typeof c.dias==="number" && c.dias<=60).sort((a,b)=>a.dias-b.dias);
+  const casamentos60 = state.casamentos.map(c=>({id:c.id, tipo:"casamento", nome:c.nomeCasal, vinculo:nomeRef("clientes", c.clienteId), dias:diasParaAniversario(c.dataCasamento), idade:idadeAtual(c.dataCasamento)+1}))
+    .filter(c=>typeof c.dias==="number" && c.dias<=60).sort((a,b)=>a.dias-b.dias);
+  const opcoes = [...criancas60, ...casamentos60].sort((a,b)=>a.dias-b.dias);
   document.getElementById("modal-content").innerHTML = `
-    <h3>📄 Gerar contrato</h3>
-    <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">${SKILLS_IA.gerar_contrato.descricao}</div>
-    <div class="field"><label>Cliente cadastrado (opcional — preenche os campos abaixo)</label>
-      <select id="contrato-cliente-select" onchange="preencherContratoPorCliente()">
-        <option value="">— preencher manualmente —</option>
-        ${clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join("")}
-      </select>
-    </div>
-    <div class="field"><label>Evento vinculado (opcional)</label>
-      <select id="contrato-evento-select" onchange="preencherContratoPorEvento()">
-        <option value="">— nenhum —</option>
-      </select>
-    </div>
-    <div class="field"><label>Nome do contratante</label><input type="text" id="contrato-nome"></div>
-    <div class="field"><label>Tipo de evento</label>
-      <select id="contrato-tipo">
-        <option value="">—</option>
-        ${["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"].map(o=>`<option value="${o}">${capitalize(o.replace("_"," "))}</option>`).join("")}
-      </select>
-    </div>
-    <div class="field"><label>Data do evento</label><input type="date" id="contrato-data"></div>
-    <div class="field"><label>Local</label><input type="text" id="contrato-local"></div>
-    <div class="field"><label>Valor total (R$)</label><input type="number" id="contrato-valor"></div>
-    <div class="field"><label>Forma de pagamento</label><input type="text" id="contrato-pagamento" placeholder="Ex: 50% na assinatura, 50% na entrega"></div>
-    <div class="field"><label>Prazo de entrega</label><input type="text" id="contrato-prazo" value="45 dias após o evento"></div>
-    <button class="primary" id="btn-gerar-ia" onclick="gerarContratoIA()">✦ Gerar contrato com IA</button>
-    <div id="resultado-ia-container"></div>
+    <h3>🎂 Aniversários e bodas (60 dias)</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">${SKILLS_IA.aniversarios_bodas.descricao}</div>
+    ${opcoes.length ? `
+      <div class="field"><label>Selecione quem</label>
+        <select id="aniv-select">
+          ${opcoes.map(o=>`<option value="${o.tipo}:${o.id}" ${preSelect===`${o.tipo}:${o.id}`?"selected":""}>${o.tipo==="crianca"?"🎂":"💍"} ${o.nome} — ${o.dias===0?"hoje":o.dias+" dia(s)"} (completa ${o.idade})</option>`).join("")}
+        </select>
+      </div>
+      <button class="primary" id="btn-gerar-ia" onclick="gerarAniversariosBodasIA()">✦ Gerar mensagem com IA</button>
+      <div id="resultado-ia-container"></div>
+    ` : `<div class="empty-state">Nenhum aniversário ou bodas nos próximos 60 dias.</div>`}
     <div class="modal-actions"><button class="ghost" onclick="closeModal()">Fechar</button></div>
   `;
   document.getElementById("modal-backdrop").classList.add("active");
 }
-function preencherContratoPorCliente(){
-  const id = document.getElementById("contrato-cliente-select")?.value;
-  const cliente = state.clientes.find(c=>c.id===id);
-  const selEvento = document.getElementById("contrato-evento-select");
-  if(!cliente){ if(selEvento) selEvento.innerHTML = `<option value="">— nenhum —</option>`; return; }
-  document.getElementById("contrato-nome").value = cliente.nome + (cliente.nomeConjuge ? " & "+cliente.nomeConjuge : "");
-  const eventosDoCliente = state.eventos.filter(e=>e.clienteId===cliente.id).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
-  if(selEvento){
-    selEvento.innerHTML = `<option value="">— nenhum —</option>` + eventosDoCliente.map(e=>`<option value="${e.id}">${capitalize((e.tipo||"").replace("_"," "))} — ${formatDate(e.data)}</option>`).join("");
+async function gerarAniversariosBodasIA(){
+  const [tipo, id] = (document.getElementById("aniv-select")?.value||"").split(":");
+  if(!tipo || !id) return;
+  let v, cliente;
+  if(tipo==="crianca"){
+    const c = state.criancas.find(x=>x.id===id);
+    cliente = state.clientes.find(x=>x.id===(c.clientePaiId||c.clienteMaeId));
+    v = { tipo:"crianca", nome:c.nome, idade:idadeAtual(c.dataNascimento)+1, dias:diasParaAniversario(c.dataNascimento), vinculo:cliente?.nome };
+  } else {
+    const c = state.casamentos.find(x=>x.id===id);
+    cliente = state.clientes.find(x=>x.id===c.clienteId);
+    v = { tipo:"casamento", nome:c.nomeCasal, idade:idadeAtual(c.dataCasamento)+1, dias:diasParaAniversario(c.dataCasamento), vinculo:cliente?.nome };
   }
-}
-function preencherContratoPorEvento(){
-  const id = document.getElementById("contrato-evento-select")?.value;
-  const evento = state.eventos.find(e=>e.id===id);
-  if(!evento) return;
-  document.getElementById("contrato-tipo").value = evento.tipo||"";
-  document.getElementById("contrato-data").value = evento.data||"";
-  document.getElementById("contrato-local").value = evento.endereco||"";
-  document.getElementById("contrato-valor").value = evento.valorContratado||"";
-}
-async function gerarContratoIA(){
-  const tipoVal = document.getElementById("contrato-tipo")?.value;
-  const dataVal = document.getElementById("contrato-data")?.value;
-  const valorVal = document.getElementById("contrato-valor")?.value;
-  const v = {
-    nomeCliente: document.getElementById("contrato-nome")?.value.trim(),
-    tipoEvento: tipoVal ? capitalize(tipoVal.replace("_"," ")) : "",
-    dataEvento: dataVal ? formatDate(dataVal) : "",
-    local: document.getElementById("contrato-local")?.value.trim(),
-    valor: valorVal ? money(valorVal) : "",
-    formaPagamento: document.getElementById("contrato-pagamento")?.value.trim(),
-    prazoEntrega: document.getElementById("contrato-prazo")?.value.trim()
-  };
-  if(!v.nomeCliente){ toast("Informe o nome do contratante."); return; }
-  await executarSkillIA("gerar_contrato", v);
-}
-
-/* ---------- Pedido de feedback ---------- */
-function abrirModalPedidoFeedback(){
-  const clientes = [...state.clientes].filter(c=>!c.hibernado).sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
-  document.getElementById("modal-content").innerHTML = `
-    <h3>⭐ Pedido de feedback</h3>
-    <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">${SKILLS_IA.pedido_de_feedback.descricao}</div>
-    <div class="field"><label>Cliente</label>
-      <select id="fb-cliente-select" onchange="preencherPedidoFeedback()">
-        <option value="">— selecione —</option>
-        ${clientes.map(c=>`<option value="${c.id}">${c.nome}</option>`).join("")}
-      </select>
-    </div>
-    <div class="field"><label>Evento (opcional, só para contexto)</label>
-      <select id="fb-evento-select">
-        <option value="">— nenhum —</option>
-      </select>
-    </div>
-    <div class="field"><label>Tom</label>
-      <select id="fb-tom">
-        ${["Caloroso e breve","Formal e objetivo"].map(o=>`<option value="${o}">${o}</option>`).join("")}
-      </select>
-    </div>
-    <button class="primary" id="btn-gerar-ia" onclick="gerarPedidoFeedbackIA()">✦ Gerar pedido com IA</button>
-    <div id="resultado-ia-container"></div>
-    <div class="modal-actions"><button class="ghost" onclick="closeModal()">Fechar</button></div>
-  `;
-  document.getElementById("modal-backdrop").classList.add("active");
-}
-function preencherPedidoFeedback(){
-  const id = document.getElementById("fb-cliente-select")?.value;
-  const cliente = state.clientes.find(c=>c.id===id);
-  const selEvento = document.getElementById("fb-evento-select");
-  if(!selEvento) return;
-  if(!cliente){ selEvento.innerHTML = `<option value="">— nenhum —</option>`; return; }
-  const eventosDoCliente = state.eventos.filter(e=>e.clienteId===cliente.id).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
-  selEvento.innerHTML = `<option value="">— nenhum —</option>` + eventosDoCliente.map(e=>`<option value="${e.id}">${capitalize((e.tipo||"").replace("_"," "))} — ${formatDate(e.data)}</option>`).join("");
-}
-async function gerarPedidoFeedbackIA(){
-  const clienteId = document.getElementById("fb-cliente-select")?.value;
-  const cliente = state.clientes.find(c=>c.id===clienteId);
-  if(!cliente){ toast("Selecione um cliente."); return; }
-  const eventoId = document.getElementById("fb-evento-select")?.value;
-  const evento = state.eventos.find(e=>e.id===eventoId);
-
-  // mesmo formato de link usado em gerarELinkFeedback(), pra abrir a mesma página pública de feedback
-  const base = location.origin + location.pathname;
-  const params = new URLSearchParams();
-  params.set("feedback","1");
-  params.set("c", cliente.id);
-  params.set("nome", encodeURIComponent(cliente.nome));
-  const link = `${base}?${params.toString()}`;
-
-  const v = {
-    nomeCliente: cliente.nome,
-    tipoEvento: evento ? capitalize((evento.tipo||"").replace("_"," ")) : "",
-    tom: document.getElementById("fb-tom")?.value,
-    link
-  };
-  const wa = whatsappLink(cliente.telefone);
+  const wa = cliente ? whatsappLink(cliente.telefone) : null;
   const btnWhats = wa ? `<button class="primary sm" onclick="window.open('${wa}?text='+encodeURIComponent(window._resultadoIA||''),'_blank')" title="Enviar WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : "";
-  await executarSkillIA("pedido_de_feedback", v, btnWhats);
+  await executarSkillIA("aniversarios_bodas", v, btnWhats);
 }
 
 /* =========================================================
@@ -3257,6 +3006,8 @@ function renderPilhaLeads(chave, titulo, itens){
   const isOpen = leadsExpandidos.has(chave);
   const sym = {negociando:"◑", convertido:"✓", perdido:"✕"};
   const lbl = {negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+  const symTemp = {quente:"🔥", morno:"🌤️", frio:"❄️"};
+  const lblTemp = {quente:"Quente", morno:"Morno", frio:"Frio"};
   return `
     <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
       <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;"
@@ -3270,12 +3021,13 @@ function renderPilhaLeads(chave, titulo, itens){
       ${isOpen ? `
         <div style="border-top:1px solid var(--border-solid); overflow-x:auto;">
           ${itens.length ? `<table>
-            <thead><tr><th>Nome</th><th>Interesse</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Nome</th><th>Interesse</th><th>Status</th><th>Temperatura</th><th></th></tr></thead>
             <tbody>
               ${itens.map(lead=>`<tr>
                 <td><a href="#" onclick="openView('leads','${lead.id}');return false;">${lead.nome||"—"}</a></td>
                 <td>${lead.interesseTipo ? capitalize(lead.interesseTipo.replace("_"," ")) : "—"}</td>
                 <td><span class="badge lead-${lead.status||"negociando"}">${sym[lead.status||"negociando"]||""} ${lbl[lead.status||"negociando"]||capitalize(lead.status||"")}</span></td>
+                <td>${lead.temperatura ? `<span class="badge lead-temp-${lead.temperatura}">${symTemp[lead.temperatura]||""} ${lblTemp[lead.temperatura]||capitalize(lead.temperatura)}</span>` : "—"}</td>
                 <td class="row-actions">
                   ${chave==="ativos" && !lead.clienteId ? `<button class="sm" onclick="converterLeadEmCliente('${lead.id}')">Converter</button>` : ""}
                   <button class="sm" onclick="openForm('leads','${lead.id}')">Editar</button>
@@ -4459,13 +4211,14 @@ function renderDashboard(main){
       const tabelaCriancas = criancas60.length ? `
         <div class="section-title">🎂 Aniversários (60 dias)</div>
         <div class="card">
-          <table><thead><tr><th>Criança</th><th>Vai completar</th><th>Em</th><th>Responsável</th><th></th></tr></thead><tbody>
+          <table><thead><tr><th>Criança</th><th>Vai completar</th><th>Em</th><th>Responsável</th><th></th>${temIA()?"<th></th>":""}</tr></thead><tbody>
             ${criancas60.map(c=>`<tr>
               <td><a href="#" onclick="openView('criancas','${c.id}');return false;">${c.nome}</a></td>
               <td>${c.aprox?"~":""}${c.idade+1} anos</td>
               <td>${c.dias===0?'<b>🎉 Hoje!</b>':c.dias+' dias'}</td>
               <td>${c.vinculo}</td>
               <td><button class="sm" onclick="enviarMensagemAniversario('${c.id}')" title="Enviar mensagem"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button></td>
+              ${temIA()?`<td><button class="sm" onclick="abrirModalAniversariosBodas('crianca:${c.id}')" title="Gerar com IA">✦</button></td>`:""}
             </tr>`).join("")}
           </tbody></table>
         </div>` : "";
@@ -4473,12 +4226,13 @@ function renderDashboard(main){
       const tabelaCasamentos = casamentos60.length ? `
         <div class="section-title">💍 Bodas (60 dias)</div>
         <div class="card">
-          <table><thead><tr><th>Casal</th><th>Vai completar</th><th>Em</th><th></th></tr></thead><tbody>
+          <table><thead><tr><th>Casal</th><th>Vai completar</th><th>Em</th><th></th>${temIA()?"<th></th>":""}</tr></thead><tbody>
             ${casamentos60.map(c=>`<tr>
               <td><a href="#" onclick="openView('casamentos','${c.id}');return false;">${c.nome}</a></td>
               <td>${c.idade+1} anos de casados</td>
               <td>${c.dias===0?'<b>🎉 Hoje!</b>':c.dias+' dias'}</td>
               <td><button class="sm" onclick="enviarMensagemCasamento('${c.id}')" title="Enviar mensagem"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button></td>
+              ${temIA()?`<td><button class="sm" onclick="abrirModalAniversariosBodas('casamento:${c.id}')" title="Gerar com IA">✦</button></td>`:""}
             </tr>`).join("")}
           </tbody></table>
         </div>` : "";
@@ -7004,6 +6758,8 @@ function usarVariacao(i){
 function renderViewLead(lead){
   const sym = {negociando:"◑", convertido:"✓", perdido:"✕"};
   const lbl = {negociando:"Negociando", convertido:"Convertido", perdido:"Perdido"};
+  const symTemp = {quente:"🔥", morno:"🌤️", frio:"❄️"};
+  const lblTemp = {quente:"Quente", morno:"Morno", frio:"Frio"};
   const s = lead.status || "negociando";
   const wa = whatsappLink(lead.telefone);
   const jaConvertido = !!lead.clienteId;
@@ -7012,20 +6768,242 @@ function renderViewLead(lead){
   const btnC = jaConvertido ? "" : "<button class=\"ghost\" onclick=\"converterLeadEmCliente('" + lid + "')\" >Converter em cliente</button>";
   const telefoneHtml = lead.telefone ? (wa ? "<a href=\"" + wa + "\" target=\"_blank\" rel=\"noopener\" title=\"WhatsApp\">" + lead.telefone + " ↗ <i class=\"ti ti-brand-whatsapp\" style=\"color:#25D366;\"></i></a>" : lead.telefone) : "—";
   const statusHtml = "<span class=\"badge lead-" + s + "\">" + (sym[s]||"") + " " + (lbl[s]||capitalize(s)) + "</span>";
+  const temperaturaHtml = lead.temperatura ? "<span class=\"badge lead-temp-" + lead.temperatura + "\">" + (symTemp[lead.temperatura]||"") + " " + (lblTemp[lead.temperatura]||capitalize(lead.temperatura)) + "</span>" : "—";
   const vinculoHtml = jaConvertido ? "<a href=\"#\" onclick=\"openView('clientes','" + cId + "');return false;\">" + nomeRef("clientes",cId) + "</a>" : "";
   const btnResumoHtml = temIA() ? "<button class=\"ghost sm\" id=\"btn-resumo-leads-" + lid + "\" onclick=\"gerarResumoCliente('leads','" + lid + "')\" style=\"margin-top:10px;width:100%\">✦ Resumo IA</button>" : "";
+  const btnRegistrarHtml = temIA() ? "<button class=\"ghost sm\" style=\"margin-bottom:10px;width:100%\" onclick=\"abrirModalAtualizarLead('" + lid + "')\">📝 Registrar novo contato</button>" : "";
+  const btnAnalisarHtml = temIA() ? "<button class=\"ghost sm\" onclick=\"analisarLeadComIA('" + lid + "')\" style=\"margin-top:6px;width:100%\">✦ Analisar com IA</button>" : "";
+  const analise = lead.analiseIA;
+  const boxAnaliseHtml = analise ? (
+    "<div class=\"ai-box\" id=\"ai-analise-leads-" + lid + "\">" +
+    "<div class=\"ai-label\">Qualificação (IA) — " + formatarDataHora(analise.criadoEm) + "</div>" +
+    "<div><b>Temperatura:</b> <span class=\"badge lead-temp-" + analise.temperatura + "\">" + (symTemp[analise.temperatura]||"") + " " + (lblTemp[analise.temperatura]||capitalize(analise.temperatura||"")) + "</span></div>" +
+    (analise.mensagemSugerida ? (
+      "<div style=\"margin-top:8px; white-space:pre-wrap;\">" + escapeHtml(analise.mensagemSugerida) + "</div>" +
+      "<div style=\"display:flex; gap:8px; margin-top:8px;\">" +
+      "<button class=\"ghost sm\" onclick=\"copiarMensagemSugeridaLead('" + lid + "')\">Copiar</button>" +
+      (wa ? "<button class=\"primary sm\" onclick=\"enviarMensagemSugeridaLead('" + lid + "')\" title=\"Enviar WhatsApp\"><i class=\"ti ti-brand-whatsapp\" style=\"color:#25D366;font-size:16px;\"></i></button>" : "") +
+      "</div>"
+    ) : "") +
+    "</div>"
+  ) : "";
   return "<h3>" + (lead.nome||"") + "</h3>" +
     viewRow("Telefone", telefoneHtml) +
     viewRow("Origem", lead.origem ? capitalize(lead.origem) : "—") +
     viewRow("Interesse em", lead.interesseTipo ? capitalize(lead.interesseTipo.replace("_"," ")) : "—") +
     viewRow("Status", statusHtml) +
+    viewRow("Temperatura", temperaturaHtml) +
     (lead.motivoPerda && s==="perdido" ? viewRow("Motivo da perda", capitalize(lead.motivoPerda.replace("_"," "))) : "") +
     (lead.observacoes ? viewRow("Observações", lead.observacoes) : "") +
     (jaConvertido ? viewRow("Cliente vinculado", vinculoHtml) : "") +
+    btnRegistrarHtml +
+    btnAnalisarHtml +
+    boxAnaliseHtml +
     renderComentarios("leads", lid) +
     btnResumoHtml +
     "<div class=\"ai-box\" id=\"ai-resumo-leads-" + lid + "\" style=\"display:none;\"></div>" +
     viewActions("leads", lid, btnC);
+}
+
+/* ---------- Atualizar lead (registro de contato + análise IA) ---------- */
+function abrirModalAtualizarLead(leadId){
+  const lead = state.leads.find(l=>l.id===leadId);
+  if(!lead) return;
+  document.getElementById("modal-content").innerHTML = `
+    <h3>📝 Registrar novo contato — ${lead.nome||""}</h3>
+    <div class="field"><label>Como você quer registrar?</label>
+      <select id="atualizar-lead-modo" onchange="mudarModoAtualizarLead()">
+        <option value="texto">Texto</option>
+        <option value="print">Print de conversa</option>
+        <option value="conversa">Conversa completa importada</option>
+      </select>
+    </div>
+    <div id="modo-texto">
+      <div class="field"><label>O que aconteceu nesse contato?</label>
+        <textarea id="atualizar-lead-texto" rows="4" placeholder="Ex: liguei e ela disse que ainda está decidindo com o noivo..."></textarea>
+      </div>
+      <button class="primary" onclick="salvarContatoTexto('${leadId}')">Salvar</button>
+    </div>
+    <div id="modo-print" style="display:none;">
+      <div style="font-size:12px; color:var(--muted); margin-bottom:10px;">Selecione um print da conversa — a IA lê e resume o que aconteceu nesse contato.</div>
+      <button class="ghost" onclick="triggerPrintContatoLead('${leadId}')">📷 Selecionar imagem</button>
+    </div>
+    <div id="modo-conversa" style="display:none;">
+      ${lead.ultimaConversaImportada ? `<div style="font-size:12px; color:var(--muted); margin-bottom:10px;">Já existe uma conversa importada anteriormente — a IA vai identificar e resumir apenas a parte nova.</div>` : ""}
+      <div class="field"><label>Cole a conversa aqui (ou selecione um arquivo .txt abaixo)</label>
+        <textarea id="atualizar-lead-conversa-texto" rows="6" placeholder="Cole aqui a conversa exportada..."></textarea>
+      </div>
+      <button class="ghost sm" onclick="triggerConversaImportadaLead('${leadId}')">Selecionar arquivo .txt</button>
+      <button class="primary" style="margin-top:8px;width:100%" onclick="salvarContatoConversaImportada('${leadId}')">Salvar</button>
+    </div>
+    <div class="modal-actions"><button class="ghost" onclick="closeModal()">Cancelar</button></div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+function mudarModoAtualizarLead(){
+  const modo = document.getElementById("atualizar-lead-modo")?.value;
+  ["texto","print","conversa"].forEach(m=>{
+    const el = document.getElementById(`modo-${m}`);
+    if(el) el.style.display = (m===modo) ? "block" : "none";
+  });
+}
+async function salvarContatoTexto(leadId){
+  const texto = document.getElementById("atualizar-lead-texto")?.value.trim();
+  if(!texto){ toast("Escreva o que aconteceu nesse contato."); return; }
+  await salvarComentario("leads", leadId, `📝 Novo contato registrado (texto):\n${texto}`);
+  await analisarLeadComIA(leadId);
+}
+function triggerPrintContatoLead(leadId){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = (e)=> processarPrintContatoLead(leadId, e.target.files[0]);
+  input.click();
+}
+async function processarPrintContatoLead(leadId, file){
+  if(!file) return;
+  const t = document.getElementById("toast");
+  if(t){ t.textContent = "📷 Lendo a imagem..."; t.style.display="block"; }
+  const reader = new FileReader();
+  reader.onerror = ()=> toast("Erro ao ler a imagem.");
+  reader.onload = async ()=>{
+    const base64 = reader.result.split(",")[1];
+    const mimeType = file.type || "image/png";
+    const prompt = `Você é assistente de um fotógrafo brasileiro. Veja o print de conversa abaixo (WhatsApp, Instagram etc.) entre ele e um lead. Resuma em poucas linhas o que aconteceu nesse contato: o que foi dito, pedido, combinado ou sinalizado. Seja direto e objetivo, sem repetir a conversa literalmente. Se não for possível identificar nada relevante, responda apenas "Nada relevante identificado.".`;
+    const resultado = await callGeminiVision(base64, mimeType, prompt);
+    if(t) t.style.display = "none";
+    if(!resultado.texto){
+      toast(mensagemErroIA(resultado, "ler a imagem"), resultado.sobrecarregado ? 7000 : undefined);
+      return;
+    }
+    await salvarComentario("leads", leadId, `📷 Print de conversa (IA):\n${resultado.texto.trim()}`);
+    await analisarLeadComIA(leadId);
+  };
+  reader.readAsDataURL(file);
+}
+function triggerConversaImportadaLead(leadId){
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".txt,text/plain";
+  input.onchange = (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onerror = ()=> toast("Erro ao ler o arquivo.");
+    reader.onload = (ev)=>{
+      const el = document.getElementById("atualizar-lead-conversa-texto");
+      if(el) el.value = (ev.target.result||"").replace(/^﻿/,"").trim();
+    };
+    reader.readAsText(file, "utf-8");
+  };
+  input.click();
+}
+async function salvarContatoConversaImportada(leadId){
+  let conversa = document.getElementById("atualizar-lead-conversa-texto")?.value.trim();
+  if(!conversa){ toast("Cole ou importe a conversa antes de salvar."); return; }
+  if(conversa.length > 12000) conversa = conversa.slice(0, 12000) + "\n[... conversa truncada para análise ...]";
+
+  const lead = state.leads.find(l=>l.id===leadId);
+  const anterior = lead?.ultimaConversaImportada || "";
+  let prompt;
+  if(anterior){
+    prompt = `Você é assistente de um fotógrafo brasileiro. Abaixo estão DUAS versões de uma conversa exportada com um lead: a versão ANTERIOR (já analisada antes) e a versão NOVA (reimportada agora, possivelmente mais longa/atualizada).
+Compare as duas com atenção e identifique SOMENTE o que é novo na versão NOVA em relação à ANTERIOR — não repita nem resuma trechos que já apareciam na versão ANTERIOR. Use seu julgamento para reconhecer mensagens novas mesmo que a formatação, timestamps ou trechos tenham mudado ligeiramente; não faça uma comparação literal caractere a caractere, entenda o CONTEÚDO.
+Resuma apenas as novidades em formato de lista curta (linhas começando com "- "). Se não houver nada novo, responda apenas "Nada de novo desde a última importação.".
+
+CONVERSA ANTERIOR:
+${anterior}
+
+CONVERSA NOVA:
+${conversa}`;
+  } else {
+    prompt = `Você é assistente de um fotógrafo brasileiro. Leia a conversa abaixo entre ele e um lead e resuma o que aconteceu nesse contato: pedidos, dúvidas, sinais de interesse, objeções. Responda em lista curta (linhas começando com "- "), direto, sem repetir trechos literais. Se não houver nada relevante, responda apenas "Nada relevante identificado.".
+
+Conversa:
+${conversa}`;
+  }
+
+  toast("Analisando conversa...");
+  const resultado = await callGemini(prompt);
+  if(!resultado.texto){ toast(mensagemErroIA(resultado, "analisar a conversa")); return; }
+
+  try{
+    await db.collection("leads").doc(leadId).update({ ultimaConversaImportada: conversa });
+  }catch(err){
+    console.error(err);
+    toast("Erro ao salvar a conversa importada. Veja o console.");
+    return;
+  }
+  await salvarComentario("leads", leadId, `💬 Conversa importada (IA):\n${resultado.texto.trim()}`);
+  await analisarLeadComIA(leadId);
+}
+
+async function analisarLeadComIA(leadId){
+  const lead = state.leads.find(l=>l.id===leadId);
+  if(!lead || !temIA()) return;
+  const comentarios = [...(lead.comentarios||[])].sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||""))
+    .map(c=>`[${formatarDataHora(c.criadoEm)}] ${c.texto}`).join("\n");
+  const prompt = `${PERSONA_BASE_IA} Você é o Agente Comercial, especialista em qualificação de leads e vendas humanizadas.
+
+Analise o histórico completo do lead abaixo e retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
+{"temperatura": "quente|morno|frio", "justificativa": "", "pontosAtencao": "", "mensagemSugerida": ""}
+
+- "temperatura": classifique o nível de interesse/urgência de compra.
+- "justificativa": 1-2 frases explicando a classificação.
+- "pontosAtencao": o que pode travar essa venda (ou "Nenhum ponto de atenção identificado.").
+- "mensagemSugerida": a próxima mensagem para enviar a este lead, pronta para copiar e colar no WhatsApp, tom humanizado, adequada ao interesse dele (${lead.interesseTipo || "não informado"}). Não invente dados que não foram informados.
+
+Nome do lead: ${lead.nome || "não informado"}
+Como chegou até nós: ${lead.origem || "não informado"}
+Interesse em: ${lead.interesseTipo ? capitalize(lead.interesseTipo.replace("_"," ")) : "não informado"}
+Status atual: ${lead.status || "negociando"}
+Histórico de comentários/contatos (mais antigo primeiro):
+${comentarios || "(nenhum comentário registrado ainda)"}`;
+
+  const resultado = await callGemini(prompt);
+  if(!resultado.texto){
+    toast(mensagemErroIA(resultado, "analisar o lead"));
+    openView("leads", leadId);
+    return;
+  }
+
+  let dados;
+  try{
+    dados = JSON.parse(resultado.texto.replace(/```json|```/g,"").trim());
+  }catch(err){
+    console.error("[analisar-lead] erro ao parsear JSON:", err, resultado.texto);
+    toast("Não consegui interpretar a análise da IA. Veja o console.");
+    openView("leads", leadId);
+    return;
+  }
+  if(!["quente","morno","frio"].includes(dados.temperatura)) dados.temperatura = lead.temperatura || "";
+
+  try{
+    const criadoEm = new Date().toISOString();
+    await db.collection("leads").doc(leadId).update({
+      temperatura: dados.temperatura,
+      analiseIA: { temperatura: dados.temperatura, mensagemSugerida: dados.mensagemSugerida||"", criadoEm }
+    });
+    const textoComentario = `🎯 Análise de qualificação (IA):\nTemperatura: ${capitalize(dados.temperatura||"não identificada")}\n${dados.justificativa||""}\nPontos de atenção: ${dados.pontosAtencao||"—"}\nSugestão de mensagem: ${dados.mensagemSugerida||"—"}`;
+    await salvarComentario("leads", leadId, textoComentario);
+  }catch(err){
+    console.error(err);
+    toast("Erro ao salvar a análise do lead. Veja o console.");
+  }
+  openView("leads", leadId);
+}
+function copiarMensagemSugeridaLead(leadId){
+  const lead = state.leads.find(l=>l.id===leadId);
+  const texto = lead?.analiseIA?.mensagemSugerida || "";
+  navigator.clipboard.writeText(texto).then(()=>toast("Copiado!")).catch(()=>toast("Não foi possível copiar."));
+}
+function enviarMensagemSugeridaLead(leadId){
+  const lead = state.leads.find(l=>l.id===leadId);
+  if(!lead) return;
+  const texto = lead.analiseIA?.mensagemSugerida || "";
+  const wa = whatsappLink(lead.telefone);
+  if(!wa) return;
+  window.open(`${wa}?text=${encodeURIComponent(texto)}`, "_blank");
 }
 
 async function converterLeadEmCliente(leadId){
