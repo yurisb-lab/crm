@@ -2229,10 +2229,11 @@ const SKILLS_IA = {
     montarPrompt(v){
       const assunto = v.tipo==="crianca" ? "o aniversário da criança" : "as bodas do casal";
       const momento = v.tipo==="crianca" ? "esse momento" : "essa celebração";
-      const contexto = v.tipo==="crianca"
+      const contexto = (v.tipo==="crianca"
         ? `Criança: ${v.nome}\nVai completar: ${v.idade} anos\nResponsável/cliente vinculado: ${v.vinculo||"não informado"}`
-        : `Casal: ${v.nome}\nVai completar: ${v.idade} anos de casados\nCliente vinculado: ${v.vinculo||"não informado"}`;
-      return `Você é Yuri Silva, fotógrafo de eventos sociais. Escreva uma mensagem de WhatsApp sobre ${assunto} abaixo, como se fosse você mesmo falando diretamente com a cliente, seguindo estas regras à risca:
+        : `Casal: ${v.nome}\nVai completar: ${v.idade} anos de casados\nCliente vinculado: ${v.vinculo||"não informado"}`)
+        + (v.observacoes ? `\nObservações sobre o cliente: ${v.observacoes}` : "");
+      return `Você é Yuri Silva, fotógrafo de eventos sociais. Escreva 2 a 3 versões diferentes de mensagem de WhatsApp sobre ${assunto} abaixo, como se fosse você mesmo falando diretamente com a cliente, seguindo estas regras à risca:
 
 - Fale diretamente com a cliente, sem se apresentar nem usar "equipe", "nós", "nosso time" ou qualquer expressão que soe como empresa.
 - Não comece a mensagem com justificativas como "estava pensando", "lembrei", "estava olhando o calendário" ou parecidas — vá direto ao assunto.
@@ -2240,11 +2241,12 @@ const SKILLS_IA = {
 - Não cite cidade, bairro ou qualquer localização.
 - Não informe a data nem quantos dias faltam — apenas diga que está chegando.
 - Tom natural, educado e pessoal, como uma conversa no WhatsApp — sem exageros nem textos muito emocionados.
-- Seja breve: entre 80 e 140 palavras.
-- Não invente detalhes sobre a família, a rotina ou os sentimentos da cliente, nem outras informações além das fornecidas abaixo.
+- Cada versão deve ser breve: entre 80 e 140 palavras.
+- Use as informações abaixo pra deixar a mensagem pessoal — não invente detalhes sobre a família, a rotina ou os sentimentos da cliente além do que foi fornecido.
 - Faça apenas uma menção discreta a fotografar ${momento}, caso ainda não tenham um fotógrafo escolhido, sem parecer propaganda.
-- Termine com uma pergunta simples que incentive a resposta, como "Os preparativos já começaram?".
-- No máximo um emoji ❤️, só no final e só se combinar com a mensagem — evite outros emojis.
+- Termine cada versão com uma pergunta simples que incentive a resposta — varie a pergunta entre as versões, sem repetir sempre a mesma frase.
+- No máximo um emoji ❤️ por versão, só no final e só se combinar com a mensagem — evite outros emojis.
+- Retorne as versões numeradas (1), 2), 3)), sem explicações antes, entre ou depois delas.
 
 ${contexto}`;
     }
@@ -2439,34 +2441,68 @@ function abrirModalAniversariosBodas(preSelect){
     <h3>🎂 Aniversários e bodas (60 dias)</h3>
     <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">${SKILLS_IA.aniversarios_bodas.descricao}</div>
     ${opcoes.length ? `
-      <div class="field"><label>Selecione quem</label>
-        <select id="aniv-select">
-          ${opcoes.map(o=>`<option value="${o.tipo}:${o.id}" ${preSelect===`${o.tipo}:${o.id}`?"selected":""}>${o.tipo==="crianca"?"🎂":"💍"} ${o.nome} — ${o.dias===0?"hoje":o.dias+" dia(s)"} (completa ${o.idade})</option>`).join("")}
-        </select>
+      <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
+        ${opcoes.map(o=>`
+          <button class="ghost sm aniv-item" style="text-align:left; justify-content:flex-start;" data-key="${o.tipo}:${o.id}" onclick="gerarAniversariosBodasIA('${o.tipo}','${o.id}')">
+            ${o.tipo==="crianca"?"🎂":"💍"} ${o.nome} — ${o.dias===0?"hoje":o.dias+" dia(s)"} (completa ${o.idade})
+          </button>
+        `).join("")}
       </div>
-      <button class="primary" id="btn-gerar-ia" onclick="gerarAniversariosBodasIA()">✦ Gerar mensagem com IA</button>
       <div id="resultado-ia-container"></div>
     ` : `<div class="empty-state">Nenhum aniversário ou bodas nos próximos 60 dias.</div>`}
     <div class="modal-actions"><button class="ghost" onclick="closeModal()">Fechar</button></div>
   `;
   document.getElementById("modal-backdrop").classList.add("active");
+  if(preSelect){
+    const [tipo, id] = preSelect.split(":");
+    gerarAniversariosBodasIA(tipo, id);
+  }
 }
-async function gerarAniversariosBodasIA(){
-  const [tipo, id] = (document.getElementById("aniv-select")?.value||"").split(":");
-  if(!tipo || !id) return;
+async function gerarAniversariosBodasIA(tipo, id){
   let v, cliente;
   if(tipo==="crianca"){
     const c = state.criancas.find(x=>x.id===id);
+    if(!c) return;
     cliente = state.clientes.find(x=>x.id===(c.clientePaiId||c.clienteMaeId));
-    v = { tipo:"crianca", nome:c.nome, idade:idadeAtual(c.dataNascimento)+1, dias:diasParaAniversario(c.dataNascimento), vinculo:cliente?.nome };
+    v = { tipo:"crianca", nome:c.nome, idade:idadeAtual(c.dataNascimento)+1, vinculo:cliente?.nome, observacoes:cliente?.observacoes||"" };
   } else {
     const c = state.casamentos.find(x=>x.id===id);
+    if(!c) return;
     cliente = state.clientes.find(x=>x.id===c.clienteId);
-    v = { tipo:"casamento", nome:c.nomeCasal, idade:idadeAtual(c.dataCasamento)+1, dias:diasParaAniversario(c.dataCasamento), vinculo:cliente?.nome };
+    v = { tipo:"casamento", nome:c.nomeCasal, idade:idadeAtual(c.dataCasamento)+1, vinculo:cliente?.nome, observacoes:cliente?.observacoes||"" };
+  }
+  const btn = document.querySelector(`.aniv-item[data-key="${tipo}:${id}"]`);
+  const container = document.getElementById("resultado-ia-container");
+  if(!container) return;
+  if(btn){ btn.disabled = true; }
+  container.innerHTML = `<div class="ai-box">Gerando mensagens...</div>`;
+  const resultado = await callGemini(SKILLS_IA.aniversarios_bodas.montarPrompt(v));
+  if(btn){ btn.disabled = false; }
+  if(!resultado.texto){
+    container.innerHTML = `<div class="ai-box">Erro: ${escapeHtml(mensagemErroIA(resultado, "gerar as mensagens"))}</div>`;
+    return;
   }
   const wa = cliente ? whatsappLink(cliente.telefone) : null;
-  const btnWhats = wa ? `<button class="primary sm" onclick="window.open('${wa}?text='+encodeURIComponent(window._resultadoIA||''),'_blank')" title="Enviar WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : "";
-  await executarSkillIA("aniversarios_bodas", v, btnWhats);
+  const versoes = resultado.texto.split(/\n(?=\d[\)\.])/).map(b=>b.replace(/^\d[\)\.]\s*/,"").trim()).filter(Boolean);
+  window._aniversariosVersoes = versoes;
+  container.innerHTML = versoes.map((texto,i)=>`
+    <div class="ai-box" style="margin-bottom:8px;">
+      <div class="ai-label">Versão ${i+1}</div>
+      <div style="white-space:pre-wrap;">${escapeHtml(texto)}</div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button class="ghost sm" onclick="copiarVersaoAniversario(${i})">Copiar</button>
+        ${wa ? `<button class="primary sm" onclick="enviarVersaoAniversario(${i},'${wa}')" title="Enviar WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
+      </div>
+    </div>
+  `).join("");
+}
+function copiarVersaoAniversario(i){
+  const texto = window._aniversariosVersoes?.[i] || "";
+  navigator.clipboard.writeText(texto).then(()=>toast("Copiado!")).catch(()=>toast("Não foi possível copiar."));
+}
+function enviarVersaoAniversario(i, wa){
+  const texto = window._aniversariosVersoes?.[i] || "";
+  window.open(`${wa}?text=${encodeURIComponent(texto)}`, "_blank");
 }
 
 /* =========================================================
@@ -6787,17 +6823,21 @@ function renderViewLead(lead){
   const btnRegistrarHtml = temIA() ? "<button class=\"ghost sm\" style=\"margin-bottom:10px;width:100%\" onclick=\"abrirModalAtualizarLead('" + lid + "')\">📝 Registrar novo contato</button>" : "";
   const btnAnalisarHtml = temIA() ? "<button class=\"ghost sm\" onclick=\"analisarLeadComIA('" + lid + "')\" style=\"margin-top:6px;width:100%\">✦ Analisar com IA</button>" : "";
   const analise = lead.analiseIA;
+  const mensagensAnalise = analise?.mensagensSugeridas || [];
   const boxAnaliseHtml = analise ? (
     "<div class=\"ai-box\" id=\"ai-analise-leads-" + lid + "\">" +
     "<div class=\"ai-label\">Qualificação (IA) — " + formatarDataHora(analise.criadoEm) + "</div>" +
     "<div><b>Temperatura:</b> <span class=\"badge lead-temp-" + analise.temperatura + "\">" + (symTemp[analise.temperatura]||"") + " " + (lblTemp[analise.temperatura]||capitalize(analise.temperatura||"")) + "</span></div>" +
-    (analise.mensagemSugerida ? (
-      "<div style=\"margin-top:8px; white-space:pre-wrap;\">" + escapeHtml(analise.mensagemSugerida) + "</div>" +
+    mensagensAnalise.map((msg,i)=>
+      "<div style=\"margin-top:10px; padding-top:10px; border-top:1px solid var(--border);\">" +
+      "<div style=\"font-size:11px; color:var(--muted-2); margin-bottom:4px;\">Versão " + (i+1) + "</div>" +
+      "<div style=\"white-space:pre-wrap;\">" + escapeHtml(msg) + "</div>" +
       "<div style=\"display:flex; gap:8px; margin-top:8px;\">" +
-      "<button class=\"ghost sm\" onclick=\"copiarMensagemSugeridaLead('" + lid + "')\">Copiar</button>" +
-      (wa ? "<button class=\"primary sm\" onclick=\"enviarMensagemSugeridaLead('" + lid + "')\" title=\"Enviar WhatsApp\"><i class=\"ti ti-brand-whatsapp\" style=\"color:#25D366;font-size:16px;\"></i></button>" : "") +
+      "<button class=\"ghost sm\" onclick=\"copiarMensagemSugeridaLead('" + lid + "'," + i + ")\">Copiar</button>" +
+      (wa ? "<button class=\"primary sm\" onclick=\"enviarMensagemSugeridaLead('" + lid + "'," + i + ")\" title=\"Enviar WhatsApp\"><i class=\"ti ti-brand-whatsapp\" style=\"color:#25D366;font-size:16px;\"></i></button>" : "") +
+      "</div>" +
       "</div>"
-    ) : "") +
+    ).join("") +
     "</div>"
   ) : "";
   return "<h3>" + (lead.nome||"") + "</h3>" +
@@ -6959,12 +6999,12 @@ async function analisarLeadComIA(leadId){
   const prompt = `${PERSONA_BASE_IA} Você é o Agente Comercial, especialista em qualificação de leads e vendas humanizadas.
 
 Analise o histórico completo do lead abaixo e retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
-{"temperatura": "quente|morno|frio", "justificativa": "", "pontosAtencao": "", "mensagemSugerida": ""}
+{"temperatura": "quente|morno|frio", "justificativa": "", "pontosAtencao": "", "mensagensSugeridas": ["", ""]}
 
 - "temperatura": classifique o nível de interesse/urgência de compra.
 - "justificativa": 1-2 frases explicando a classificação.
 - "pontosAtencao": o que pode travar essa venda (ou "Nenhum ponto de atenção identificado.").
-- "mensagemSugerida": a próxima mensagem para enviar a este lead, pronta para copiar e colar no WhatsApp, tom humanizado, adequada ao interesse dele (${lead.interesseTipo || "não informado"}). Não invente dados que não foram informados.
+- "mensagensSugeridas": 2 a 3 versões diferentes da próxima mensagem para enviar a este lead, cada uma pronta para copiar e colar no WhatsApp, tom humanizado, adequada ao interesse dele (${lead.interesseTipo || "não informado"}). Varie a abordagem entre as versões (ex: uma mais direta, outra mais pessoal/emocional, outra com senso de oportunidade) e, quando fizer sentido, use gatilhos emocionais sutis (afeto, pertencimento, memória que está sendo construída) sem soar forçado ou manipulador. Não invente dados que não foram informados.
 
 Nome do lead: ${lead.nome || "não informado"}
 Como chegou até nós: ${lead.origem || "não informado"}
@@ -6990,14 +7030,15 @@ ${comentarios || "(nenhum comentário registrado ainda)"}`;
     return;
   }
   if(!["quente","morno","frio"].includes(dados.temperatura)) dados.temperatura = lead.temperatura || "";
+  const mensagens = Array.isArray(dados.mensagensSugeridas) ? dados.mensagensSugeridas.filter(Boolean) : [];
 
   try{
     const criadoEm = new Date().toISOString();
     await db.collection("leads").doc(leadId).update({
       temperatura: dados.temperatura,
-      analiseIA: { temperatura: dados.temperatura, mensagemSugerida: dados.mensagemSugerida||"", criadoEm }
+      analiseIA: { temperatura: dados.temperatura, mensagensSugeridas: mensagens, criadoEm }
     });
-    const textoComentario = `🎯 Análise de qualificação (IA):\nTemperatura: ${capitalize(dados.temperatura||"não identificada")}\n${dados.justificativa||""}\nPontos de atenção: ${dados.pontosAtencao||"—"}\nSugestão de mensagem: ${dados.mensagemSugerida||"—"}`;
+    const textoComentario = `🎯 Análise de qualificação (IA):\nTemperatura: ${capitalize(dados.temperatura||"não identificada")}\n${dados.justificativa||""}\nPontos de atenção: ${dados.pontosAtencao||"—"}\nSugestões de mensagem:\n${mensagens.length ? mensagens.map((m,i)=>`${i+1}) ${m}`).join("\n") : "—"}`;
     await salvarComentario("leads", leadId, textoComentario);
   }catch(err){
     console.error(err);
@@ -7005,15 +7046,15 @@ ${comentarios || "(nenhum comentário registrado ainda)"}`;
   }
   openView("leads", leadId);
 }
-function copiarMensagemSugeridaLead(leadId){
+function copiarMensagemSugeridaLead(leadId, i){
   const lead = state.leads.find(l=>l.id===leadId);
-  const texto = lead?.analiseIA?.mensagemSugerida || "";
+  const texto = lead?.analiseIA?.mensagensSugeridas?.[i] || "";
   navigator.clipboard.writeText(texto).then(()=>toast("Copiado!")).catch(()=>toast("Não foi possível copiar."));
 }
-function enviarMensagemSugeridaLead(leadId){
+function enviarMensagemSugeridaLead(leadId, i){
   const lead = state.leads.find(l=>l.id===leadId);
   if(!lead) return;
-  const texto = lead.analiseIA?.mensagemSugerida || "";
+  const texto = lead.analiseIA?.mensagensSugeridas?.[i] || "";
   const wa = whatsappLink(lead.telefone);
   if(!wa) return;
   window.open(`${wa}?text=${encodeURIComponent(texto)}`, "_blank");
