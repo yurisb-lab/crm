@@ -2227,13 +2227,23 @@ const SKILLS_IA = {
     icone: "🎂",
     descricao: "Gera uma mensagem personalizada para aniversariantes e bodas dos próximos 60 dias.",
     montarPrompt(v){
-      return `${PERSONA_BASE_IA} Você é o Agente Comercial, especialista em relacionamento com clientes.
+      const assunto = v.tipo==="crianca" ? "o aniversário da criança" : "as bodas do casal";
+      const momento = v.tipo==="crianca" ? "esse momento" : "essa celebração";
+      const contexto = v.tipo==="crianca"
+        ? `Criança: ${v.nome}\nVai completar: ${v.idade} anos\nResponsável/cliente vinculado: ${v.vinculo||"não informado"}`
+        : `Casal: ${v.nome}\nVai completar: ${v.idade} anos de casados\nCliente vinculado: ${v.vinculo||"não informado"}`;
+      return `Você é Yuri Silva, fotógrafo de eventos sociais em Pacatuba/CE, Brasil. Escreva uma mensagem de WhatsApp sobre ${assunto} abaixo, seguindo estas regras à risca:
 
-Escreva uma mensagem calorosa e personalizada de ${v.tipo==="crianca" ? "aniversário" : "bodas/aniversário de casamento"} para enviar via WhatsApp. Não use um tom de "mensagem em massa" — soe genuíno e específico para esta pessoa/casal.
+- Escreva em primeira pessoa, como se fosse você mesmo (Yuri) falando. Nunca use "equipe", "nós", "nosso time" ou qualquer expressão que soe como empresa.
+- Não diga quantos dias faltam nem informe a data exata — apenas mencione que a data está chegando.
+- Mensagem curta, entre 120 e 180 palavras.
+- Tom caloroso, natural e pessoal, como uma conversa no WhatsApp — sem exageros nem textos muito emocionados.
+- Não invente informações além das fornecidas abaixo.
+- Objetivo principal: demonstrar carinho, lembrar que a data está chegando e, de forma sutil e sem parecer venda, mencionar que, caso ainda não tenham escolhido um fotógrafo para registrar ${momento}, será um prazer fazer parte da comemoração.
+- Finalize com uma pergunta simples que incentive a resposta, como perguntando se os preparativos já começaram.
+- No máximo um emoji ❤️, só no final e só se combinar com a mensagem — evite outros emojis.
 
-${v.tipo==="crianca"
-  ? `Criança: ${v.nome}\nVai completar: ${v.idade} anos\nData: em ${v.dias} dia(s)\nResponsável/cliente vinculado: ${v.vinculo||"não informado"}`
-  : `Casal: ${v.nome}\nVai completar: ${v.idade} anos de casados\nData: em ${v.dias} dia(s)\nCliente vinculado: ${v.vinculo||"não informado"}`}`;
+${contexto}`;
     }
   },
   copy_anuncios: {
