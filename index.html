@@ -886,8 +886,11 @@ const SCHEMAS = {
       {key:"status", label:"Status", format:(v,row)=>{
         const s = v||'confirmado';
         const symbols = {confirmado:'●', realizado:'●', entregue:'✓'};
-        const idx = EVENTO_STATUS_SEQ.indexOf(s);
-        const proximo = idx>-1 && idx<EVENTO_STATUS_SEQ.length-1 ? EVENTO_STATUS_SEQ[idx+1] : null;
+        // status de versões antigas do CRM (ex: "fechado", "orcamento") não existem mais na sequência atual —
+        // trata como equivalente a "confirmado" pra não travar o avanço de eventos antigos
+        const idxAtual = EVENTO_STATUS_SEQ.indexOf(s);
+        const idx = idxAtual===-1 ? 0 : idxAtual;
+        const proximo = idx<EVENTO_STATUS_SEQ.length-1 ? EVENTO_STATUS_SEQ[idx+1] : null;
         if(proximo && !row.bloqueado){
           return `<span class="badge ${s}" style="cursor:pointer;" title="Clique para avançar para '${statusLabel(proximo)}'" onclick="avancarStatusEvento('${row.id}')">${symbols[s]||""} ${statusLabel(s)}</span>`;
         }
@@ -6406,9 +6409,13 @@ async function avancarStatusEvento(eventoId){
   const ev = state.eventos.find(e=>e.id===eventoId);
   if(!ev) return;
   if(ev.bloqueado){ toast("Evento bloqueado — desbloqueie para alterar o status."); return; }
-  const idx = EVENTO_STATUS_SEQ.indexOf(ev.status||"confirmado");
-  if(idx===-1 || idx>=EVENTO_STATUS_SEQ.length-1) return;
+  // status de versões antigas do CRM (ex: "fechado", "orcamento") não existem mais na sequência atual —
+  // trata como equivalente a "confirmado" pra não travar o avanço de eventos antigos
+  const idxAtual = EVENTO_STATUS_SEQ.indexOf(ev.status||"confirmado");
+  const idx = idxAtual===-1 ? 0 : idxAtual;
+  if(idx>=EVENTO_STATUS_SEQ.length-1) return;
   const proximo = EVENTO_STATUS_SEQ[idx+1];
+  if(!confirm(`Avançar o status deste evento para "${statusLabel(proximo)}"?`)) return;
   const updateData = { status: proximo };
   if(proximo==="entregue" && !ev.dataEntregaReal) updateData.dataEntregaReal = new Date().toISOString().slice(0,10);
   try{
