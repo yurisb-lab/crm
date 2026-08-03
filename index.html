@@ -2232,15 +2232,18 @@ const SKILLS_IA = {
       const contexto = v.tipo==="crianca"
         ? `Criança: ${v.nome}\nVai completar: ${v.idade} anos\nResponsável/cliente vinculado: ${v.vinculo||"não informado"}`
         : `Casal: ${v.nome}\nVai completar: ${v.idade} anos de casados\nCliente vinculado: ${v.vinculo||"não informado"}`;
-      return `Você é Yuri Silva, fotógrafo de eventos sociais em Pacatuba/CE, Brasil. Escreva uma mensagem de WhatsApp sobre ${assunto} abaixo, seguindo estas regras à risca:
+      return `Você é Yuri Silva, fotógrafo de eventos sociais. Escreva uma mensagem de WhatsApp sobre ${assunto} abaixo, como se fosse você mesmo falando diretamente com a cliente, seguindo estas regras à risca:
 
-- Escreva em primeira pessoa, como se fosse você mesmo (Yuri) falando. Nunca use "equipe", "nós", "nosso time" ou qualquer expressão que soe como empresa.
-- Não diga quantos dias faltam nem informe a data exata — apenas mencione que a data está chegando.
-- Mensagem curta, entre 120 e 180 palavras.
-- Tom caloroso, natural e pessoal, como uma conversa no WhatsApp — sem exageros nem textos muito emocionados.
-- Não invente informações além das fornecidas abaixo.
-- Objetivo principal: demonstrar carinho, lembrar que a data está chegando e, de forma sutil e sem parecer venda, mencionar que, caso ainda não tenham escolhido um fotógrafo para registrar ${momento}, será um prazer fazer parte da comemoração.
-- Finalize com uma pergunta simples que incentive a resposta, como perguntando se os preparativos já começaram.
+- Fale diretamente com a cliente, sem se apresentar nem usar "equipe", "nós", "nosso time" ou qualquer expressão que soe como empresa.
+- Não comece a mensagem com justificativas como "estava pensando", "lembrei", "estava olhando o calendário" ou parecidas — vá direto ao assunto.
+- Não use gírias ou expressões como "rapaz", "menina", "como o tempo voa" e afins.
+- Não cite cidade, bairro ou qualquer localização.
+- Não informe a data nem quantos dias faltam — apenas diga que está chegando.
+- Tom natural, educado e pessoal, como uma conversa no WhatsApp — sem exageros nem textos muito emocionados.
+- Seja breve: entre 80 e 140 palavras.
+- Não invente detalhes sobre a família, a rotina ou os sentimentos da cliente, nem outras informações além das fornecidas abaixo.
+- Faça apenas uma menção discreta a fotografar ${momento}, caso ainda não tenham um fotógrafo escolhido, sem parecer propaganda.
+- Termine com uma pergunta simples que incentive a resposta, como "Os preparativos já começaram?".
 - No máximo um emoji ❤️, só no final e só se combinar com a mensagem — evite outros emojis.
 
 ${contexto}`;
