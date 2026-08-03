@@ -883,9 +883,14 @@ const SCHEMAS = {
       {key:"tipo", label:"Tipo", format:(v,row)=> v==="outro" && row.outroDescricao ? `Outro: ${row.outroDescricao}` : (v?capitalize(v.replace("_"," ")):"—")},
       {key:"clienteId", label:"Cliente", format:v=>v?`<a href="#" onclick="openView('clientes','${v}');return false;">${nomeRef("clientes",v)}</a>`:"—"},
       {key:"valorContratado", label:"Valor", format:v=>v?money(v):"—"},
-      {key:"status", label:"Status", format:v=>{
+      {key:"status", label:"Status", format:(v,row)=>{
         const s = v||'confirmado';
         const symbols = {confirmado:'●', realizado:'●', entregue:'✓'};
+        const idx = EVENTO_STATUS_SEQ.indexOf(s);
+        const proximo = idx>-1 && idx<EVENTO_STATUS_SEQ.length-1 ? EVENTO_STATUS_SEQ[idx+1] : null;
+        if(proximo && !row.bloqueado){
+          return `<span class="badge ${s}" style="cursor:pointer;" title="Clique para avançar para '${statusLabel(proximo)}'" onclick="avancarStatusEvento('${row.id}')">${symbols[s]||""} ${statusLabel(s)}</span>`;
+        }
         return `<span class="badge ${s}">${symbols[s]||""} ${statusLabel(s)}</span>`;
       }},
       {key:"_saldo", label:"Saldo", format:(v,row)=>{
@@ -954,6 +959,7 @@ const STATUS_LABELS = {
   confirmado:"Confirmado", realizado:"Realizado", entregue:"Entregue"
 };
 function statusLabel(s){ return STATUS_LABELS[s] || capitalize(s); }
+const EVENTO_STATUS_SEQ = ["confirmado","realizado","entregue"];
 
 const NEGOCIACAO_STATUS_LABELS = {
   negociacao:"Em negociação", fechado:"Fechado", perdido:"Perdido"
@@ -3902,15 +3908,21 @@ function renderDashboard(main){
     ${(()=>{
       const alertas = calcularAlertas();
       if(!alertas.length) return "";
-      return `<div class="section-title">⚠️ Alertas</div>
+      const alertasLeads = alertas.filter(a=>a.col==="leads");
+      const alertasClientes = alertas.filter(a=>a.col!=="leads");
+      const tabela = lista => `
       <div class="card" style="padding:0;">
         <table><tbody>
-          ${alertas.map(a=>`<tr>
+          ${lista.map(a=>`<tr>
             <td style="padding:11px 12px; font-size:13px; line-height:1.5;">${a.texto}</td>
             <td class="row-actions"><button class="sm" onclick="abrirAlerta('${a.tipo}','${a.col}','${a.id}')">Ver</button></td>
           </tr>`).join("")}
         </tbody></table>
       </div>`;
+      return `
+        ${alertasLeads.length ? `<div class="section-title">⚠️ Alertas de Leads</div>${tabela(alertasLeads)}` : ""}
+        ${alertasClientes.length ? `<div class="section-title">⚠️ Alertas de Clientes</div>${tabela(alertasClientes)}` : ""}
+      `;
     })()}
 
     ${(()=>{
@@ -4191,8 +4203,13 @@ function renderRelatorioMesFinanceiro(){
   `;
 }
 
+function analiseFinanceiraSalva(anoMes){
+  return state.config?.avaliacoesFinanceiras?.[anoMes] || null;
+}
+
 function renderAvaliacaoMesIA(ref, stats, meta, pct){
   const bateuMeta = meta ? stats.recebido >= meta : null;
+  const salva = analiseFinanceiraSalva(ref.chave);
   return `
     <div class="section-title">🤖 Avaliação do mês com IA</div>
     <div class="card" style="margin-bottom:24px;">
@@ -4204,11 +4221,63 @@ function renderAvaliacaoMesIA(ref, stats, meta, pct){
                 : `${MESES[ref.mes]} ficou ${money(meta-stats.recebido)} abaixo da meta (${pct}%). Peça pra IA uma análise dos possíveis motivos e ideias práticas pra melhorar.`)
             : `Defina uma meta mensal em Configurações pra poder avaliar se o mês bateu ou não a meta.`}
         </div>
-        ${temIA() ? `<button class="ghost" id="btn-avaliar-mes" onclick="avaliarMesComIA('${ref.chave}')">✦ Avaliar o mês com IA</button>` : `<span style="font-size:12px; color:var(--muted-2);">Configure a chave Gemini em Configurações para usar a IA.</span>`}
+        ${temIA() ? `<button class="ghost" id="btn-avaliar-mes" onclick="avaliarMesComIA('${ref.chave}')">${salva ? "↻ Analisar novamente" : "✦ Avaliar o mês com IA"}</button>` : `<span style="font-size:12px; color:var(--muted-2);">Configure a chave Gemini em Configurações para usar a IA.</span>`}
       </div>
-      <div class="ai-box" id="ai-avaliacao-mes" style="display:none;"></div>
+      <div class="ai-box" id="ai-avaliacao-mes" style="display:${salva?"block":"none"};">
+        ${salva ? `<div class="ai-label">📊 Avaliação de ${MESES[ref.mes]} — salva em ${formatarDataHora(salva.criadoEm)}</div>${escapeHtml(salva.texto).replace(/\n/g,"<br>")}` : ""}
+      </div>
+      ${salva ? renderComentariosAvaliacaoMes(ref.chave) : ""}
     </div>
   `;
+}
+
+function comentariosAvaliacaoMes(anoMes){
+  return state.config?.avaliacoesFinanceiras?.[anoMes]?.comentarios || [];
+}
+function renderComentariosAvaliacaoMes(anoMes){
+  const sorted = [...comentariosAvaliacaoMes(anoMes)].sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||""));
+  return `
+    <div class="view-section-title" style="margin-top:14px;">Comentários</div>
+    <div id="comentarios-lista-avaliacao-${anoMes}">
+      ${sorted.length ? sorted.map(c=>`
+        <div class="comentario-item">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+            <div style="flex:1; min-width:0;">
+              <div class="comentario-data">${formatarDataHora(c.criadoEm)}</div>
+              <div class="comentario-texto">${escapeHtml(c.texto)}</div>
+            </div>
+            <button class="ghost sm" title="Excluir comentário" onclick="excluirComentarioAvaliacaoMes('${anoMes}','${c.criadoEm}')">✕</button>
+          </div>
+        </div>`).join("") : `<div style="font-size:13px;color:var(--muted-2);">Nenhum comentário ainda.</div>`}
+    </div>
+    <div class="comentario-input-row">
+      <textarea id="novo-comentario-avaliacao-${anoMes}" placeholder="Escreva um comentário..."></textarea>
+      <button class="sm" onclick="salvarComentarioAvaliacaoMes('${anoMes}')">Salvar</button>
+    </div>
+  `;
+}
+async function salvarComentarioAvaliacaoMes(anoMes){
+  const input = document.getElementById(`novo-comentario-avaliacao-${anoMes}`);
+  const texto = input ? input.value.trim() : "";
+  if(!texto){ toast("Escreva algo antes de salvar."); return; }
+  const existente = state.config?.avaliacoesFinanceiras?.[anoMes] || {};
+  const novos = [...(existente.comentarios||[]), { texto, criadoEm: new Date().toISOString() }];
+  try{
+    await db.collection("config").doc("settings").set({
+      avaliacoesFinanceiras: { ...(state.config?.avaliacoesFinanceiras||{}), [anoMes]: { ...existente, comentarios: novos } }
+    }, { merge:true });
+    toast("Comentário salvo.");
+  }catch(err){ console.error(err); toast("Erro ao salvar comentário."); }
+}
+async function excluirComentarioAvaliacaoMes(anoMes, criadoEm){
+  const existente = state.config?.avaliacoesFinanceiras?.[anoMes] || {};
+  const novos = (existente.comentarios||[]).filter(c=>c.criadoEm!==criadoEm);
+  try{
+    await db.collection("config").doc("settings").set({
+      avaliacoesFinanceiras: { ...(state.config?.avaliacoesFinanceiras||{}), [anoMes]: { ...existente, comentarios: novos } }
+    }, { merge:true });
+    toast("Comentário excluído.");
+  }catch(err){ console.error(err); toast("Erro ao excluir comentário."); }
 }
 
 async function avaliarMesComIA(anoMes){
@@ -4268,9 +4337,23 @@ MOTIVOS DE PERDA DE LEADS NO HISTÓRICO GERAL (${state.leads.filter(l=>l.status=
 Escreva uma análise curta e direta (6 a 8 linhas) sobre prováveis motivos do resultado do mês (bom ou ruim) com base nos dados acima. Depois liste de 3 a 5 sugestões práticas e específicas — nada genérico — pra melhorar o faturamento nos próximos meses (pense em ações reais pra um fotógrafo de eventos sociais: reativação de clientes parados, promoções pontuais, upsell de produtos/álbuns, sazonalidade, follow-up de leads parados, etc). Linguagem direta e informal, sem enrolação, sem markdown.`;
 
   const resultado = await callGemini(prompt);
-  box.innerHTML = resultado.texto
-    ? `<div class="ai-label">📊 Avaliação de ${nomeMes}</div>${escapeHtml(resultado.texto).replace(/\n/g,"<br>")}`
-    : `<div class="ai-label">Erro</div>${mensagemErroIA(resultado, "avaliar o mês")}`;
+  if(resultado.texto){
+    box.innerHTML = `<div class="ai-label">📊 Avaliação de ${nomeMes}</div>${escapeHtml(resultado.texto).replace(/\n/g,"<br>")}`;
+    const existente = state.config?.avaliacoesFinanceiras?.[anoMes] || {};
+    try{
+      await db.collection("config").doc("settings").set({
+        avaliacoesFinanceiras: {
+          ...(state.config?.avaliacoesFinanceiras||{}),
+          [anoMes]: { texto: resultado.texto, criadoEm: new Date().toISOString(), comentarios: existente.comentarios||[] }
+        }
+      }, { merge:true });
+    }catch(err){
+      console.error(err);
+      toast("Avaliação gerada, mas houve erro ao salvar. Veja o console.");
+    }
+  } else {
+    box.innerHTML = `<div class="ai-label">Erro</div>${mensagemErroIA(resultado, "avaliar o mês")}`;
+  }
 
   if(btn){ btn.disabled = false; btn.textContent = "✦ Avaliar o mês com IA"; }
 }
@@ -6318,6 +6401,25 @@ async function marcarEventoEntregue(eventoId){
   }
 }
 
+// avança o status do evento pro próximo passo da sequência confirmado → realizado → entregue
+async function avancarStatusEvento(eventoId){
+  const ev = state.eventos.find(e=>e.id===eventoId);
+  if(!ev) return;
+  if(ev.bloqueado){ toast("Evento bloqueado — desbloqueie para alterar o status."); return; }
+  const idx = EVENTO_STATUS_SEQ.indexOf(ev.status||"confirmado");
+  if(idx===-1 || idx>=EVENTO_STATUS_SEQ.length-1) return;
+  const proximo = EVENTO_STATUS_SEQ[idx+1];
+  const updateData = { status: proximo };
+  if(proximo==="entregue" && !ev.dataEntregaReal) updateData.dataEntregaReal = new Date().toISOString().slice(0,10);
+  try{
+    await db.collection("eventos").doc(eventoId).update(updateData);
+    toast(`Status atualizado para "${statusLabel(proximo)}".`);
+  }catch(err){
+    console.error(err);
+    toast("Erro ao atualizar o status. Veja o console.");
+  }
+}
+
 function abrirModalEnvioMensagem(textoOriginal, cliente, contexto){
   const wa = cliente ? whatsappLink(cliente.telefone) : null;
   document.getElementById("modal-content").innerHTML = `
@@ -6922,6 +7024,14 @@ function renderFormularioModal(){
 function camposVisiveis(schema){
   return schema.fields.filter(f=> !f.visibleIf || f.visibleIf(formState));
 }
+function aplicarDataEntregaPrevista(dataEvento){
+  if(formState._col !== "eventos" || formState._id) return; // só sugere em eventos novos
+  if(!dataEvento || formState.dataEntregaPrevista) return; // não sobrescreve se já foi definida à mão
+  const dataEntrega = new Date(dataEvento+"T00:00:00");
+  dataEntrega.setDate(dataEntrega.getDate()+45);
+  formState.dataEntregaPrevista = dataEntrega.toISOString().slice(0,10);
+  refreshFormFields();
+}
 function aplicarValorTabela(tipo){
   if(formState._col !== "eventos") return;
   const precos = state.config?.precos || {};
@@ -7123,7 +7233,8 @@ function renderField(f, value){
       <input id="${id}" type="text" value="${str}" oninput="formState['${f.key}']=this.value.split(',').map(s=>s.trim()).filter(Boolean)">
       </div>`;
   }
-  return `<div class="field"><label>${f.label}</label><input id="${id}" type="${f.type}" value="${value||""}" oninput="formState['${f.key}']=this.value"></div>`;
+  const extraDataOn = (f.key==="data" && formState._col==="eventos") ? " aplicarDataEntregaPrevista(this.value);" : "";
+  return `<div class="field"><label>${f.label}</label><input id="${id}" type="${f.type}" value="${value||""}" oninput="formState['${f.key}']=this.value;${extraDataOn}"></div>`;
 }
 
 function autoSelecionarCriancaVinculada(clienteId){
@@ -7320,6 +7431,13 @@ async function saveDoc(ignorarDuplicatas=false){
       historico.push({ etapa: etapaNova, data: new Date().toISOString() });
     }
     data.historicoEtapas = historico;
+  }
+
+  // entrega prevista padrão: 45 dias após a data do evento (só ao criar, se não foi definida à mão)
+  if(col === "eventos" && !existing && data.data && !data.dataEntregaPrevista){
+    const dataEntrega = new Date(data.data+"T00:00:00");
+    dataEntrega.setDate(dataEntrega.getDate()+45);
+    data.dataEntregaPrevista = dataEntrega.toISOString().slice(0,10);
   }
 
   const missing = camposVisiveis(schema).filter(f=>f.required && !data[f.key]);
