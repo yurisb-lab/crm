@@ -140,7 +140,7 @@
   #app.active{ display:flex; }
 
   #sidebar{
-    width:240px; flex:0 0 240px; background:var(--surface);
+    width:230px; flex:0 0 230px; background:var(--surface);
     border-right:1px solid var(--border-solid);
     display:flex; flex-direction:column; padding:22px 14px;
     position:sticky; top:0; height:100vh; overflow-y:auto;
@@ -460,227 +460,6 @@
     .aviso-evento-acoes{ width:100%; }
     .aviso-evento-acoes button{ flex:1; }
   }
-
-  /* =========================================================
-     REDESIGN — navegação agrupada, padrão lista + painel lateral
-     ========================================================= */
-  .nav-group-label{
-    font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted-2);
-    padding:0 10px; margin:16px 0 6px; font-weight:700;
-  }
-  .nav-group:first-of-type .nav-group-label{ margin-top:2px; }
-  nav button{ padding:9px 10px; font-weight:500; }
-  nav button.active{ color:var(--amber-text); font-weight:600; }
-  .nav-footer{ border-top:1px solid var(--border-solid); padding-top:10px; margin-top:10px; }
-
-  /* ---- mobile tab bar ---- */
-  #mobile-tabbar{ display:none; }
-  @media(max-width:900px){
-    #mobile-tabbar{
-      display:flex; position:fixed; left:0; right:0; bottom:0; z-index:35;
-      background:#17130f; background:var(--surface); border-top:1px solid var(--border-solid);
-      padding:10px 8px calc(env(safe-area-inset-bottom,0px) + 10px);
-    }
-    #mobile-tabbar button{
-      flex:1; background:transparent; border:none; color:var(--muted-2);
-      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
-      min-height:44px; padding:4px; border-radius:8px;
-    }
-    #mobile-tabbar button i{ font-size:20px; }
-    #mobile-tabbar button span{ font-size:10px; }
-    #mobile-tabbar button.active{ color:var(--amber-text); }
-    #main{ padding-bottom:84px; }
-  }
-
-  /* ---- padrão lista + painel lateral ---- */
-  .list-panel-layout{ display:flex; align-items:flex-start; gap:24px; }
-  .list-panel-main{ flex:1; min-width:0; }
-  .detail-panel{
-    width:360px; flex:0 0 360px; background:var(--surface); border:0.5px solid var(--border-solid);
-    border-radius:var(--radius); box-shadow:var(--shadow-1);
-    padding:24px; position:sticky; top:16px; max-height:calc(100vh - 48px); overflow-y:auto;
-    display:flex; flex-direction:column; gap:20px;
-  }
-  .detail-panel-backdrop{ display:none; }
-  @media(max-width:1100px){
-    .detail-panel{
-      position:fixed; top:0; right:0; bottom:0; left:auto; height:100vh; max-height:100vh; z-index:45;
-      width:min(400px,92vw); flex-basis:auto; border-radius:0; box-shadow:-20px 0 40px -10px #0008;
-    }
-    .detail-panel-backdrop.open{ display:block; position:fixed; inset:0; background:#0c0a07b3; z-index:44; }
-  }
-  @media(max-width:900px){
-    .list-panel-layout{ display:block; }
-    .detail-panel{ width:100%; }
-  }
-  .detail-panel-header{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
-  .detail-panel-close{
-    background:transparent; border:none; color:var(--muted-2); padding:2px; width:28px; height:28px;
-    display:flex; align-items:center; justify-content:center; border-radius:7px; flex-shrink:0;
-  }
-  .detail-panel-close:hover{ color:var(--text); background:var(--surface-2); }
-  .detail-panel-title{ font-family:'Fraunces',serif; font-size:22px; font-weight:600; line-height:1.2; }
-  .detail-panel-sub{ font-size:12.5px; color:var(--muted); margin-top:4px; }
-  .detail-panel-actions{ display:flex; gap:8px; }
-  .detail-panel-actions button{ flex:1; justify-content:center; }
-  .detail-stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .detail-stat-grid .stat-card{ padding:12px 14px; box-shadow:none; }
-  .detail-stat-grid .stat-card .value{ font-size:22px; }
-  .detail-section-label{
-    font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700;
-  }
-
-  /* ---- barra de filtros das listas ---- */
-  .filter-bar{ display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; }
-  .filter-search{ position:relative; flex:1; min-width:180px; }
-  .filter-search i{ position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted-2); font-size:15px; }
-  .filter-search input{ width:100%; padding-left:34px; }
-  .filter-btn{
-    background:var(--surface); border:0.5px solid var(--border-solid); color:var(--muted);
-    padding:10px 14px; border-radius:8px; font-size:13.5px; display:flex; align-items:center; gap:6px;
-  }
-  .chip-counter{
-    padding:8px 14px; border-radius:20px; font-size:13px; background:var(--surface); border:0.5px solid var(--border-solid);
-    color:var(--muted); cursor:pointer; white-space:nowrap; font-weight:500;
-  }
-  .chip-counter.active{ background:var(--amber-dim); color:var(--amber-text); border-color:transparent; font-weight:600; }
-  .chip-row{ display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; overflow-x:auto; }
-
-  /* ---- tabela de lista (grid) ---- */
-  .dtable{ background:var(--surface); border:0.5px solid var(--border-solid); border-radius:var(--radius); overflow:hidden; }
-  .dtable-row{ display:grid; gap:12px; align-items:center; }
-  .dtable-head{ padding:11px 18px; border-bottom:1px solid var(--border-solid); }
-  .dtable-head span{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted-2); font-weight:700; }
-  .dtable-body-row{ padding:14px 18px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .12s ease-out; }
-  .dtable-body-row:last-child{ border-bottom:none; }
-  .dtable-body-row:hover, .dtable-body-row.selected{ background:var(--surface-2); }
-  .dtable-primary{ font-size:14.5px; font-weight:600; }
-  .dtable-secondary{ font-size:12px; color:var(--muted-2); margin-top:2px; }
-  .dtable-row-actions{ display:flex; gap:6px; justify-content:flex-end; opacity:0; transition:opacity .12s ease-out; }
-  .dtable-body-row:hover .dtable-row-actions, .dtable-body-row.selected .dtable-row-actions{ opacity:1; }
-  /* tabelas viram cards empilhados no mobile — nunca scroll horizontal */
-  @media(max-width:760px){
-    .dtable-head{ display:none; }
-    .dtable-body-row{ display:flex !important; flex-direction:column; align-items:flex-start; gap:6px; }
-    .dtable-row-actions{ opacity:1; justify-content:flex-start; margin-top:2px; }
-  }
-  .icon-btn{
-    width:28px; height:28px; border-radius:7px; background:var(--amber-dim); color:var(--amber-text);
-    border:none; display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:0;
-  }
-  .icon-btn:hover{ filter:brightness(1.15); border-color:transparent; }
-
-  /* ---- pílulas de status do redesign ---- */
-  .pill{ display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600; white-space:nowrap; }
-  .pill-verde{ background:var(--green-dim); color:var(--green); }
-  .pill-ambar{ background:var(--amber-dim); color:var(--amber-text); }
-  .pill-roxo{ background:var(--accent-2-dim); color:var(--accent-2); }
-  .pill-vermelho{ background:var(--danger-dim); color:var(--danger); }
-  .pill-neutro{ background:var(--border-solid); color:var(--muted); }
-
-  /* ---- stepper vertical (produção do evento) ---- */
-  .stepper{ display:flex; flex-direction:column; }
-  .stepper-step{ display:flex; gap:12px; }
-  .stepper-track{ display:flex; flex-direction:column; align-items:center; }
-  .stepper-circle{
-    width:22px; height:22px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
-    font-size:12px; border:2px solid var(--border-solid); color:var(--muted-2);
-  }
-  .stepper-circle.done{ background:var(--green); border-color:var(--green); color:#0f1a0c; }
-  .stepper-circle.current{ border-color:var(--amber); background:var(--amber-dim); color:var(--amber-text); }
-  .stepper-connector{ width:2px; height:14px; background:var(--border-solid); margin-left:10px; }
-  .stepper-connector.done{ background:var(--green); }
-  .stepper-body{ padding-bottom:14px; flex:1; }
-  .stepper-label{ font-size:14px; color:var(--muted); padding-top:1px; }
-  .stepper-label.current{ color:var(--amber-text); font-weight:600; }
-  .stepper-label.done{ color:var(--muted); }
-  .stepper-progress{ font-size:11.5px; color:var(--muted-2); margin-top:2px; }
-
-  /* ---- segmented control (etapa da negociação) ---- */
-  .segmented{ display:flex; border:0.5px solid var(--border-solid); border-radius:8px; overflow:hidden; }
-  .segmented button{
-    flex:1; border:none; border-radius:0; background:var(--surface); color:var(--muted);
-    padding:9px 6px; font-size:12.5px; border-right:0.5px solid var(--border-solid);
-  }
-  .segmented button:last-child{ border-right:none; }
-  .segmented button.active{ background:var(--amber-dim); border:0.5px solid var(--amber); color:var(--amber-text); font-weight:600; }
-
-  /* ---- funil de negociações (3 colunas) ---- */
-  .funil-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
-  #negociacoes-mobile-chips{ display:none; }
-  @media(max-width:900px){
-    #negociacoes-mobile-chips{ display:flex; }
-    .funil-grid{ grid-template-columns:1fr; }
-    .funil-col{ display:none; }
-    .funil-col.mobile-active{ display:block; }
-  }
-  .funil-col-header{ display:flex; flex-direction:column; align-items:flex-start; gap:2px; margin-bottom:10px; }
-  .funil-col-title{ font-size:12.5px; text-transform:uppercase; font-weight:700; color:var(--muted); }
-  .funil-col-total{ font-size:12px; color:var(--muted-2); white-space:nowrap; }
-  .funil-col-cards{ display:flex; flex-direction:column; gap:10px; }
-  .funil-card{
-    background:var(--surface); border:0.5px solid var(--border-solid); border-radius:10px; padding:13px; cursor:pointer;
-    transition:background .12s ease-out;
-  }
-  .funil-card:hover{ background:var(--surface-2); }
-  .funil-card.atencao, .funil-card.selected{ background:var(--surface-2); border:0.5px solid var(--amber); }
-  .funil-card-title{ font-size:14px; font-weight:600; }
-  .funil-card-sub{ font-size:12px; color:var(--muted-2); margin-top:2px; }
-  .funil-card-valor{ font-size:13px; color:var(--amber-text); margin-top:6px; }
-  .funil-card-alerta{ font-size:11.5px; color:var(--danger); margin-top:8px; }
-
-  /* ---- catálogo de produtos (cartões) ---- */
-  .produtos-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
-  @media(max-width:700px){ .produtos-grid{ grid-template-columns:1fr; } }
-  .produto-card{ background:var(--surface); border:0.5px solid var(--border-solid); border-radius:10px; padding:16px; }
-  .produto-card-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
-  .produto-card-nome{ font-size:15px; font-weight:600; }
-  .produto-card-preco{ font-family:'Fraunces',serif; font-size:26px; color:var(--amber-text); margin:8px 0 10px; }
-  .produto-card-inclui{ font-size:12.5px; color:var(--muted); line-height:1.6; }
-  .produto-card-footer{ border-top:1px solid var(--border); padding-top:10px; margin-top:12px; font-size:12px; color:var(--green); }
-  .produto-card-add{
-    border:1px dashed var(--border-solid); background:var(--bg); border-radius:10px; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; gap:6px; color:var(--muted-2); cursor:pointer; min-height:180px;
-  }
-  .produto-card-add i{ font-size:20px; }
-  .produto-card-add span{ font-size:13px; }
-  .produtos-arquivado-faixa{ background:var(--surface-2); border-radius:8px; padding:12px 16px; font-size:12.5px; color:var(--muted); margin-top:8px; }
-
-  /* ---- abas (configurações) ---- */
-  .tabs-bar{ display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:22px; overflow-x:auto; }
-  .tabs-bar button{
-    background:transparent; border:none; border-bottom:2px solid transparent; border-radius:0;
-    padding:9px 14px; font-size:13.5px; color:var(--muted); white-space:nowrap;
-  }
-  .tabs-bar button.active{ color:var(--amber-text); border-bottom-color:var(--amber); font-weight:600; }
-  .toggle-row{
-    display:flex; justify-content:space-between; align-items:center; gap:14px; background:var(--surface);
-    border:0.5px solid var(--border-solid); border-radius:9px; padding:14px; margin-bottom:10px;
-  }
-  .toggle-row-title{ font-size:14px; font-weight:600; }
-  .toggle-row-desc{ font-size:12px; color:var(--muted-2); margin-top:2px; }
-  .switch{
-    width:42px; height:24px; border-radius:20px; background:var(--border-solid); border:none; padding:2px;
-    flex-shrink:0; cursor:pointer; position:relative; transition:background .15s ease-out;
-  }
-  .switch::after{
-    content:""; position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%;
-    background:var(--muted-2); transition:transform .15s ease-out;
-  }
-  .switch.on{ background:var(--amber); }
-  .switch.on::after{ background:#181008; transform:translateX(18px); }
-  .autosave-note{ display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--green); margin-top:8px; }
-
-  /* ---- estados: carregando, erro ---- */
-  .skeleton-row{ height:52px; border-radius:8px; background:var(--surface-2); margin-bottom:8px; animation:skeleton-pulse 1.2s ease-in-out infinite; }
-  @keyframes skeleton-pulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
-  .alert-strip{
-    background:color-mix(in srgb, var(--danger) 12%, transparent);
-    border:0.5px solid color-mix(in srgb, var(--danger) 30%, transparent);
-    border-radius:10px; padding:12px 14px; font-size:13px;
-    color:color-mix(in srgb, var(--danger) 75%, var(--text));
-    display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
-  }
 </style>
 </head>
 <body>
@@ -706,7 +485,6 @@
       <h1>CRM</h1>
     </div>
     <nav id="nav"></nav>
-    <nav id="nav-footer" class="nav-footer"></nav>
     <div class="sidebar-footer">
       <div class="footer-row">
         <span id="user-email"></span>
@@ -722,7 +500,6 @@
       <button class="theme-toggle ghost" id="theme-toggle-btn-mobile" title="Alternar tema">🌙</button>
     </div>
     <main id="main"></main>
-    <div id="mobile-tabbar"></div>
   </div>
 </div>
 
@@ -784,12 +561,8 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err=>{
 const state = {
   leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], produtos: [], pagamentos: [], recibos: [], bloqueios: [], negociacoes: [], prereservas: [], feedbacks: [],
   config: {},
-  currentPage: "dashboard",
-  loadedCols: new Set()
+  currentPage: "dashboard"
 };
-function skeletonRows(n){
-  return Array.from({length:n}).map(()=>`<div class="skeleton-row"></div>`).join("");
-}
 const listeners = [];
 
 function toggleTheme(){
@@ -892,7 +665,6 @@ function startListeners(){
     const unsub = db.collection(col).onSnapshot(
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
-        state.loadedCols.add(col);
         invalidarCrmContextCache();
         renderPage(state.currentPage);
       },
@@ -907,10 +679,8 @@ function startListeners(){
   const unsubConfig = db.collection("config").doc("settings").onSnapshot(
     doc=>{
       state.config = doc.exists ? doc.data() : {};
-      // re-renderiza páginas que exibem dados de config — exceto a própria página de
-      // Configurações, que mantém seu rascunho local (configDraft) e salva sozinha
-      // (autosave); recarregá-la a cada gravação perderia a aba ativa e o foco do campo.
-      const paginasConfig = ["dashboard","pagamentos","relatorios"];
+      // re-renderiza qualquer página que use dados de config
+      const paginasConfig = ["configuracoes","dashboard","pagamentos","relatorios"];
       if(paginasConfig.includes(state.currentPage)) renderPage(state.currentPage);
     },
     err=>{
@@ -1341,48 +1111,29 @@ function toggleOrdenacaoColuna(col, key){
 /* =========================================================
    NAV
    ========================================================= */
-const NAV_GROUPS = [
-  { label:"Visão geral", items:[
-    {key:"dashboard",  label:"Dashboard"},
-    {key:"agenda",     label:"Agenda"},
-    {key:"conversar",  label:"Conversar"}
-  ]},
-  { label:"Captação", items:[
-    {key:"leads",       label:"Leads"},
-    {key:"negociacoes", label:"Negociações"}
-  ]},
-  { label:"Clientes", items:[
-    {key:"clientes",   label:"Clientes"},
-    {key:"criancas",   label:"Aniversariantes", child:true},
-    {key:"casamentos", label:"Casamentos", child:true}
-  ]},
-  { label:"Eventos", items:[
-    {key:"eventos", label:"Eventos"}
-  ]},
-  { label:"Catálogo", items:[
-    {key:"produtos", label:"Produtos"}
-  ]},
-  { label:"Relacionamento", items:[
-    {key:"feedbacks", label:"Feedbacks"}
-  ]},
-  { label:"Financeiro", items:[
-    {key:"pagamentos", label:"Financeiro"},
-    {key:"relatorios", label:"Relatórios"}
-  ]},
-  { label:"Inteligência", items:[
-    {key:"agentesIA", label:"Agentes de IA"}
-  ]}
-];
-const NAV_FOOTER_ITEMS = [
+const NAV_ITEMS = [
+  {key:"dashboard",     label:"Dashboard"},
+  {key:"agenda",        label:"Agenda"},
+  {key:"conversar",     label:"Conversar"},
+  {key:"leads",         label:"Leads"},
+  {key:"negociacoes",   label:"Negociações"},
+  {key:"eventos",       label:"Eventos"},
+  {key:"clientes",      label:"Clientes"},
+  {key:"criancas",      label:"Aniversariantes", child:true},
+  {key:"casamentos",    label:"Casamentos", child:true},
+  {key:"produtos",      label:"Produtos"},
+  {key:"feedbacks",     label:"Feedbacks"},
+  {key:"pagamentos",    label:"Financeiro"},
+  {key:"relatorios",    label:"Relatórios"},
+  {key:"agentesIA",     label:"Agentes de IA"},
   {key:"configuracoes", label:"Configurações"}
 ];
-const NAV_ITEMS = [...NAV_GROUPS.flatMap(g=>g.items), ...NAV_FOOTER_ITEMS];
 const NAV_ICONS = {
   dashboard:     `<i class="ti ti-home"></i>`,
   agenda:        `<i class="ti ti-calendar"></i>`,
   leads:         `<i class="ti ti-user-plus"></i>`,
-  negociacoes:   `<i class="ti ti-affiliate"></i>`,
-  eventos:       `<i class="ti ti-camera"></i>`,
+  negociacoes:   `<i class="ti ti-arrows-right-left"></i>`,
+  eventos:       `<i class="ti ti-calendar-event"></i>`,
   clientes:      `<i class="ti ti-users"></i>`,
   criancas:      `<i class="ti ti-cake"></i>`,
   casamentos:    `<i class="ti ti-heart"></i>`,
@@ -1394,503 +1145,145 @@ const NAV_ICONS = {
   agentesIA:     `<i class="ti ti-robot"></i>`,
   configuracoes: `<i class="ti ti-settings"></i>`,
 };
-function navButtonHtml(item){
-  const btn = `
+function buildNav(){
+  const nav = document.getElementById("nav");
+  nav.innerHTML = NAV_ITEMS.map(item=>{
+    const btn = `
     <button data-page="${item.key}" onclick="renderPage('${item.key}')">
       <span class="nav-icon-wrap">${NAV_ICONS[item.key]||""}</span>${item.label}
     </button>
   `;
-  return item.child ? `<div class="nav-child-wrap">${btn}</div>` : btn;
-}
-function buildNav(){
-  const nav = document.getElementById("nav");
-  nav.innerHTML = NAV_GROUPS.map(group=>`
-    <div class="nav-group">
-      <div class="nav-group-label">${group.label}</div>
-      ${group.items.map(navButtonHtml).join("")}
-    </div>
-  `).join("");
-  const navFooter = document.getElementById("nav-footer");
-  navFooter.innerHTML = NAV_FOOTER_ITEMS.map(navButtonHtml).join("");
-  buildMobileTabbar();
-}
-const MOBILE_TAB_ITEMS = [
-  {key:"dashboard",    label:"Início",   icon:"ti-layout-dashboard"},
-  {key:"agenda",       label:"Agenda",   icon:"ti-calendar"},
-  {key:"negociacoes",  label:"Pipeline", icon:"ti-affiliate"},
-  {key:"clientes",     label:"Clientes", icon:"ti-users"},
-];
-function buildMobileTabbar(){
-  const bar = document.getElementById("mobile-tabbar");
-  if(!bar) return;
-  bar.innerHTML = MOBILE_TAB_ITEMS.map(item=>`
-    <button data-tab="${item.key}" onclick="renderPage('${item.key}')">
-      <i class="ti ${item.icon}"></i><span>${item.label}</span>
-    </button>
-  `).join("") + `
-    <button data-tab="mais" onclick="openSidebarMobile()">
-      <i class="ti ti-menu-2"></i><span>Mais</span>
-    </button>
-  `;
+    return item.child ? `<div class="nav-child-wrap">${btn}</div>` : btn;
+  }).join("");
 }
 function setActiveNav(page){
-  document.querySelectorAll("#nav button, #nav-footer button").forEach(b=>{
+  document.querySelectorAll("#nav button").forEach(b=>{
     b.classList.toggle("active", b.dataset.page===page);
-  });
-  const tabKeys = MOBILE_TAB_ITEMS.map(i=>i.key);
-  document.querySelectorAll("#mobile-tabbar button").forEach(b=>{
-    b.classList.toggle("active", b.dataset.tab===page || (b.dataset.tab==="mais" && !tabKeys.includes(page)));
   });
 }
 
 /* =========================================================
    PAGE ROUTER
    ========================================================= */
-/* ---------- EVENTOS: lista + painel de produção ---------- */
-let eventosBusca = "";
-let eventosEtapaFiltro = "todos"; // todos | confirmado | realizado | entregue
-let eventosSelectedId = null;
+/* ---------- EVENTOS: visão em pilha por ano + filtro por tipo/tag ---------- */
+let eventosFiltroTipo = "";
+let eventosFiltroTag = "";
+let expandedYears = null; // inicializado com o ano mais recente aberto
 
-const EVENTO_ETAPA_LABEL = { confirmado:"Contratado", realizado:"Editando", entregue:"Entregue" };
-const EVENTO_ETAPA_PILL  = { confirmado:"pill-ambar", realizado:"pill-roxo", entregue:"pill-verde" };
-const EVENTO_STAGES = ["Contratado","Fotografado","Editando","Entregue"];
+function renderEventosPage(main){
+  const schema = SCHEMAS.eventos;
+  const todosOsTipos = ["aniversario","batizado","casamento_civil","casamento_religioso","ensaio","outro"];
 
-function eventoStageIndex(ev){
-  const status = ev.status || "confirmado";
-  if(status==="entregue") return 3;
-  if(status==="realizado") return 2;
-  const hoje = new Date().toISOString().slice(0,10);
-  return (ev.data && ev.data<=hoje) ? 1 : 0;
+  main.innerHTML = `
+    <div class="page-header">
+      <div><div class="eyebrow">Cadastro</div><h2>${schema.label}</h2></div>
+      <div class="page-actions">
+        <input type="text" id="filtro-tag-evento" placeholder="Buscar cliente, aniversariante, tag, endereço..." value="${eventosFiltroTag}"
+          oninput="eventosFiltroTag=this.value; renderEventosList();" style="width:220px;">
+        <select id="filtro-tipo-evento" onchange="eventosFiltroTipo=this.value; renderEventosList();" style="width:auto;">
+          <option value="">Todos os tipos</option>
+          ${todosOsTipos.map(t=>`<option value="${t}" ${eventosFiltroTipo===t?"selected":""}>${capitalize(t.replace("_"," "))}</option>`).join("")}
+        </select>
+        <button class="ghost" onclick="abrirEscolhaCriarPorImagem()">📸 Criar com imagem</button>
+        <button class="ghost" onclick="abrirExportarEventosPDF()">📄 Exportar PDF</button>
+        <button class="primary" onclick="openForm('eventos')">+ Novo Evento</button>
+      </div>
+    </div>
+    <div id="eventos-list-container"></div>
+  `;
+  renderEventosList();
 }
-function eventoNomeDisplay(ev){
-  if(ev.nomeEvento) return ev.nomeEvento;
-  const tipo = ev.tipo==="outro" && ev.outroDescricao ? ev.outroDescricao : capitalize((ev.tipo||"").replace("_"," "));
-  return `${tipo} · ${nomeRef("clientes",ev.clienteId)}`;
-}
-function eventosFiltrados(){
+
+function renderEventosList(){
+  const container = document.getElementById("eventos-list-container");
+  if(!container) return;
+  const schema = SCHEMAS.eventos;
+
   let itens = [...state.eventos];
-  if(eventosEtapaFiltro!=="todos") itens = itens.filter(e=>(e.status||"confirmado")===eventosEtapaFiltro);
-  const termo = eventosBusca.trim().toLowerCase();
-  if(termo){
+  if(eventosFiltroTipo) itens = itens.filter(e=>e.tipo===eventosFiltroTipo);
+  if(eventosFiltroTag.trim()){
+    const termo = eventosFiltroTag.trim().toLowerCase();
     itens = itens.filter(e=>{
+      // tags
       if((e.tags||[]).some(t=>t.toLowerCase().includes(termo))) return true;
+      // nome do cliente
       const cli = state.clientes.find(c=>c.id===e.clienteId);
       if(cli && (cli.nome||"").toLowerCase().includes(termo)) return true;
       if(cli && (cli.nomeConjuge||"").toLowerCase().includes(termo)) return true;
+      // nome da criança vinculada
       const crianca = e.criancaId ? state.criancas.find(c=>c.id===e.criancaId) : null;
       if(crianca && (crianca.nome||"").toLowerCase().includes(termo)) return true;
+      // nome do evento
       if((e.nomeEvento||"").toLowerCase().includes(termo)) return true;
+      // endereço
       if((e.endereco||"").toLowerCase().includes(termo)) return true;
+      // tipo de evento
       if((e.tipo||"").replace("_"," ").includes(termo)) return true;
+      // status
       if(statusLabel(e.status||"confirmado").toLowerCase().includes(termo)) return true;
+      // descrição de "outro"
       if((e.outroDescricao||"").toLowerCase().includes(termo)) return true;
       return false;
     });
   }
-  return itens.sort((a,b)=> (b.data||"").localeCompare(a.data||""));
-}
 
-function renderEventosPage(main){
-  eventosSelectedId = null;
-  const hoje = new Date();
-  const mesAtual = hoje.toISOString().slice(0,7);
-  const nesteMes = state.eventos.filter(e=>(e.data||"").slice(0,7)===mesAtual).length;
-  const comSaldo = state.eventos.filter(e=>((Number(e.valorContratado)||0) - totalPago(e.id))>0).length;
-  main.innerHTML = `
-    <div class="page-header">
-      <div><h2>Eventos</h2><div style="font-size:13px; color:var(--muted); margin-top:4px;">${nesteMes} em ${formatarMesAno(mesAtual).split("/")[0].toLowerCase()} · ${comSaldo} com saldo aberto</div></div>
-      <div class="page-actions">
-        <button class="ghost" onclick="abrirEscolhaCriarPorImagem()"><i class="ti ti-camera-plus"></i></button>
-        <button class="ghost" onclick="abrirExportarEventosPDF()"><i class="ti ti-file-download"></i></button>
-        <button class="primary" onclick="openForm('eventos')"><i class="ti ti-plus"></i>Novo evento</button>
-      </div>
-    </div>
-    <div class="filter-bar">
-      <div class="filter-search"><i class="ti ti-search"></i>
-        <input type="text" id="eventos-busca-input" placeholder="Buscar cliente, aniversariante, tag, endereço..." value="${eventosBusca}"
-          oninput="eventosBusca=this.value; renderEventosBody();">
-      </div>
-    </div>
-    <div id="eventos-body"></div>
-  `;
-  renderEventosBody();
-}
+  // agrupa por ano (a partir da data do evento; sem data vai pra "Sem data")
+  const porAno = {};
+  itens.forEach(ev=>{
+    const ano = ev.data ? ev.data.slice(0,4) : "Sem data";
+    if(!porAno[ano]) porAno[ano] = [];
+    porAno[ano].push(ev);
+  });
+  const anos = Object.keys(porAno).sort((a,b)=> b.localeCompare(a));
 
-function selecionarEvento(id){
-  eventosSelectedId = (eventosSelectedId===id) ? null : id;
-  renderEventosBody();
-}
-function fecharPainelEvento(){ eventosSelectedId = null; renderEventosBody(); }
-
-function renderEventosBody(){
-  const container = document.getElementById("eventos-body");
-  if(!container) return;
-  if(!state.loadedCols || !state.loadedCols.has("eventos")){
-    container.innerHTML = `<div class="dtable">${skeletonRows(5)}</div>`;
-    return;
+  if(expandedYears === null){
+    expandedYears = new Set(anos.length ? [anos[0]] : []);
   }
-  const itens = eventosFiltrados();
-  const contagem = { todos: state.eventos.length, confirmado:0, realizado:0, entregue:0 };
-  state.eventos.forEach(e=> contagem[e.status||"confirmado"] = (contagem[e.status||"confirmado"]||0)+1);
-  const chips = [
-    {key:"todos", label:"Todos"}, {key:"confirmado", label:"Contratado"},
-    {key:"realizado", label:"Editando"}, {key:"entregue", label:"Entregue"}
-  ];
 
-  const ev = eventosSelectedId ? state.eventos.find(e=>e.id===eventosSelectedId) : null;
-
-  container.innerHTML = `
-    <div class="chip-row">
-      ${chips.map(c=>`<div class="chip-counter ${eventosEtapaFiltro===c.key?'active':''}" onclick="eventosEtapaFiltro='${c.key}'; renderEventosBody();">${c.label} ${contagem[c.key]||0}</div>`).join("")}
-    </div>
-    <div class="list-panel-layout">
-      <div class="list-panel-main">
-        <div class="dtable">
-          <div class="dtable-row dtable-head" style="grid-template-columns:2fr 1.4fr 1.1fr 0.9fr;">
-            <span>Evento</span><span>Etapa</span><span>Data</span><span>Saldo</span>
-          </div>
-          ${itens.length ? itens.map(e=>{
-            const saldo = (Number(e.valorContratado)||0) - totalPago(e.id);
-            const status = e.status||"confirmado";
-            return `
-            <div class="dtable-row dtable-body-row ${eventosSelectedId===e.id?'selected':''}" style="grid-template-columns:2fr 1.4fr 1.1fr 0.9fr;" onclick="selecionarEvento('${e.id}')">
-              <div>
-                <div class="dtable-primary">${escapeHtml(eventoNomeDisplay(e))}</div>
-                <div class="dtable-secondary">${escapeHtml(e.endereco||"—")}</div>
-              </div>
-              <div><span class="pill ${EVENTO_ETAPA_PILL[status]}">${EVENTO_ETAPA_LABEL[status]}</span></div>
-              <div style="font-size:13px; color:var(--muted);">${formatDate(e.data)}</div>
-              <div style="font-size:13.5px; font-weight:600; color:${saldo>0?'var(--danger)':'var(--green)'};">${saldo>0?money(saldo):'quitado'}</div>
-            </div>`;
-          }).join("") : `<div class="empty-state"><div class="serif">Nada encontrado</div>Tente outro filtro ou cadastre um novo evento.</div>`}
-        </div>
-      </div>
-      ${ev ? `<div class="detail-panel-backdrop open" onclick="fecharPainelEvento()"></div>${renderEventoPanel(ev)}` : ""}
-    </div>
+  container.innerHTML = anos.length ? anos.map(ano=>renderAnoStack(ano, porAno[ano], schema)).join("") : `
+    <div class="card"><div class="empty-state"><div class="serif">Nada encontrado</div>Tente outro filtro ou cadastre um novo evento.</div></div>
   `;
 }
 
-function renderEventoPanel(ev){
-  const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
-  const cliente = state.clientes.find(c=>c.id===ev.clienteId);
-  const wa = cliente ? whatsappLink(cliente.telefone) : null;
-  const idx = eventoStageIndex(ev);
-  const idxStatusAtual = EVENTO_STATUS_SEQ.indexOf(ev.status||"confirmado");
-  const podeAvancar = !ev.bloqueado && idxStatusAtual < EVENTO_STATUS_SEQ.length-1;
-  const proximoStatus = podeAvancar ? EVENTO_STATUS_SEQ[(idxStatusAtual===-1?0:idxStatusAtual)+1] : null;
-
-  const stepperHtml = EVENTO_STAGES.map((label,i)=>{
-    const isDone = i<idx, isCurrent = i===idx;
-    const circle = isDone ? `<div class="stepper-circle done"><i class="ti ti-check"></i></div>`
-      : `<div class="stepper-circle ${isCurrent?'current':''}"></div>`;
-    const connector = i<EVENTO_STAGES.length-1 ? `<div class="stepper-connector ${isDone?'done':''}"></div>` : "";
-    return `<div class="stepper-step">
-      <div class="stepper-track">${circle}${connector}</div>
-      <div class="stepper-body">
-        <div class="stepper-label ${isCurrent?'current':isDone?'done':''}">${label}</div>
-      </div>
-    </div>`;
-  }).join("");
-
-  const pagamentos = state.pagamentos.filter(p=>p.eventoId===ev.id).sort((a,b)=>(a.data||"").localeCompare(b.data||""));
-  const pagamentosHtml = pagamentos.map(p=>`
-    <div style="display:flex; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;">
-      <div><div style="font-weight:600;">${capitalize(p.tipo||"Pagamento")}</div><div style="font-size:11.5px; color:var(--muted-2);">pago em ${p.data?formatarMesAno(p.data.slice(0,7)):"—"}</div></div>
-      <div style="color:var(--green); font-weight:600; white-space:nowrap;">${money(p.valor)}</div>
-    </div>`).join("") + (saldo>0 ? `
-    <div style="display:flex; justify-content:space-between; gap:8px; padding:8px 0; font-size:13px;">
-      <div><div style="font-weight:600;">Saldo</div><div style="font-size:11.5px; color:var(--muted-2);">vence na entrega</div></div>
-      <div style="color:var(--danger); font-weight:600; white-space:nowrap;">${money(saldo)}</div>
-    </div>` : "");
+function renderAnoStack(ano, eventosDoAno, schema){
+  const isOpen = expandedYears.has(ano);
+  const ordenados = [...eventosDoAno].sort((a,b)=> (b.data||"").localeCompare(a.data||""));
+  const totalValor = eventosDoAno.reduce((s,e)=> s + (Number(e.valorContratado)||0), 0);
 
   return `
-    <aside class="detail-panel">
-      <div class="detail-panel-header">
-        <div>
-          <div class="detail-panel-title">${escapeHtml(eventoNomeDisplay(ev))}</div>
-          <div class="detail-panel-sub">${formatDate(ev.data)}${ev.endereco?" · "+escapeHtml(ev.endereco):""}</div>
+    <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;" onclick="toggleAno('${ano}')">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:'Fraunces',serif; font-size:18px;">${isOpen?'▾':'▸'} ${ano}</span>
+          <span style="font-size:12px; color:var(--muted);">${eventosDoAno.length} evento${eventosDoAno.length===1?'':'s'} · ${money(totalValor)}</span>
         </div>
-        <button class="detail-panel-close" onclick="fecharPainelEvento()"><i class="ti ti-x"></i></button>
+        <span style="font-size:12px; color:var(--muted-2);">${isOpen?'recolher':'expandir'}</span>
       </div>
-
-      <div class="stepper">${stepperHtml}</div>
-      ${proximoStatus ? `<button class="primary" style="width:100%;" onclick="avancarStatusEvento('${ev.id}')">Marcar como ${EVENTO_ETAPA_LABEL[proximoStatus].toLowerCase()}</button>` : ""}
-      ${ev.bloqueado ? `<div style="font-size:12px; color:var(--muted-2);"><i class="ti ti-lock"></i> Evento bloqueado — <a href="#" onclick="toggleBloqueioEvento('${ev.id}',true);return false;" style="color:var(--amber-text);">desbloquear</a></div>` : ""}
-
-      ${(ev.fotoLida||ev.iaVerificado) ? `<div style="display:flex; gap:6px; flex-wrap:wrap;">
-        ${ev.fotoLida ? `<span class="pill pill-roxo">📸 Data por foto</span>` : ""}
-        ${ev.iaVerificado ? `<span class="pill pill-roxo">✨ Verificado por IA</span>` : ""}
-      </div>` : ""}
-
-      <div class="detail-stat-grid">
-        <div class="stat-card"><div class="label">Contrato</div><div class="value">${money(ev.valorContratado)}</div></div>
-        <div class="stat-card"><div class="label">Saldo aberto</div><div class="value" style="color:${saldo>0?'var(--danger)':'var(--green)'}; font-size:22px;">${saldo>0?money(saldo):"Quitado"}</div></div>
-      </div>
-
-      ${ev.tags && ev.tags.length ? `<div>${ev.tags.map(t=>`<span class="tag-chip">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
-
-      <div class="quick-actions" style="margin:0;">
-        ${ev.endereco ? `<button onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.endereco)}','_blank')"><i class="ti ti-map-pin"></i> Maps</button>` : ""}
-        <button onclick="window.open('${buildGCalUrl(ev)}','_blank')"><i class="ti ti-calendar"></i> Google Agenda</button>
-        <button onclick="copiarMsgConfirmacao('${ev.id}')"><i class="ti ti-message-circle"></i> Msg confirmação</button>
-        <button onclick="abrirGerarRecibo('${ev.id}')"><i class="ti ti-receipt"></i> Gerar recibo</button>
-        ${temIA() ? `<button onclick="triggerFotoFesta('${ev.id}')"><i class="ti ti-camera"></i> Ler foto da festa</button>` : ""}
-        <button class="ghost" onclick="toggleBloqueioEvento('${ev.id}',${!!ev.bloqueado})">${ev.bloqueado?"🔓 Desbloquear":"🔒 Bloquear"}</button>
-      </div>
-
-      ${(ev.dataEntregaPrevista || ev.dataEntregaReal || ev.linkGaleriaCompleta) ? `
-      <div style="font-size:12.5px; color:var(--muted); display:flex; flex-direction:column; gap:4px;">
-        ${ev.dataEntregaReal ? `<div>Entregue em ${formatDate(ev.dataEntregaReal)}</div>` : ev.dataEntregaPrevista ? `<div>Entrega prevista para ${formatDate(ev.dataEntregaPrevista)}</div>` : ""}
-        ${ev.linkGaleriaCompleta ? `<div><a href="${ev.linkGaleriaCompleta}" target="_blank" rel="noopener" style="color:var(--amber-text);">Abrir galeria completa ↗</a></div>` : ""}
-      </div>` : ""}
-
-      <div>
-        <div class="detail-section-label" style="margin-bottom:8px;">Pagamentos</div>
-        ${pagamentosHtml || `<div style="font-size:12.5px; color:var(--muted-2);">Nenhum pagamento registrado.</div>`}
-        <button class="secondary sm" style="width:100%; margin-top:10px;" onclick="abrirBaixaRapida('${ev.id}')">Registrar pagamento</button>
-      </div>
-
-      <div>
-        <div class="detail-section-label" style="margin-bottom:8px;">Cliente</div>
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-          <div style="min-width:0;">
-            <div style="font-weight:600; font-size:14px; cursor:pointer;" onclick="openView('clientes','${ev.clienteId}')">${escapeHtml(nomeRef("clientes",ev.clienteId))}</div>
-            <div style="font-size:12px; color:var(--muted-2);">${escapeHtml(cliente?.telefone||"—")}</div>
-          </div>
-          ${wa ? `<button class="icon-btn" onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp"></i></button>` : ""}
+      ${isOpen ? `
+        <div style="overflow-x:auto; border-top:1px solid var(--border-solid);">
+          <table>
+            <thead><tr>${schema.columns.map(c=>`<th>${c.label}</th>`).join("")}<th></th></tr></thead>
+            <tbody>
+              ${ordenados.map(item=>`
+                <tr>
+                  ${schema.columns.map(c=>`<td>${c.format ? c.format(item[c.key],item) : (item[c.key] ?? "—")}</td>`).join("")}
+                  <td class="row-actions">
+                    <button class="sm" onclick="openForm('eventos','${item.id}')">Editar</button>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
         </div>
-      </div>
-
-      ${renderComentarios("eventos", ev.id)}
-      ${painelRodapeEdicao("eventos", ev.id, `excluirEventoPainel('${ev.id}')`)}
-    </aside>
-  `;
-}
-
-/* ---------- CLIENTES: lista + painel de relacionamento ---------- */
-let clientesSelectedId = null;
-let clientesBusca = "";
-let clientesFiltroRelacionamento = ""; // "" | fiel | negociando | esfriando | primeiro
-let clientesFiltroCidade = "";
-
-function clienteBadgeInfo(clienteId){
-  const cli = state.clientes.find(c=>c.id===clienteId);
-  if(cli?.hibernado) return { label:"😴 Hibernado", pill:"pill-neutro" };
-  if(negociacaoAtualCliente(clienteId)) return { label:"Em negociação", pill:"pill-ambar" };
-  const status = statusRelacionamentoCliente(clienteId);
-  if(status==="recorrente"){
-    return { label:`Fiel · ${eventosConcluidosCliente(clienteId).length} eventos`, pill:"pill-verde" };
-  }
-  if(status==="inativo"){
-    const concluidos = eventosConcluidosCliente(clienteId);
-    const meses = concluidos.length ? mesesDesde(concluidos[0].data) : null;
-    return { label:`Esfriando${meses!=null?" · "+meses+" meses":""}`, pill:"pill-vermelho" };
-  }
-  return { label:"Primeiro evento", pill:"pill-neutro" };
-}
-function relativoDias(dataStr){
-  if(!dataStr) return null;
-  const dias = Math.floor((new Date()-new Date(dataStr+"T00:00:00"))/86400000);
-  if(dias<=0) return "hoje";
-  if(dias===1) return "ontem";
-  if(dias<30) return `há ${dias} dias`;
-  const meses = Math.floor(dias/30);
-  if(meses<12) return `há ${meses} ${meses===1?"mês":"meses"}`;
-  const anos = Math.floor(meses/12);
-  return `há ${anos} ano${anos>1?"s":""}`;
-}
-function clientesFiltrados(){
-  let itens = state.clientes.filter(c=>!c.hibernado);
-  const termo = clientesBusca.trim().toLowerCase();
-  if(termo){
-    itens = itens.filter(c=>
-      (c.nome||"").toLowerCase().includes(termo) ||
-      (c.nomeConjuge||"").toLowerCase().includes(termo) ||
-      (c.telefone||"").toLowerCase().includes(termo) ||
-      (c.cidade||"").toLowerCase().includes(termo)
-    );
-  }
-  if(clientesFiltroCidade) itens = itens.filter(c=>(c.cidade||"")===clientesFiltroCidade);
-  if(clientesFiltroRelacionamento){
-    itens = itens.filter(c=>{
-      const info = clienteBadgeInfo(c.id);
-      if(clientesFiltroRelacionamento==="fiel") return info.pill==="pill-verde";
-      if(clientesFiltroRelacionamento==="negociando") return info.pill==="pill-ambar";
-      if(clientesFiltroRelacionamento==="esfriando") return info.pill==="pill-vermelho";
-      if(clientesFiltroRelacionamento==="primeiro") return info.pill==="pill-neutro";
-      return true;
-    });
-  }
-  return itens.sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
-}
-
-function renderClientesPage(main){
-  clientesSelectedId = null;
-  const mesAtual = new Date().toISOString().slice(0,7);
-  const ativos = state.clientes.filter(c=>!c.hibernado);
-  const novos = ativos.filter(c=>(c.criadoEm||"").slice(0,7)===mesAtual).length;
-  const cidades = [...new Set(state.clientes.map(c=>c.cidade).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
-  main.innerHTML = `
-    <div class="page-header">
-      <div><h2>Clientes</h2><div style="font-size:13px; color:var(--muted); margin-top:4px;">${ativos.length} no total · ${novos} novo${novos===1?"":"s"} em ${formatarMesAno(mesAtual).split("/")[0].toLowerCase()}</div></div>
-      <div class="page-actions">
-        <button class="ghost" onclick="verificarDuplicados()">Verificar duplicados</button>
-        <button class="primary" onclick="openForm('clientes')"><i class="ti ti-plus"></i>Novo cliente</button>
-      </div>
-    </div>
-    <div class="filter-bar">
-      <div class="filter-search"><i class="ti ti-search"></i>
-        <input type="text" id="clientes-busca-input" placeholder="Buscar por nome, telefone ou cidade" value="${clientesBusca}"
-          oninput="clientesBusca=this.value; renderClientesBody();">
-      </div>
-      <select class="filter-btn" onchange="clientesFiltroRelacionamento=this.value; renderClientesBody();">
-        <option value="">Relacionamento</option>
-        <option value="fiel" ${clientesFiltroRelacionamento==="fiel"?"selected":""}>Fiel</option>
-        <option value="negociando" ${clientesFiltroRelacionamento==="negociando"?"selected":""}>Em negociação</option>
-        <option value="esfriando" ${clientesFiltroRelacionamento==="esfriando"?"selected":""}>Esfriando</option>
-        <option value="primeiro" ${clientesFiltroRelacionamento==="primeiro"?"selected":""}>Primeiro evento</option>
-      </select>
-      <select class="filter-btn" onchange="clientesFiltroCidade=this.value; renderClientesBody();">
-        <option value="">Cidade</option>
-        ${cidades.map(c=>`<option value="${c}" ${clientesFiltroCidade===c?"selected":""}>${c}</option>`).join("")}
-      </select>
-    </div>
-    <div id="clientes-body"></div>
-  `;
-  renderClientesBody();
-}
-
-function selecionarCliente(id){
-  clientesSelectedId = (clientesSelectedId===id) ? null : id;
-  renderClientesBody();
-}
-function fecharPainelCliente(){ clientesSelectedId = null; renderClientesBody(); }
-
-function renderClientesBody(){
-  const container = document.getElementById("clientes-body");
-  if(!container) return;
-  if(!state.loadedCols || !state.loadedCols.has("clientes")){
-    container.innerHTML = `<div class="dtable">${skeletonRows(6)}</div>`;
-    return;
-  }
-  const itens = clientesFiltrados();
-  const cli = clientesSelectedId ? state.clientes.find(c=>c.id===clientesSelectedId) : null;
-
-  container.innerHTML = `
-    <div class="list-panel-layout">
-      <div class="list-panel-main">
-        <div class="dtable">
-          <div class="dtable-row dtable-head" style="grid-template-columns:2fr 1.55fr 1fr 0.9fr 96px;">
-            <span>Cliente</span><span>Relacionamento</span><span>Último contato</span><span>Total gasto</span><span></span>
-          </div>
-          ${itens.length ? itens.map(c=>{
-            const info = clienteBadgeInfo(c.id);
-            const uc = ultimoContatoCliente(c.id);
-            const wa = whatsappLink(c.telefone);
-            return `
-            <div class="dtable-row dtable-body-row ${clientesSelectedId===c.id?'selected':''}" style="grid-template-columns:2fr 1.55fr 1fr 0.9fr 96px;" onclick="selecionarCliente('${c.id}')">
-              <div>
-                <div class="dtable-primary">${escapeHtml(c.nome||"—")}${c.nomeConjuge?" & "+escapeHtml(c.nomeConjuge):""}</div>
-                <div class="dtable-secondary">${escapeHtml(c.cidade||"—")}${c.telefone?" · "+escapeHtml(c.telefone):""}</div>
-              </div>
-              <div><span class="pill ${info.pill}">${info.label}</span></div>
-              <div style="font-size:12.5px; color:var(--muted);">${uc?relativoDias(uc.data):"—"}</div>
-              <div style="font-size:13.5px; font-weight:600;">${money(valorTotalCliente(c.id))}</div>
-              <div class="dtable-row-actions" onclick="event.stopPropagation();">
-                ${wa?`<button class="icon-btn" onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp"></i></button>`:""}
-                <button class="icon-btn" onclick="abrirNovoEventoParaCliente('${c.id}')" title="Novo evento"><i class="ti ti-camera-plus"></i></button>
-              </div>
-            </div>`;
-          }).join("") : `<div class="empty-state"><div class="serif">Nada encontrado</div>Tente outro filtro ou cadastre um novo cliente.</div>`}
-        </div>
-        ${renderPilhaClientesHibernados()}
-        ${renderPainelReativacao()}
-      </div>
-      ${cli ? `<div class="detail-panel-backdrop open" onclick="fecharPainelCliente()"></div>${renderClientePanel(cli)}` : ""}
+      ` : ""}
     </div>
   `;
 }
 
-function renderClientePanel(cli){
-  const wa = whatsappLink(cli.telefone);
-  const totalGasto = valorTotalCliente(cli.id);
-  const eventosCliente = state.eventos.filter(e=>e.clienteId===cli.id).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
-  const hoje = new Date().toISOString().slice(0,10);
-  const desde = cli.criadoEm ? new Date(cli.criadoEm) : null;
-  const desdeLabel = desde ? `Cliente desde ${MESES[desde.getMonth()].toLowerCase()} de ${desde.getFullYear()}` : "";
-  const negAtual = negociacaoAtualCliente(cli.id);
-  const criancasVinculadas = state.criancas.filter(c=>c.clientePaiId===cli.id || c.clienteMaeId===cli.id)
-    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
-
-  const historicoHtml = eventosCliente.length ? eventosCliente.map(e=>{
-    const futuro = e.data && e.data>=hoje;
-    return `
-    <div style="display:flex; gap:10px; align-items:flex-start; padding:8px 0;">
-      <div style="width:26px; height:26px; border-radius:7px; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:${futuro?'var(--amber-dim)':'var(--border-solid)'}; color:${futuro?'var(--amber-text)':'var(--muted)'};">
-        <i class="ti ti-camera" style="font-size:14px;"></i>
-      </div>
-      <div style="min-width:0; cursor:pointer;" onclick="openView('eventos','${e.id}')">
-        <div style="font-size:13px; font-weight:600;">${escapeHtml(eventoNomeDisplay(e))}</div>
-        <div style="font-size:11.5px; color:var(--muted-2);">${formatDate(e.data)} · ${statusLabel(e.status||"confirmado")}</div>
-      </div>
-    </div>`;
-  }).join("") : `<div style="font-size:12.5px; color:var(--muted-2);">Nenhum evento ainda.</div>`;
-
-  return `
-    <aside class="detail-panel">
-      <div class="detail-panel-header">
-        <div>
-          <div class="detail-panel-title">${escapeHtml(cli.nome||"—")}${cli.nomeConjuge?" & "+escapeHtml(cli.nomeConjuge):""}</div>
-          <div class="detail-panel-sub">${desdeLabel}</div>
-        </div>
-        <button class="detail-panel-close" onclick="fecharPainelCliente()"><i class="ti ti-x"></i></button>
-      </div>
-
-      <div class="detail-panel-actions">
-        ${wa ? `<button class="primary" onclick="window.open('${wa}','_blank')"><i class="ti ti-brand-whatsapp"></i>WhatsApp</button>` : `<button class="primary" disabled>Sem telefone</button>`}
-        <button class="secondary" onclick="abrirNovoEventoParaCliente('${cli.id}')">Novo evento</button>
-      </div>
-
-      ${cli.hibernado ? `<div class="alert-strip" style="color:var(--muted); background:var(--surface-2); border-color:var(--border-solid);">
-        <span>😴 Hibernado${cli.hibernadoMotivo ? " — "+escapeHtml(cli.hibernadoMotivo) : ""}</span>
-        <button class="ghost sm" onclick="reativarClienteHibernado('${cli.id}')">Reativar</button>
-      </div>` : ""}
-
-      <div class="detail-stat-grid">
-        <div class="stat-card"><div class="label">Total gasto</div><div class="value" style="color:var(--amber-text);">${money(totalGasto)}</div></div>
-        <div class="stat-card"><div class="label">Eventos</div><div class="value">${eventosCliente.length}</div></div>
-      </div>
-
-      <div class="quick-actions" style="margin:0;">
-        <button onclick="abrirNovaNegociacaoParaCliente('${cli.id}')"><i class="ti ti-affiliate"></i> Nova negociação</button>
-        <button onclick="gerarELinkFeedback('cliente','${cli.id}')"><i class="ti ti-message-star"></i> Pedir feedback</button>
-        ${!cli.hibernado ? `<button class="ghost" onclick="hibernarCliente('${cli.id}')">😴 Hibernar</button>` : ""}
-        ${temIA() ? `<button onclick="gerarResumoCliente('clientes','${cli.id}')"><i class="ti ti-sparkles"></i> Resumo IA</button>` : ""}
-      </div>
-      <div class="ai-box" id="ai-resumo-clientes-${cli.id}" style="display:none;"></div>
-
-      ${negAtual ? `<div style="font-size:12.5px;">Negociação atual: <span class="pill pill-ambar">${negociacaoStatusLabel(negAtual.status)}</span> <a href="#" onclick="openView('negociacoes','${negAtual.id}');return false;" style="color:var(--amber-text);">ver →</a></div>` : ""}
-
-      ${criancasVinculadas.length ? `
-      <div>
-        <div class="detail-section-label" style="margin-bottom:6px;">Crianças vinculadas</div>
-        ${criancasVinculadas.map(c=>`<div style="font-size:13px; cursor:pointer; padding:4px 0;" onclick="openView('criancas','${c.id}')">${escapeHtml(c.nome)}</div>`).join("")}
-      </div>` : ""}
-
-      <div>
-        <div class="detail-section-label" style="margin-bottom:6px;">Histórico</div>
-        ${historicoHtml}
-      </div>
-
-      <div>
-        <div class="detail-section-label" style="margin-bottom:6px;">Anotações</div>
-        <div class="card" style="font-size:13px; line-height:1.55; color:var(--muted); padding:12px 14px;">${cli.observacoes ? escapeHtml(cli.observacoes) : "Nenhuma anotação ainda."}</div>
-      </div>
-
-      ${renderComentarios("clientes", cli.id)}
-      ${painelRodapeEdicao("clientes", cli.id, `excluirClientePainel('${cli.id}')`)}
-    </aside>
-  `;
+function toggleAno(ano){
+  if(expandedYears.has(ano)) expandedYears.delete(ano);
+  else expandedYears.add(ano);
+  renderEventosList();
 }
 
 function renderPage(page){
@@ -1899,7 +1292,6 @@ function renderPage(page){
   closeSidebarMobile();
   const main = document.getElementById("main");
   if(page==="dashboard") return renderDashboard(main);
-  if(page==="clientes") return renderClientesPage(main);
   if(page==="eventos") return renderEventosPage(main);
   if(page==="agenda") return renderAgenda(main);
   if(page==="leads") return renderLeadsPage(main);
@@ -1924,7 +1316,6 @@ function removerCampoProtocoloReativacao(i){
   if(!confirm("Remover este campo? O texto dele será perdido ao salvar.")) return;
   protocoloReativacaoDraft.splice(i,1);
   renderProtocoloReativacaoLista();
-  configAutosave();
 }
 function renderProtocoloReativacaoLista(){
   const container = document.getElementById("protocolo-reativacao-container");
@@ -1935,259 +1326,182 @@ function renderProtocoloReativacaoLista(){
         <span>Modelo ${i+1}</span>
         ${protocoloReativacaoDraft.length>1 ? `<button class="ghost sm" style="padding:2px 8px;" onclick="removerCampoProtocoloReativacao(${i})">Remover</button>` : ""}
       </label>
-      <textarea rows="4" placeholder="Cole aqui a mensagem de reativação..." oninput="protocoloReativacaoDraft[${i}]=this.value; configAutosave();">${texto||""}</textarea>
+      <textarea rows="4" placeholder="Cole aqui a mensagem de reativação..." oninput="protocoloReativacaoDraft[${i}]=this.value">${texto||""}</textarea>
     </div>
   `).join("");
 }
-let activeSettingsTab = "negocio";
-const CONFIG_TIPOS_EVENTO = [
-  {key:"aniversario", label:"Aniversário"},
-  {key:"batizado", label:"Batizado"},
-  {key:"casamento_civil", label:"Casamento civil"},
-  {key:"casamento_religioso", label:"Casamento religioso"},
-  {key:"ensaio", label:"Ensaio"},
-  {key:"outro", label:"Outro"}
-];
 function renderConfiguracoes(main){
   configDraft = { ...state.config, precos: { ...(state.config.precos||{}) } };
   protocoloReativacaoDraft = Array.isArray(state.config.protocoloReativacao) && state.config.protocoloReativacao.length
     ? [...state.config.protocoloReativacao]
     : ["", "", ""];
-  activeSettingsTab = "negocio";
-  const tabs = [{key:"negocio",label:"Negócio"},{key:"funil",label:"Funil"},{key:"mensagens",label:"Mensagens"},{key:"conta",label:"Conta"}];
+  const tiposEvento = [
+    {key:"aniversario", label:"Aniversário"},
+    {key:"batizado", label:"Batizado"},
+    {key:"casamento_civil", label:"Casamento civil"},
+    {key:"casamento_religioso", label:"Casamento religioso"},
+    {key:"ensaio", label:"Ensaio"},
+    {key:"outro", label:"Outro"}
+  ];
   main.innerHTML = `
-    <div class="page-header"><div><h2>Configurações</h2></div></div>
-    <div class="tabs-bar">
-      ${tabs.map(t=>`<button data-tab="${t.key}" class="${activeSettingsTab===t.key?'active':''}" onclick="selecionarAbaConfig('${t.key}')">${t.label}</button>`).join("")}
-    </div>
-    <div id="config-tab-content"></div>
-    <div class="autosave-note" id="config-autosave-note" style="display:none;"><i class="ti ti-check"></i>Alterações salvas automaticamente</div>
-  `;
-  renderConfigTabContent();
-}
-function selecionarAbaConfig(key){
-  activeSettingsTab = key;
-  document.querySelectorAll(".tabs-bar button").forEach(b=> b.classList.toggle("active", b.dataset.tab===key));
-  renderConfigTabContent();
-}
-function renderConfigTabContent(){
-  const container = document.getElementById("config-tab-content");
-  if(!container) return;
-  const nota = document.getElementById("config-autosave-note");
-  if(nota) nota.style.display = "none";
-  if(activeSettingsTab==="negocio") container.innerHTML = renderConfigTabNegocio();
-  else if(activeSettingsTab==="funil") container.innerHTML = renderConfigTabFunil();
-  else if(activeSettingsTab==="mensagens") container.innerHTML = renderConfigTabMensagens();
-  else container.innerHTML = renderConfigTabConta();
-  if(activeSettingsTab==="funil") renderProtocoloReativacaoLista();
-}
-function renderConfigTabNegocio(){
-  return `
+    <div class="page-header"><div><div class="eyebrow">Personalização</div><h2>Configurações</h2></div></div>
+
     <div class="card" style="margin-bottom:16px;">
-      <div class="field" style="max-width:260px; margin-bottom:0;">
-        <label>Meta de faturamento mensal (R$)</label>
-        <input type="number" id="meta-mensal" placeholder="Ex: 3000" style="font-size:15px; font-weight:600;"
+      <div class="section-title" style="margin-top:0;">🎯 Meta de faturamento mensal</div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:12px; line-height:1.5;">
+        Define quanto você quer receber por mês. O Dashboard mostrará o progresso automaticamente.
+      </div>
+      <div class="field" style="max-width:260px;">
+        <label>Meta mensal (R$)</label>
+        <input type="number" id="meta-mensal" placeholder="Ex: 3000"
           value="${state.config.metaMensal||""}"
-          oninput="configDraft.metaMensal=this.value; configAutosave();">
+          oninput="configDraft.metaMensal=this.value">
       </div>
     </div>
-    <div class="card" style="margin-bottom:16px;">
-      <div class="field-row">
-        <div class="field" style="margin-bottom:0;"><label>Nome do estúdio</label>
-          <input type="text" value="${escapeHtml(state.config.nomeEstudio||"")}" placeholder="Ex: Yuri Fotos"
-            oninput="configDraft.nomeEstudio=this.value; configAutosave();"></div>
-        <div class="field" style="margin-bottom:0;"><label>WhatsApp de contato</label>
-          <input type="tel" value="${escapeHtml(state.config.whatsappContato||"")}" placeholder="(41) 90000-0000"
-            oninput="configDraft.whatsappContato=this.value; configAutosave();"></div>
-      </div>
-    </div>
+
     <div class="card">
-      <div class="section-title" style="margin-top:0;">Tabela de preços</div>
+      <div class="section-title" style="margin-top:0;">Meus Dados — Tabela de Preços</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
         Defina um valor padrão por tipo de evento. Ao criar um evento novo, esse valor já vem preenchido — você só ajusta se for diferente.
       </div>
       <div class="grid grid-3">
-        ${CONFIG_TIPOS_EVENTO.map(t=>`
+        ${tiposEvento.map(t=>`
           <div class="field">
             <label>${t.label}</label>
             <input type="number" value="${state.config.precos?.[t.key]||""}" placeholder="0,00"
-              oninput="configDraft.precos['${t.key}']=this.value; configAutosave();">
+              oninput="configDraft.precos['${t.key}']=this.value">
           </div>
         `).join("")}
       </div>
     </div>
-  `;
-}
-function toggleConfigBool(key, btn){
-  configDraft[key] = !configDraft[key];
-  btn.classList.toggle("on", configDraft[key]);
-  configAutosave();
-}
-function renderConfigTabFunil(){
-  return `
-    <div class="toggle-row">
-      <div><div class="toggle-row-title">Avisar sobre leads parados</div><div class="toggle-row-desc">Depois de 7 dias sem contato</div></div>
-      <button class="switch ${configDraft.avisarLeadsParados?'on':''}" onclick="toggleConfigBool('avisarLeadsParados', this)"></button>
-    </div>
-    <div class="toggle-row">
-      <div><div class="toggle-row-title">Lembrar de pedir feedback</div><div class="toggle-row-desc">3 dias após a entrega do evento</div></div>
-      <button class="switch ${configDraft.lembrarFeedback?'on':''}" onclick="toggleConfigBool('lembrarFeedback', this)"></button>
-    </div>
+
     <div class="card" style="margin-top:16px;">
-      <div class="section-title" style="margin-top:0;">Protocolo de reativação de clientes</div>
+      <div class="section-title" style="margin-top:0;">Protocolo Reativação de Clientes</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
-        Modelos de mensagem para reativar clientes parados. Use <code>{nome}</code> — substituído automaticamente pelo nome do cliente. Aparecem no botão "✦ Mensagem" do painel de reativação, na página Clientes.
+        Cole aqui os modelos de mensagem que você usa para reativar clientes parados. Você pode adicionar mais campos se precisar de mais de 3 modelos. Use <code>{nome}</code> — ele é substituído automaticamente pelo nome do cliente. Esses modelos aparecem no botão "✦ Mensagem" do painel "Reativar clientes", no Dashboard.
       </div>
       <div id="protocolo-reativacao-container"></div>
       <button class="ghost sm" onclick="adicionarCampoProtocoloReativacao()">+ Adicionar campo</button>
     </div>
-  `;
-}
-function renderConfigTabMensagens(){
-  return `
-    <div class="card" style="margin-bottom:16px;">
+
+    <div class="card" style="margin-top:16px;">
       <div class="section-title" style="margin-top:0;">Mensagem de aniversário</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
-        Mensagem enviada quando a criança está perto de fazer aniversário.
+        Escreva a mensagem que você manda quando a criança está perto de fazer aniversário. Use estes campos —
+        eles são substituídos automaticamente pelos dados de cada criança:<br>
         <code>{nome}</code> · <code>{idade}</code> · <code>{data}</code> · <code>{responsavel}</code>
       </div>
-      <textarea id="msg-aniversario" rows="6" style="width:100%;"
+      <textarea id="msg-aniversario" rows="7" style="width:100%;"
         placeholder="Ex: Oi {responsavel}! Vi que o(a) {nome} vai completar {idade} aninhos no dia {data} 🎉 Que tal já garantirmos a sessão de fotos pra comemorar?"
-        oninput="configDraft.mensagemAniversario=this.value; configAutosave();">${state.config.mensagemAniversario||""}</textarea>
+        oninput="configDraft.mensagemAniversario=this.value">${state.config.mensagemAniversario||""}</textarea>
     </div>
-    <div class="card" style="margin-bottom:16px;">
+
+    <div class="card" style="margin-top:16px;">
       <div class="section-title" style="margin-top:0;">Mensagem de casamento (bodas)</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
-        Mensagem pra quando o casal está perto de completar mais um ano de casados.
+        Mensagem pra quando o casal está perto de completar mais um ano de casados. Campos disponíveis:<br>
         <code>{nomeCasal}</code> · <code>{anos}</code> · <code>{data}</code>
       </div>
-      <textarea id="msg-casamento" rows="6" style="width:100%;"
+      <textarea id="msg-casamento" rows="7" style="width:100%;"
         placeholder="Ex: Oi {nomeCasal}! Vocês vão completar {anos} anos de casados no dia {data} 💍 Que tal eternizarmos essa data com uma sessão de fotos?"
-        oninput="configDraft.mensagemCasamento=this.value; configAutosave();">${state.config.mensagemCasamento||""}</textarea>
+        oninput="configDraft.mensagemCasamento=this.value">${state.config.mensagemCasamento||""}</textarea>
     </div>
-    <div class="card">
-      <div class="section-title" style="margin-top:0;">Mensagem de agradecimento (feedback)</div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="section-title" style="margin-top:0;">Mensagem de agradecimento (Feedback)</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
-        Exibida na tela de agradecimento assim que o cliente envia o feedback pelo link público. <code>{nome}</code> — nome do cliente (quando disponível).
+        Mensagem exibida na tela de agradecimento assim que o cliente envia o feedback pelo link público. Use <code>{nome}</code> — ele é substituído automaticamente pelo nome do cliente (quando disponível).
       </div>
-      <textarea id="msg-agradecimento-feedback" rows="6" style="width:100%;"
+      <textarea id="msg-agradecimento-feedback" rows="7" style="width:100%;"
         placeholder="Ex: Oi, {nome}! Muito obrigado pela confiança..."
-        oninput="configDraft.mensagemAgradecimentoFeedback=this.value; configAutosave();">${state.config.mensagemAgradecimentoFeedback||""}</textarea>
+        oninput="configDraft.mensagemAgradecimentoFeedback=this.value">${state.config.mensagemAgradecimentoFeedback||""}</textarea>
     </div>
-  `;
-}
-function renderConfigTabConta(){
-  return `
-    <div class="card" style="margin-bottom:16px;">
-      <div class="section-title" style="margin-top:0;">Conta</div>
-      <div class="view-row"><span class="view-label">E-mail</span><span class="view-value">${escapeHtml(document.getElementById("user-email")?.textContent||"")}</span></div>
-    </div>
-    <div class="card">
-      <div class="section-title" style="margin-top:0;">Inteligência artificial (Gemini)</div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="section-title" style="margin-top:0;">Inteligência Artificial (Gemini)</div>
       <div style="font-size:13px; color:var(--muted); margin-bottom:10px; line-height:1.5;">
         Cole aqui sua chave gratuita do Google Gemini — obtenha em <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--text);">aistudio.google.com ↗</a>.<br>
         O app funciona normalmente sem ela — a IA é um recurso opcional.
       </div>
       <input type="password" id="gemini-key" placeholder="AIza..." value="${state.config.geminiKey||""}"
-        oninput="configDraft.geminiKey=this.value; configAutosave();" style="width:100%;">
+        oninput="configDraft.geminiKey=this.value" style="width:100%;">
+    </div>
+
+    <div style="margin-top:14px; display:flex; justify-content:flex-end;">
+      <button class="primary" id="btn-salvar-config" onclick="salvarConfiguracoes()">Salvar</button>
     </div>
   `;
+  renderProtocoloReativacaoLista();
 }
 
 /* =========================================================
    CATÁLOGO DE PRODUTOS (vive na tela "Produtos", com salvamento próprio)
    ========================================================= */
-let catalogoEditIndex = null;
-function catalogoVendasStats(nomeProduto){
-  const anoAtual = new Date().getFullYear();
-  const pedidos = state.produtos.filter(p=>p.produtoNome===nomeProduto && (p.dataPedido||"").slice(0,4)===String(anoAtual));
-  return { qtd: pedidos.length, total: pedidos.reduce((s,p)=>s+(Number(p.valorVenda)||0),0) };
-}
-function catalogoSemVendaRecente(nomeProduto){
-  const pedidos = state.produtos.filter(p=>p.produtoNome===nomeProduto);
-  if(!pedidos.length) return false;
-  const ultimoAno = pedidos.reduce((max,p)=> (p.dataPedido||"") > max ? p.dataPedido : max, "").slice(0,4);
-  return ultimoAno && Number(ultimoAno) < new Date().getFullYear()-1;
-}
+let catalogoDraft = [];
 function renderCatalogoSecaoProdutos(){
-  const itens = state.config.catalogoProdutos || [];
-  const anoAtual = new Date().getFullYear();
-  const ativos = itens.map((p,i)=>({p,i})).filter(x=>!catalogoSemVendaRecente(x.p.nome));
-  const arquivados = itens.map((p,i)=>({p,i})).filter(x=>catalogoSemVendaRecente(x.p.nome));
+  catalogoDraft = (state.config.catalogoProdutos||[]).map(p=>({...p}));
   return `
-    <div class="section-title" style="margin-top:0;">Catálogo de pacotes</div>
-    <div class="produtos-grid" style="margin-bottom:10px;">
-      ${ativos.map(({p,i})=>{
-        const stats = catalogoVendasStats(p.nome);
-        return `
-        <div class="produto-card">
-          <div class="produto-card-head">
-            <div class="produto-card-nome">${escapeHtml(p.nome||"—")}</div>
-            <button class="ghost sm" style="padding:2px 6px;" onclick="abrirEditarProdutoCatalogo(${i})" title="Editar"><i class="ti ti-dots"></i></button>
-          </div>
-          <div class="produto-card-preco">${p.venda?money(p.venda):"—"}</div>
-          <div class="produto-card-inclui">${escapeHtml(p.descricao||"")}</div>
-          <div class="produto-card-footer">${stats.qtd} venda${stats.qtd===1?"":"s"} em ${anoAtual} · ${money(stats.total)}</div>
-        </div>`;
-      }).join("")}
-      <div class="produto-card-add" onclick="abrirEditarProdutoCatalogo(-1)">
-        <i class="ti ti-plus"></i><span>Adicionar pacote</span>
+    <div class="card" style="margin-bottom:20px;">
+      <div class="section-title" style="margin-top:0;">📦 Catálogo de Produtos</div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:12px; line-height:1.5;">
+        Cadastre os tipos de produto que você vende (álbuns, quadros, pen drives...). Ao registrar um pedido abaixo, esses valores já vêm preenchidos — você só ajusta se for diferente dessa vez.
+      </div>
+      <div id="catalogo-produtos-container"></div>
+      <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
+        <button class="ghost sm" onclick="adicionarProdutoCatalogo()">+ Adicionar produto</button>
+        <button class="primary sm" id="btn-salvar-catalogo" onclick="salvarCatalogoProdutos()">Salvar catálogo</button>
       </div>
     </div>
-    ${arquivados.map(({p})=>`<div class="produtos-arquivado-faixa">Pacote arquivado: <strong>${escapeHtml(p.nome)}</strong> — sem vendas desde ${p.nome && state.produtos.filter(x=>x.produtoNome===p.nome).length ? state.produtos.filter(x=>x.produtoNome===p.nome).reduce((max,x)=>(x.dataPedido||"")>max?x.dataPedido:max,"").slice(0,4) : "sempre"}.</div>`).join("")}
   `;
 }
-function abrirEditarProdutoCatalogo(idx){
-  catalogoEditIndex = idx;
-  const p = idx>=0 ? (state.config.catalogoProdutos||[])[idx] : { nome:"", descricao:"", custo:"", venda:"", fornecedor:"" };
-  formState = {...p};
-  document.getElementById("modal-content").innerHTML = `
-    <h3>${idx>=0?"Editar":"Novo"} pacote</h3>
-    <div class="field"><label>Nome</label><input type="text" value="${escapeHtml(formState.nome||"")}" oninput="formState.nome=this.value" placeholder="Ex: Ensaio 1h" style="width:100%;"></div>
-    <div class="field"><label>O que inclui</label><textarea oninput="formState.descricao=this.value" placeholder="Ex: 8h de cobertura · 400 fotos tratadas · álbum 30x30" style="width:100%;">${escapeHtml(formState.descricao||"")}</textarea></div>
-    <div class="field-row">
-      <div class="field"><label>Custo (R$)</label><input type="number" value="${formState.custo||""}" oninput="formState.custo=this.value" style="width:100%;"></div>
-      <div class="field"><label>Venda (R$)</label><input type="number" value="${formState.venda||""}" oninput="formState.venda=this.value" style="width:100%;"></div>
+function renderCatalogoProdutosLista(){
+  const container = document.getElementById("catalogo-produtos-container");
+  if(!container) return;
+  const itens = catalogoDraft || [];
+  container.innerHTML = itens.length ? `
+    <div style="overflow-x:auto;">
+    <table><thead><tr><th>Nome</th><th>Descrição</th><th>Custo (R$)</th><th>Venda (R$)</th><th>Fornecedor</th><th></th></tr></thead>
+    <tbody>
+      ${itens.map((p,i)=>`
+        <tr>
+          <td><input type="text" value="${p.nome||""}" oninput="catalogoDraft[${i}].nome=this.value" style="width:100%;" placeholder="Ex: Álbum 20x20"></td>
+          <td><input type="text" value="${p.descricao||""}" oninput="catalogoDraft[${i}].descricao=this.value" style="width:100%;" placeholder="Ex: 20 páginas, capa dura"></td>
+          <td><input type="number" value="${p.custo||""}" oninput="catalogoDraft[${i}].custo=this.value" style="width:100px;"></td>
+          <td><input type="number" value="${p.venda||""}" oninput="catalogoDraft[${i}].venda=this.value" style="width:100px;"></td>
+          <td><input type="text" value="${p.fornecedor||""}" oninput="catalogoDraft[${i}].fornecedor=this.value" style="width:100%;"></td>
+          <td><button class="sm danger" onclick="removerProdutoCatalogo(${i})">Excluir</button></td>
+        </tr>
+      `).join("")}
+    </tbody></table>
     </div>
-    <div class="field"><label>Fornecedor</label><input type="text" value="${escapeHtml(formState.fornecedor||"")}" oninput="formState.fornecedor=this.value" style="width:100%;"></div>
-    <div class="modal-actions">
-      ${idx>=0?`<button class="danger" onclick="excluirProdutoCatalogo()">Excluir</button>`:""}
-      <button class="ghost" onclick="closeModal()">Cancelar</button>
-      <button class="primary" onclick="salvarProdutoCatalogoModal()">Salvar</button>
-    </div>
-  `;
-  document.getElementById("modal-backdrop").classList.add("active");
+  ` : `<div class="empty-state" style="padding:16px;">Nenhum produto cadastrado ainda.</div>`;
 }
-async function salvarProdutoCatalogoModal(){
-  if(!formState.nome){ toast("Informe o nome do pacote."); return; }
-  const itens = [...(state.config.catalogoProdutos||[])];
-  const item = { nome:formState.nome, descricao:formState.descricao||"", custo:formState.custo||"", venda:formState.venda||"", fornecedor:formState.fornecedor||"" };
-  if(catalogoEditIndex>=0) itens[catalogoEditIndex] = item; else itens.push(item);
+function adicionarProdutoCatalogo(){
+  if(!catalogoDraft) catalogoDraft = [];
+  catalogoDraft.push({ nome:"", descricao:"", custo:"", venda:"", fornecedor:"" });
+  renderCatalogoProdutosLista();
+}
+function removerProdutoCatalogo(i){
+  catalogoDraft.splice(i,1);
+  renderCatalogoProdutosLista();
+}
+async function salvarCatalogoProdutos(){
+  const btn = document.getElementById("btn-salvar-catalogo");
+  if(btn){ btn.disabled = true; btn.textContent = "Salvando..."; }
   try{
-    await db.collection("config").doc("settings").set({ catalogoProdutos: itens }, {merge:true});
-    toast("Catálogo salvo.");
-    closeModal();
-  }catch(err){ console.error(err); toast("Erro ao salvar catálogo. Veja o console."); }
-}
-async function excluirProdutoCatalogo(){
-  if(!confirm("Excluir este pacote do catálogo?")) return;
-  const itens = [...(state.config.catalogoProdutos||[])];
-  itens.splice(catalogoEditIndex,1);
-  try{
-    await db.collection("config").doc("settings").set({ catalogoProdutos: itens }, {merge:true});
-    toast("Pacote removido.");
-    closeModal();
-  }catch(err){ console.error(err); toast("Erro ao remover. Veja o console."); }
-}
-let configAutosaveTimer = null;
-function configAutosave(){
-  const nota = document.getElementById("config-autosave-note");
-  if(nota) nota.style.display = "none";
-  clearTimeout(configAutosaveTimer);
-  configAutosaveTimer = setTimeout(salvarConfiguracoes, 900);
+    await db.collection("config").doc("settings").set({ catalogoProdutos: catalogoDraft }, {merge:true});
+    toast("Catálogo de produtos salvo.");
+  }catch(err){
+    console.error(err);
+    toast("Erro ao salvar catálogo. Veja o console.");
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = "Salvar catálogo"; }
+  }
 }
 async function salvarConfiguracoes(){
-  // lê os campos diretamente do DOM (cobre a aba atualmente visível) para garantir que nada se perca
+  const btn = document.getElementById("btn-salvar-config");
+
+  // lê os campos diretamente do DOM para garantir que nada se perca por re-render
   const metaEl = document.getElementById("meta-mensal");
   if(metaEl && metaEl.value!=="") configDraft.metaMensal = Number(metaEl.value)||0;
 
@@ -2205,15 +1519,17 @@ async function salvarConfiguracoes(){
 
   configDraft.protocoloReativacao = [...protocoloReativacaoDraft];
 
+  if(btn){ btn.disabled = true; btn.textContent = "Salvando..."; }
   try{
     // aguarda a confirmação real do servidor antes de avisar que salvou —
     // evita que um refresh prematuro descarte uma gravação ainda em andamento
     await db.collection("config").doc("settings").set(configDraft, {merge:true});
-    const nota = document.getElementById("config-autosave-note");
-    if(nota) nota.style.display = "flex";
+    toast("Configurações salvas. Pode atualizar a página com segurança.");
   }catch(err){
     console.error(err);
     toast("Erro ao salvar. Veja o console.");
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = "Salvar"; }
   }
 }
 function proximaDataAniversario(dataNasc){
@@ -3787,191 +3103,99 @@ function togglePilhaLead(chave){
    status de relacionamento (Lead/Ativo/Inativo/Recorrente),
    que é calculado automaticamente a partir dos eventos concluídos.
    ========================================================= */
-let negociacoesSelectedId = null;
-let negociacoesMobileEtapa = "contato";
-const FUNIL_ETAPAS = [
-  {key:"contato",    label:"Primeiro contato"},
-  {key:"orcamento",  label:"Orçamento enviado"},
-  {key:"negociando", label:"Negociando"}
-];
-function etapaFunilNegociacao(n){ return n.etapaFunil || "contato"; }
-function diasSemContatoNegociacao(n){
-  const comentarios = n.comentarios||[];
-  const ultimo = comentarios.length ? [...comentarios].sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""))[0].criadoEm : n.criadoEm;
-  if(!ultimo) return null;
-  return Math.floor((new Date()-new Date(ultimo))/86400000);
-}
-function negociacaoEmAtencao(n){
-  const dias = diasSemContatoNegociacao(n);
-  return typeof dias==="number" && dias>=4;
-}
-function negociacaoDataLabel(n){
-  if(n.tipoData==="data" && n.dataDefinida) return formatDate(n.dataDefinida);
-  if(n.mesPrevisto) return formatarMesAno(n.mesPrevisto);
-  return "sem data";
-}
+const negociacoesExpandidas = new Set(["abertas"]);
 
 function renderNegociacoesPage(main){
-  negociacoesSelectedId = null;
-  const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"negociacao"));
-  const emJogo = abertas.reduce((s,n)=>s+(Number(n.valorProposto)||0),0);
+  const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"negociacao"))
+    .sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||""));
+  const fechadas = state.negociacoes.filter(n=>n.status==="fechado")
+    .sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+  const perdidas = state.negociacoes.filter(n=>n.status==="perdido")
+    .sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+
   main.innerHTML = `
     <div class="page-header">
-      <div><h2>Negociações</h2><div style="font-size:13px; color:var(--muted); margin-top:4px;">${abertas.length} aberta${abertas.length===1?"":"s"} · ${money(emJogo)} em jogo</div></div>
+      <div><div class="eyebrow">Funil</div><h2>Negociações</h2></div>
       <div class="page-actions">
-        <button class="primary" onclick="openForm('negociacoes')"><i class="ti ti-plus"></i>Nova</button>
+        <button class="primary" onclick="openForm('negociacoes')">+ Nova Negociação</button>
       </div>
     </div>
-    <div class="chip-row" id="negociacoes-mobile-chips" style="display:none;"></div>
-    <div id="negociacoes-body"></div>
+    <div style="font-size:12px; color:var(--muted-2); margin:-10px 0 14px;">
+      💡 Isso é o status da negociação atual (temporário). O status de relacionamento do cliente (Lead / Ativo / Inativo / Recorrente) é calculado automaticamente e fica na página Clientes.
+    </div>
+    ${renderPilhaNegociacoes("abertas", "Em aberto", abertas)}
+    ${renderPilhaNegociacoes("fechadas", "Fechadas", fechadas)}
+    ${renderPilhaNegociacoes("perdidas", "Perdidas", perdidas)}
+    ${renderPainelReativacao()}
   `;
-  renderNegociacoesBody();
 }
 
-function selecionarNegociacao(id){
-  negociacoesSelectedId = (negociacoesSelectedId===id) ? null : id;
-  renderNegociacoesBody();
-}
-function fecharPainelNegociacao(){ negociacoesSelectedId = null; renderNegociacoesBody(); }
-function selecionarEtapaMobileNegociacao(key){ negociacoesMobileEtapa = key; renderNegociacoesBody(); }
-
-function renderNegociacoesBody(){
-  const container = document.getElementById("negociacoes-body");
-  const chipsWrap = document.getElementById("negociacoes-mobile-chips");
-  if(!container) return;
-  if(!state.loadedCols || !state.loadedCols.has("negociacoes")){
-    container.innerHTML = skeletonRows(4);
-    return;
-  }
-  const abertas = state.negociacoes.filter(n=>!["fechado","perdido"].includes(n.status||"negociacao"));
-  const fechadas = state.negociacoes.filter(n=>n.status==="fechado").sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
-  const perdidas = state.negociacoes.filter(n=>n.status==="perdido").sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
-
-  if(chipsWrap){
-    chipsWrap.style.display = "";
-    chipsWrap.innerHTML = FUNIL_ETAPAS.map(et=>{
-      const n = abertas.filter(x=>etapaFunilNegociacao(x)===et.key).length;
-      return `<div class="chip-counter ${negociacoesMobileEtapa===et.key?'active':''}" onclick="selecionarEtapaMobileNegociacao('${et.key}')">${et.label} ${n}</div>`;
-    }).join("");
-  }
-
-  const neg = negociacoesSelectedId ? state.negociacoes.find(n=>n.id===negociacoesSelectedId) : null;
-
-  const colunasHtml = FUNIL_ETAPAS.map(et=>{
-    const itens = abertas.filter(n=>etapaFunilNegociacao(n)===et.key)
-      .sort((a,b)=>(a.criadoEm||"").localeCompare(b.criadoEm||""));
-    const total = itens.reduce((s,n)=>s+(Number(n.valorProposto)||0),0);
-    return `
-    <div class="funil-col ${negociacoesMobileEtapa===et.key?'mobile-active':''}" data-etapa="${et.key}">
-      <div class="funil-col-header">
-        <span class="funil-col-title">${et.label} · ${itens.length}</span>
-        <span class="funil-col-total">${money(total)}</span>
+function renderPilhaNegociacoes(chave, titulo, itens){
+  const isOpen = negociacoesExpandidas.has(chave);
+  const sym = {negociacao:"◑", fechado:"✓", perdido:"✕"};
+  return `
+    <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;"
+           onclick="togglePilhaNegociacao('${chave}')">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:'Fraunces',serif; font-size:18px;">${isOpen?"▾":"▸"} ${titulo}</span>
+          <span style="font-size:12px; color:var(--muted);">${itens.length} negociaç${itens.length===1?"ão":"ões"}</span>
+        </div>
+        <span style="font-size:12px; color:var(--muted-2);">${isOpen?"recolher":"expandir"}</span>
       </div>
-      <div class="funil-col-cards">
-        ${itens.length ? itens.map(n=>{
-          const atencao = negociacaoEmAtencao(n);
-          const dias = diasSemContatoNegociacao(n);
-          return `
-          <div class="funil-card ${atencao?'atencao':''} ${negociacoesSelectedId===n.id?'selected':''}" onclick="selecionarNegociacao('${n.id}')">
-            <div class="funil-card-title">${escapeHtml(nomeRef("clientes",n.clienteId))}</div>
-            <div class="funil-card-sub">${n.tipoInteresse?capitalize(n.tipoInteresse.replace("_"," ")):"—"} · ${negociacaoDataLabel(n)}</div>
-            ${n.valorProposto ? `<div class="funil-card-valor">${money(n.valorProposto)}</div>` : ""}
-            ${atencao ? `<div class="funil-card-alerta">sem resposta há ${dias} dia${dias===1?"":"s"}</div>` : ""}
-          </div>`;
-        }).join("") : `<div class="empty-state" style="padding:16px 8px;font-size:12.5px;">Nada aqui.</div>`}
-      </div>
-    </div>`;
-  }).join("");
-
-  container.innerHTML = `
-    <div class="list-panel-layout">
-      <div class="list-panel-main">
-        <div class="funil-grid">${colunasHtml}</div>
-        ${(fechadas.length||perdidas.length) ? `
-          <div class="section-title" style="margin-top:28px;">Fechadas e perdidas</div>
-          <div class="dtable">
-            <div class="dtable-row dtable-head" style="grid-template-columns:2fr 1.4fr 1fr;"><span>Cliente</span><span>Status</span><span>Valor</span></div>
-            ${[...fechadas,...perdidas].map(n=>`
-              <div class="dtable-row dtable-body-row" style="grid-template-columns:2fr 1.4fr 1fr;" onclick="selecionarNegociacao('${n.id}')">
-                <div class="dtable-primary">${escapeHtml(nomeRef("clientes",n.clienteId))}</div>
-                <div><span class="pill ${n.status==='fechado'?'pill-verde':'pill-vermelho'}">${negociacaoStatusLabel(n.status)}</span></div>
-                <div style="font-size:13px;">${n.valorProposto?money(n.valorProposto):"—"}</div>
-              </div>`).join("")}
-          </div>
-        ` : ""}
-      </div>
-      ${neg ? `<div class="detail-panel-backdrop open" onclick="fecharPainelNegociacao()"></div>${renderNegociacaoPanel(neg)}` : ""}
+      ${isOpen ? `
+        <div style="border-top:1px solid var(--border-solid); overflow-x:auto;">
+          ${itens.length ? `<table>
+            <thead><tr><th>Cliente</th><th>Interesse</th><th>Status</th><th>Valor proposto</th><th></th></tr></thead>
+            <tbody>
+              ${itens.map(n=>`<tr>
+                <td><a href="#" onclick="openView('clientes','${n.clienteId}');return false;">${nomeRef("clientes",n.clienteId)}</a></td>
+                <td>${n.tipoInteresse ? capitalize(n.tipoInteresse.replace("_"," ")) : "—"}</td>
+                <td><span class="badge">${sym[n.status||"negociacao"]||""} ${negociacaoStatusLabel(n.status)}</span></td>
+                <td>${n.valorProposto?money(n.valorProposto):"—"}</td>
+                <td class="row-actions">
+                  <button class="sm" onclick="openView('negociacoes','${n.id}')">Ver</button>
+                  <button class="sm" onclick="openForm('negociacoes','${n.id}')">Editar</button>
+                  <button class="sm danger" onclick="deleteDoc('negociacoes','${n.id}')">Excluir</button>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>` : `<div class="empty-state" style="padding:24px;">Nenhuma negociação aqui.</div>`}
+        </div>
+      ` : ""}
     </div>
   `;
 }
 
-function definirEtapaNegociacao(id, etapa){
-  const n = state.negociacoes.find(x=>x.id===id);
-  if(!n) return;
-  if(etapa==="fechado"){
-    db.collection("negociacoes").doc(id).update({ status:"fechado" })
-      .then(()=>toast("Negociação marcada como fechada."))
-      .catch(err=>{ console.error(err); toast("Erro ao atualizar a negociação."); });
-    return;
-  }
-  db.collection("negociacoes").doc(id).update({ status:"negociacao", etapaFunil: etapa })
-    .catch(err=>{ console.error(err); toast("Erro ao atualizar a negociação."); });
+function togglePilhaNegociacao(chave){
+  if(negociacoesExpandidas.has(chave)) negociacoesExpandidas.delete(chave);
+  else negociacoesExpandidas.add(chave);
+  renderPage("negociacoes");
 }
 
-function gerarContratoTexto(id){
-  const n = state.negociacoes.find(x=>x.id===id);
-  if(!n) return;
-  const cliente = state.clientes.find(c=>c.id===n.clienteId);
-  const texto = `Resumo para contrato\n\nCliente: ${nomeRef("clientes",n.clienteId)}\nTelefone: ${cliente?.telefone||"—"}\nServiço: ${n.tipoInteresse?capitalize(n.tipoInteresse.replace("_"," ")):"—"}\nData/mês previsto: ${negociacaoDataLabel(n)}\nValor proposto: ${n.valorProposto?money(n.valorProposto):"a combinar"}`;
-  navigator.clipboard.writeText(texto).then(()=>toast("Resumo para contrato copiado.")).catch(()=>toast("Não foi possível copiar."));
-}
-
-function renderNegociacaoPanel(neg){
+function renderViewNegociacao(neg){
   const cliente = state.clientes.find(c=>c.id===neg.clienteId);
   const wa = cliente ? whatsappLink(cliente.telefone) : null;
-  const atencao = negociacaoEmAtencao(neg);
-  const dias = diasSemContatoNegociacao(neg);
-  const etapaAtual = neg.status==="fechado" ? "fechado" : etapaFunilNegociacao(neg);
-  const segPos = [...FUNIL_ETAPAS.map(e=>e.key), "fechado"];
-  const segLabels = { contato:"Contato", orcamento:"Orçamento", negociando:"Negociando", fechado:"Fechado" };
+  const historico = Array.isArray(neg.historicoStatus) ? [...neg.historicoStatus].sort((a,b)=>(a.data||"").localeCompare(b.data||"")) : [];
   const podeGerarEvento = neg.status==="fechado" && !neg.eventoId;
 
-  return `
-    <aside class="detail-panel">
-      <div class="detail-panel-header">
-        <div>
-          <div class="detail-panel-title">${escapeHtml(nomeRef("clientes",neg.clienteId))}</div>
-          <div class="detail-panel-sub">${neg.tipoInteresse?capitalize(neg.tipoInteresse.replace("_"," ")):"—"} · ${negociacaoDataLabel(neg)}</div>
-        </div>
-        <button class="detail-panel-close" onclick="fecharPainelNegociacao()"><i class="ti ti-x"></i></button>
-      </div>
-
-      ${atencao ? `<div class="alert-strip"><span>⚠️ Sem resposta há ${dias} dia${dias===1?"":"s"} — vale um novo contato.</span></div>` : ""}
-
-      <div class="detail-panel-actions">
-        ${wa ? `<button class="primary" onclick="window.open('${wa}','_blank')"><i class="ti ti-brand-whatsapp"></i>WhatsApp</button>` : `<button class="primary" disabled>Sem telefone</button>`}
-        <button class="secondary" onclick="gerarContratoTexto('${neg.id}')">Gerar contrato</button>
-      </div>
-
-      <div>
-        <div class="detail-section-label" style="margin-bottom:8px;">Etapa</div>
-        <div class="segmented">
-          ${segPos.map(key=>`<button class="${etapaAtual===key?'active':''}" onclick="definirEtapaNegociacao('${neg.id}','${key}')">${segLabels[key]}</button>`).join("")}
-        </div>
-      </div>
-
-      <div class="detail-stat-grid">
-        <div class="stat-card"><div class="label">Valor proposto</div><div class="value">${neg.valorProposto?money(neg.valorProposto):"—"}</div></div>
-        <div class="stat-card"><div class="label">Interesse</div><div class="value" style="font-size:16px;">${neg.tipoInteresse?capitalize(neg.tipoInteresse.replace("_"," ")):"—"}</div></div>
-      </div>
-
-      ${podeGerarEvento ? `<button class="secondary" style="width:100%;" onclick="criarEventoDeNegociacao('${neg.id}')"><i class="ti ti-calendar-event"></i> Criar evento a partir desta negociação</button>` : ""}
-      ${neg.eventoId ? `<div style="font-size:12.5px;"><a href="#" onclick="openView('eventos','${neg.eventoId}');return false;" style="color:var(--amber-text);">Ver evento vinculado →</a></div>` : ""}
-
-      ${renderComentarios("negociacoes", neg.id).replace("Comentários","Histórico de contato").replace('placeholder="Escreva um comentário..."','placeholder="Registrar novo contato..."').replace(">Salvar<",">Registrar contato<")}
-      ${painelRodapeEdicao("negociacoes", neg.id, `excluirNegociacaoPainel('${neg.id}')`)}
-    </aside>
-  `;
+  return `<h3>Negociação · ${cliente?.nome||"—"}</h3>
+    ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${neg.clienteId}');return false;">${nomeRef("clientes",neg.clienteId)}</a>`)}
+    ${viewRow("Interesse em", neg.tipoInteresse ? capitalize(neg.tipoInteresse.replace("_"," ")) : "—")}
+    ${neg.tipoData==="data" && neg.dataDefinida ? viewRow("Data definida", formatDate(neg.dataDefinida) + ` <span style="font-size:11px;color:var(--muted-2);">(pré-reserva automática na Agenda)</span>`) : (neg.mesPrevisto ? viewRow("Mês previsto (sem data definida)", formatarMesAno(neg.mesPrevisto)) : "")}
+    ${viewRow("Status", `<span class="badge">${negociacaoStatusLabel(neg.status)}</span>`)}
+    ${neg.motivoPerda && neg.status==="perdido" ? viewRow("Motivo da perda", capitalize(neg.motivoPerda.replace("_"," "))) : ""}
+    ${viewRow("Valor proposto", neg.valorProposto ? money(neg.valorProposto) : "—")}
+    ${neg.observacoes ? viewRow("Observações", neg.observacoes) : ""}
+    ${neg.eventoId ? viewRow("Evento vinculado", `<a href="#" onclick="openView('eventos','${neg.eventoId}');return false;">Ver evento →</a>`) : ""}
+    ${historico.length ? `
+      <div class="view-section-title">Histórico da negociação</div>
+      ${historico.map(h=>`<div class="comentario-item"><div class="comentario-data">${formatarDataHora(h.data)}</div><div class="comentario-texto">${negociacaoStatusLabel(h.status)}</div></div>`).join("")}
+    ` : ""}
+    ${viewActions("negociacoes", neg.id, `
+      ${wa ? `<button class="ghost" onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
+      ${podeGerarEvento ? `<button class="ghost" onclick="closeModal();criarEventoDeNegociacao('${neg.id}')">📆 Criar evento a partir desta negociação</button>` : ""}
+    `)}`;
 }
 
 function abrirNovaNegociacaoParaCliente(clienteId){
@@ -4021,15 +3245,15 @@ const produtosExpandidos = new Set(["encomendado","previa_enviada","aprovado","e
 function renderProdutosPage(main){
   main.innerHTML = `
     <div class="page-header">
-      <div><h2>Produtos</h2></div>
+      <div><div class="eyebrow">Vendas</div><h2>Produtos</h2></div>
       <div class="page-actions">
-        <button class="primary" onclick="openForm('produtos')"><i class="ti ti-plus"></i>Novo pedido</button>
+        <button class="primary" onclick="openForm('produtos')">+ Novo Pedido</button>
       </div>
     </div>
     ${renderCatalogoSecaoProdutos()}
-    <div class="section-title">Pedidos em andamento</div>
     ${ETAPAS_PRODUTO.map(et=>renderPilhaProdutos(et.key, et.label, state.produtos.filter(p=>(p.etapa||"encomendado")===et.key))).join("")}
   `;
+  renderCatalogoProdutosLista();
 }
 
 function renderPilhaProdutos(chave, titulo, itens){
@@ -6114,52 +5338,12 @@ function copiarResumoEvento(eventoId){
 }
 
 function openView(col, id){
-  // clientes, eventos e negociações usam o padrão lista + painel lateral: navega até a
-  // própria página da coleção com o registro já selecionado, em vez de abrir um modal.
-  if(col==="clientes"){ clientesSelectedId = id; return renderPage("clientes"); }
-  if(col==="eventos"){ eventosSelectedId = id; return renderPage("eventos"); }
-  if(col==="negociacoes"){ negociacoesSelectedId = id; return renderPage("negociacoes"); }
   const item = state[col]?.find(i=>i.id===id);
   if(!item) return;
-  const renderers = { criancas: renderViewCrianca, casamentos: renderViewCasamento, leads: renderViewLead, produtos: renderViewProduto };
+  const renderers = { eventos: renderViewEvento, clientes: renderViewCliente, criancas: renderViewCrianca, casamentos: renderViewCasamento, leads: renderViewLead, produtos: renderViewProduto, negociacoes: renderViewNegociacao };
   const html = (renderers[col] || renderViewGeneric)(item, col);
   document.getElementById("modal-content").innerHTML = html;
   document.getElementById("modal-backdrop").classList.add("active");
-}
-
-/* ---- rodapé discreto de editar/excluir, reutilizado pelos 3 painéis laterais ---- */
-function painelRodapeEdicao(col, id, onExcluir){
-  return `<div style="display:flex; justify-content:space-between; padding-top:14px; border-top:1px solid var(--border);">
-    <button class="ghost sm" onclick="openForm('${col}','${id}')">Editar</button>
-    <button class="ghost sm" style="color:var(--danger);" onclick="${onExcluir}">Excluir</button>
-  </div>`;
-}
-async function excluirClientePainel(id){
-  if(!confirm("Tem certeza que deseja excluir este cliente? Essa ação não pode ser desfeita.")) return;
-  try{
-    await db.collection("clientes").doc(id).delete();
-    toast("Cliente excluído.");
-    clientesSelectedId = null;
-    renderClientesBody();
-  }catch(err){ console.error(err); toast("Erro ao excluir. Veja o console."); }
-}
-async function excluirEventoPainel(id){
-  if(!confirm("Tem certeza que deseja excluir este evento? Essa ação não pode ser desfeita.")) return;
-  try{
-    await db.collection("eventos").doc(id).delete();
-    toast("Evento excluído.");
-    eventosSelectedId = null;
-    renderEventosBody();
-  }catch(err){ console.error(err); toast("Erro ao excluir. Veja o console."); }
-}
-async function excluirNegociacaoPainel(id){
-  if(!confirm("Tem certeza que deseja excluir esta negociação? Essa ação não pode ser desfeita.")) return;
-  try{
-    await db.collection("negociacoes").doc(id).delete();
-    toast("Negociação excluída.");
-    negociacoesSelectedId = null;
-    renderNegociacoesBody();
-  }catch(err){ console.error(err); toast("Erro ao excluir. Veja o console."); }
 }
 
 function renderViewGeneric(item, col){
@@ -6716,6 +5900,62 @@ async function confirmarFotoFesta(eventoId){
     console.error(err);
     toast("Erro ao salvar. Veja o console.");
   }
+}
+
+function renderViewEvento(ev){
+  const saldo = (Number(ev.valorContratado)||0) - totalPago(ev.id);
+  const pago = totalPago(ev.id);
+  const symbols = {confirmado:'●', realizado:'●', entregue:'✓'};
+  const s = ev.status || 'confirmado';
+  const cliente = state.clientes.find(c=>c.id===ev.clienteId);
+  const wa = cliente ? whatsappLink(cliente.telefone) : null;
+  const gcalUrl = buildGCalUrl(ev);
+  const nomeDisplay = ev.tipo==="outro" && ev.outroDescricao ? ev.outroDescricao : capitalize((ev.tipo||"").replace("_"," "));
+
+  return `<h3>${nomeDisplay} · ${formatDate(ev.data)}</h3>
+
+    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:center;">
+      ${ev.bloqueado ? `<span style="background:#6b728022;padding:3px 10px;border-radius:20px;font-size:12px;">🔒 Bloqueado</span>` : ""}
+      ${ev.fotoLida ? `<span style="background:#3b82f622;padding:3px 10px;border-radius:20px;font-size:12px;">📸 Data por foto</span>` : ""}
+      ${ev.iaVerificado ? `<span style="background:#a855f722;padding:3px 10px;border-radius:20px;font-size:12px;">✨ Verificado por IA</span>` : ""}
+      <button class="ghost sm" onclick="toggleBloqueioEvento('${ev.id}',${!!ev.bloqueado})">${ev.bloqueado?"🔓 Desbloquear":"🔒 Bloquear"}</button>
+    </div>
+
+    <div class="quick-actions">
+      ${wa ? `<button onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
+      ${ev.endereco ? `<button onclick="window.open('https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.endereco)}','_blank')">🗺️ Maps</button>` : ""}
+      <button onclick="window.open('${gcalUrl}','_blank')">📅 Google Agenda</button>
+      <button onclick="copiarMsgConfirmacao('${ev.id}')">📋 Msg confirmação</button>
+      <button onclick="abrirGerarRecibo('${ev.id}')">🧾 Gerar recibo</button>
+      ${temIA() ? `<button onclick="triggerFotoFesta('${ev.id}')">📸 Ler foto da festa</button>` : ""}
+    </div>
+
+    ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${ev.clienteId}');return false;">${nomeRef("clientes",ev.clienteId)}</a>`)}
+    ${ev.nomeEvento ? viewRow("Nome do evento", ev.nomeEvento) : ""}
+    ${ev.criancaId ? viewRow("Criança", `<a href="#" onclick="openView('criancas','${ev.criancaId}');return false;">${nomeRef("criancas",ev.criancaId)}</a>`) : ""}
+    ${ev.casamentoId ? viewRow("Casamento", `<a href="#" onclick="openView('casamentos','${ev.casamentoId}');return false;">${nomeRef("casamentos",ev.casamentoId)}</a>`) : ""}
+    ${ev.endereco ? viewRow("Endereço", ev.endereco) : ""}
+    ${ev.recepcao!==undefined && ev.recepcao!=="" ? viewRow("Houve recepção?", ev.recepcao ? "Sim" : "Não") : ""}
+    ${viewRow("Horário", ev.horario || "—")}
+    ${viewRow("Status", `<span class="badge ${s}">${symbols[s]||""} ${statusLabel(s)}</span>`)}
+    ${(()=>{
+      const tabela = Number(ev.valorTabela)||0;
+      const final = Number(ev.valorContratado)||0;
+      const desconto = tabela - final;
+      if(tabela>0 && desconto>0){
+        return viewRow("Valor de tabela", money(tabela)) +
+               viewRow("Valor final cobrado", money(final)) +
+               viewRow("Desconto concedido", money(desconto) + (ev.motivoDesconto ? ` — ${ev.motivoDesconto}` : ""));
+      }
+      return viewRow("Valor contratado", money(final));
+    })()}
+    ${viewRow("Recebido", money(pago))}
+    ${viewRow("Saldo pendente", saldo>0 ? `<span style="font-weight:700;">${money(saldo)}</span>` : '<span style="color:var(--muted-2);">Pago ✓</span>')}
+    ${ev.tags && ev.tags.length ? viewRow("Tags", ev.tags.map(t=>`<span class="tag-chip">${t}</span>`).join("")) : ""}
+    ${ev.dataEntregaPrevista ? viewRow("Entrega prevista", formatDate(ev.dataEntregaPrevista)) : ""}
+    ${ev.dataEntregaReal ? viewRow("Entrega realizada", formatDate(ev.dataEntregaReal)) : ""}
+    ${ev.linkGaleriaCompleta ? viewRow("Galeria completa", `<a href="${ev.linkGaleriaCompleta}" target="_blank" rel="noopener">Abrir galeria ↗</a>`) : ""}
+    ${viewActions("eventos", ev.id, `<button class="ghost" onclick="copiarResumoEvento('${ev.id}')">Copiar resumo</button>`)}`;
 }
 
 /* =========================================================
@@ -7951,6 +7191,81 @@ async function converterLeadEmCliente(leadId){
   }
 }
 
+function renderViewCliente(cli){
+  const wa = whatsappLink(cli.telefone);
+  const eventosCliente = state.eventos.filter(e=>e.clienteId===cli.id).sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+  const hoje = new Date().toISOString().slice(0,10);
+  const proximo = eventosCliente.filter(e=>e.data>=hoje).sort((a,b)=>(a.data||"").localeCompare(b.data||""))[0];
+
+  const criancasVinculadas = state.criancas.filter(c=>c.clientePaiId===cli.id || c.clienteMaeId===cli.id)
+    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  const criancasDisponiveis = state.criancas.filter(c=>c.clientePaiId!==cli.id && c.clienteMaeId!==cli.id)
+    .sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+
+  const negociacoesCliente = state.negociacoes.filter(n=>n.clienteId===cli.id).sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+  const negAtual = negociacaoAtualCliente(cli.id);
+
+  const ucView = ultimoContatoCliente(cli.id);
+  return `<h3>${cli.nome}${cli.nomeConjuge ? " & "+cli.nomeConjuge : ""}</h3>
+    <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:center;">
+      ${badgeRelacionamento(cli.id)}
+      ${ucView ? `<span style="font-size:11px; background:var(--surface-2); border:1px solid var(--border-solid); border-radius:20px; padding:2px 10px; color:var(--muted);">Último contato: ${formatDate(ucView.data)}</span>` : `<span style="font-size:11px; color:var(--muted-2);">Nenhum contato registrado</span>`}
+    </div>
+    ${cli.hibernado ? `
+      <div class="card" style="padding:10px 14px; margin-bottom:14px; border-color:var(--muted-2);">
+        <div style="font-size:12px; color:var(--muted-2);">😴 Hibernado em ${formatDate((cli.hibernadoEm||"").slice(0,10))}${cli.hibernadoMotivo ? " — "+escapeHtml(cli.hibernadoMotivo) : ""}</div>
+        <button class="ghost sm" style="margin-top:6px;" onclick="reativarClienteHibernado('${cli.id}')">↩ Reativar cliente</button>
+      </div>
+    ` : `<button class="ghost sm" style="margin-bottom:10px;" onclick="closeModal();setTimeout(()=>hibernarCliente('${cli.id}'),150)">😴 Hibernar cliente</button>`}
+    ${temIA() ? `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📷 Atualizar via print ou contato .vcf (IA)</button>` : `<button class="ghost sm" style="margin-bottom:10px;" onclick="triggerClientePrintUpload('${cli.id}')">📋 Atualizar via contato .vcf</button>`}
+    <button class="ghost sm" style="margin-bottom:10px;" onclick="closeModal();setTimeout(()=>gerarELinkFeedback('cliente','${cli.id}'),150)">📝 Pedir feedback</button>
+    ${viewRow("Telefone", cli.telefone ? (wa ? `<a href="${wa}" target="_blank" rel="noopener" title="WhatsApp">${cli.telefone} ↗ <i class="ti ti-brand-whatsapp" style="color:#25D366;"></i></a>` : cli.telefone) : "—")}
+    ${viewRow("Cidade", cli.cidade || "—")}
+    ${viewRow("Origem", cli.origem ? capitalize(cli.origem) : "—")}
+    ${viewRow("Indicado por", cli.indicadoPor || "—")}
+    ${cli.observacoes ? viewRow("Observações", cli.observacoes) : ""}
+
+    <div class="view-section-title">Crianças vinculadas</div>
+    ${criancasVinculadas.length ? criancasVinculadas.map(c=>`
+      <div class="view-link-card" style="display:flex; align-items:center; justify-content:space-between;">
+        <span style="cursor:pointer;" onclick="openView('criancas','${c.id}')">${c.nome}</span>
+        <button class="sm ghost" onclick="desvincularCrianca('${c.id}','${cli.id}')">Desvincular</button>
+      </div>
+    `).join("") : `<div style="font-size:13px; color:var(--muted-2); margin-bottom:8px;">Nenhuma criança vinculada ainda.</div>`}
+    <div style="display:flex; gap:8px; margin-top:8px;">
+      <select id="select-vincular-crianca-${cli.id}" style="flex:1;">
+        <option value="">Vincular criança existente...</option>
+        ${criancasDisponiveis.map(c=>`<option value="${c.id}">${c.nome}</option>`).join("")}
+      </select>
+      <button class="sm" onclick="vincularCriancaExistente('${cli.id}')">Vincular</button>
+    </div>
+
+    <div class="view-section-title">Negociação atual</div>
+    <div style="font-size:13px; margin-bottom:8px;">${negAtual ? `<span class="badge">${negociacaoStatusLabel(negAtual.status)}</span>` : `<span style="color:var(--muted-2);">Nenhuma</span>`}</div>
+    <div class="btn-row-responsive">
+      <button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirNovaNegociacaoParaCliente('${cli.id}'),150)">+ Nova negociação</button>
+      <button class="ghost sm" onclick="closeModal();setTimeout(()=>abrirNovoEventoParaCliente('${cli.id}'),150)">+ Novo evento</button>
+    </div>
+    ${negociacoesCliente.length ? `
+      <div class="view-section-title">Histórico de negociações (${negociacoesCliente.length})</div>
+      ${negociacoesCliente.map(n=>`<div class="view-link-card" onclick="openView('negociacoes','${n.id}')">${n.tipoInteresse?capitalize(n.tipoInteresse.replace("_"," ")):"—"} · ${negociacaoStatusLabel(n.status)}${n.valorProposto?" · "+money(n.valorProposto):""}</div>`).join("")}
+    ` : ""}
+
+    <div class="view-section-title">Próximo evento</div>
+    ${proximo
+      ? `<div class="view-link-card" onclick="openView('eventos','${proximo.id}')">${capitalize((proximo.tipo||"").replace("_"," "))} · ${formatDate(proximo.data)} ${proximo.horario?"· "+proximo.horario:""}</div>`
+      : `<div style="font-size:13px; color:var(--muted-2);">Nenhum evento futuro.</div>`}
+    ${eventosCliente.length ? `
+      <div class="view-section-title">Histórico de eventos (${eventosCliente.length})</div>
+      ${eventosCliente.map(e=>`<div class="view-link-card" onclick="openView('eventos','${e.id}')">${formatDate(e.data)} · ${capitalize((e.tipo||"").replace("_"," "))}</div>`).join("")}
+    ` : ""}
+    ${renderHistoricoContatos(cli)}
+    ${renderComentarios("clientes", cli.id)}
+    ${temIA() ? `<button class="ghost sm" id="btn-resumo-clientes-${cli.id}" onclick="gerarResumoCliente('clientes','${cli.id}')" style="margin-top:10px; width:100%;">✦ Resumo IA</button>` : ""}
+    <div class="ai-box" id="ai-resumo-clientes-${cli.id}" style="display:none;"></div>
+    ${temIA() ? `<button class="ghost sm" id="btn-briefing-${cli.id}" onclick="gerarBriefingCliente('${cli.id}')" style="margin-top:8px; width:100%;">📋 Briefing de relacionamento</button>` : ""}
+    <div class="ai-box" id="ai-briefing-${cli.id}" style="display:none;"></div>
+    ${viewActions("clientes", cli.id)}`;}
 async function vincularCriancaExistente(clienteId){
   const select = document.getElementById(`select-vincular-crianca-${clienteId}`);
   const criancaId = select ? select.value : "";
