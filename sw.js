@@ -1,7 +1,9 @@
-const CACHE_NAME = "crm-estudio-v2";
+const CACHE_NAME = "crm-estudio-v3";
 const APP_SHELL = [
   "./index.html",
   "./manifest.json",
+  "./logo-mark.svg",
+  "./favicon-32.png",
   "./icon-192.png",
   "./icon-512.png",
   "./apple-touch-icon.png"

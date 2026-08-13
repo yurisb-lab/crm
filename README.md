@@ -15,7 +15,9 @@ CRM web (PWA) para um fotógrafo de eventos sociais (Yuri Silva Fotografias, Pac
 index.html              # aplicação inteira (HTML + CSS + JS)
 manifest.json            # manifesto da PWA
 sw.js                     # service worker
-icon-*.png, favicon-32.png, apple-touch-icon.png   # ícones da PWA
+brand/logo-yuri.svg       # logo original (mesmo arquivo do painel de galerias)
+logo-mark.svg             # recorte quadrado do logo: favicon e fonte dos ícones
+icon-*.png, favicon-32.png, apple-touch-icon.png   # ícones da PWA, gerados do logo-mark.svg
 crm-fotografo.html        # versão/experimento anterior do app
 ```
 
