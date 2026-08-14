@@ -19,7 +19,12 @@
   // aplica o tema salvo antes da pintura, pra evitar flash
   document.documentElement.setAttribute("data-theme", localStorage.getItem("crm-theme") || "dark");
 </script>
+<!-- preconnect: fonts.googleapis.com só serve o CSS; os arquivos de fonte vêm de
+     fonts.gstatic.com, que é onde estava o atraso real (precisa de crossorigin,
+     fonte é buscada em modo CORS). www.gstatic.com serve o SDK do Firebase. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.44.0/tabler-icons.min.css">
 <style>
@@ -529,11 +534,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<!-- exifr: leitura de metadados EXIF das fotos (data real da câmera) -->
-<script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
-<!-- jsPDF + autoTable: geração do relatório de eventos em PDF -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<!-- exifr (leitura de EXIF) e jsPDF + autoTable (relatório em PDF) não são mais
+     carregados aqui: só servem a dois botões e vinham em toda visita. Agora são
+     buscados sob demanda — ver carregarScript/garantirJsPdf no script abaixo. -->
+
 
 <script>
 /* =========================================================
@@ -673,6 +677,51 @@ if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
     navigator.serviceWorker.register("sw.js").catch(err=> console.error("[sw] erro ao registrar:", err));
   });
+}
+
+/* =========================================================
+   CARREGAMENTO SOB DEMANDA DE LIBS EXTERNAS
+   =========================================================
+   exifr e jsPDF somavam ~150 KB baixados em toda visita para servir dois
+   botões (ler EXIF de uma foto e exportar o PDF de eventos). Agora só descem
+   quando o botão é usado de fato.
+*/
+const CDN_EXIFR = "https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js";
+const CDN_JSPDF = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+const CDN_JSPDF_AUTOTABLE = "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js";
+
+// a promessa fica cacheada por URL: chamadas repetidas (e cliques repetidos
+// enquanto ainda está baixando) reaproveitam o mesmo <script>, sem duplicar.
+const _scriptsCarregados = new Map();
+function carregarScript(url){
+  if(_scriptsCarregados.has(url)) return _scriptsCarregados.get(url);
+  const promessa = new Promise((resolve, reject)=>{
+    const el = document.createElement("script");
+    el.src = url;
+    el.async = true;
+    el.onload = ()=> resolve();
+    el.onerror = ()=>{
+      _scriptsCarregados.delete(url); // permite nova tentativa numa próxima ação
+      el.remove();
+      reject(new Error(`falha ao carregar ${url}`));
+    };
+    document.head.appendChild(el);
+  });
+  _scriptsCarregados.set(url, promessa);
+  return promessa;
+}
+
+/** Garante jsPDF + plugin autoTable. Retorna false se o CDN não responder. */
+async function garantirJsPdf(){
+  try{
+    await carregarScript(CDN_JSPDF);
+    // autoTable é plugin: precisa do jsPDF já registrado, por isso em sequência
+    await carregarScript(CDN_JSPDF_AUTOTABLE);
+    return !!window.jspdf?.jsPDF;
+  }catch(err){
+    console.error("[pdf] não foi possível carregar o gerador de PDF:", err);
+    return false;
+  }
 }
 
 function toast(msg, duracao=2600){
@@ -4510,11 +4559,13 @@ function renderExportarEventosModal(anos){
   `;
 }
 
-function gerarPdfEventos(){
+async function gerarPdfEventos(){
   const cfg = exportEventosConfig;
   const colunas = EXPORT_EVENTOS_CAMPOS.filter(c=>cfg.colunas.has(c.key));
   if(!colunas.length){ toast("Selecione ao menos uma coluna."); return; }
-  if(!window.jspdf){ toast("Não foi possível carregar o gerador de PDF. Verifique sua conexão."); return; }
+  // a lib desce só agora, no primeiro uso — avisa porque pode demorar um pouco
+  if(!window.jspdf) toast("Preparando o gerador de PDF...");
+  if(!(await garantirJsPdf())){ toast("Não foi possível carregar o gerador de PDF. Verifique sua conexão."); return; }
 
   let items = [...state.eventos];
   if(cfg.filtroAno) items = items.filter(e=>(e.data||"").startsWith(cfg.filtroAno));
@@ -5478,6 +5529,7 @@ function renderViewGeneric(item, col){
 // muito mais confiável do que pedir pra IA "adivinhar" a data olhando a imagem.
 // retorna "AAAA-MM-DD" ou null se a foto não tiver esse metadado (ex: print de tela, foto sem EXIF).
 async function extrairDataExif(file){
+  try{ await carregarScript(CDN_EXIFR); }catch(err){ /* tratado no guard abaixo */ }
   if(typeof exifr === "undefined"){
     console.warn("[exif] lib exifr não carregou (CDN indisponível?). Seguindo sem data do EXIF.");
     return null;
