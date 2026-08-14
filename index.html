@@ -569,6 +569,68 @@ const state = {
 };
 const listeners = [];
 
+/* =========================================================
+   ÍNDICES — lookups O(1) para o que roda dentro de loop de render
+   =========================================================
+   nomeRef/totalPago/labelEvento varriam o array inteiro a cada linha
+   renderizada, o que dava O(eventos × clientes) e O(eventos × pagamentos)
+   em telas como Dashboard e Financeiro. Aqui os mesmos dados ficam
+   pré-indexados por id (e por data, para o calendário).
+
+   Isto só é seguro porque os arrays de state nunca são mutados no lugar:
+   são substituídos inteiros no callback do snapshot, que é o único ponto
+   que reconstrói os índices. Se algum dia aparecer um state.x.push(...),
+   este cache passa a mentir — use sempre a substituição do array inteiro.
+*/
+const _idx = {
+  porId: {},                        // col -> Map(id -> item)
+  pagamentosPorEvento: new Map(),   // eventoId  -> [pagamento]
+  pagamentosPorProduto: new Map(),  // produtoId -> [pagamento]
+  eventosPorData: new Map(),        // "YYYY-MM-DD" -> [evento]
+  bloqueiosPorData: new Map(),
+  prereservasPorData: new Map()
+};
+
+/**
+ * Agrupa por chave. Itens com chave vazia (null/undefined/"") ficam DE FORA
+ * de propósito: um evento sem data não pertence a um índice por data, e a
+ * chave "" não é endereçável por quem consulta — renderDiaCal, abrirDiaCal e
+ * calcDisponibilidade recebem sempre um "YYYY-MM-DD" vindo de isoFromDate.
+ * Difere do filter/find original só nesse caso inalcançável.
+ */
+function _agruparPor(arr, obterChave){
+  const mapa = new Map();
+  (arr||[]).forEach(item=>{
+    const chave = obterChave(item);
+    if(chave===null || chave===undefined || chave==="") return;
+    const lista = mapa.get(chave);
+    if(lista) lista.push(item); else mapa.set(chave, [item]);
+  });
+  return mapa;
+}
+
+/** Reconstrói os índices de uma coleção. Chamado ao receber cada snapshot. */
+function reconstruirIndices(col){
+  const mapa = new Map();
+  (state[col]||[]).forEach(item=> mapa.set(item.id, item));
+  _idx.porId[col] = mapa;
+
+  if(col==="pagamentos"){
+    _idx.pagamentosPorEvento  = _agruparPor(state.pagamentos, p=>p.eventoId);
+    _idx.pagamentosPorProduto = _agruparPor(state.pagamentos, p=>p.produtoId);
+  }
+  if(col==="eventos")     _idx.eventosPorData     = _agruparPor(state.eventos, e=>e.data);
+  if(col==="bloqueios")   _idx.bloqueiosPorData   = _agruparPor(state.bloqueios, b=>b.data);
+  if(col==="prereservas") _idx.prereservasPorData = _agruparPor(state.prereservas, p=>p.data);
+}
+
+/** Busca por id via índice, com fallback linear enquanto o índice não existe. */
+function itemPorId(col, id){
+  if(id===null || id===undefined) return undefined;
+  const mapa = _idx.porId[col];
+  return mapa ? mapa.get(id) : state[col]?.find(i=>i.id===id);
+}
+
 function toggleTheme(){
   const current = document.documentElement.getAttribute("data-theme") || "dark";
   const next = current === "dark" ? "light" : "dark";
@@ -680,6 +742,7 @@ function startListeners(){
     const unsub = db.collection(col).onSnapshot(
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+        reconstruirIndices(col); // antes de qualquer render, senão os índices ficam um snapshot atrás
         invalidarCrmContextCache();
         agendarRender();
       },
@@ -1047,14 +1110,14 @@ function formatarMesAno(mesStr){
   return `${nomesMes[Number(m)-1]||m}/${y}`;
 }
 function nomeRef(col, id){
-  const item = state[col]?.find(i=>i.id===id);
+  const item = itemPorId(col, id);
   if(!item) return "—";
   if(col==="clientes" && item.nomeConjuge) return `${item.nome} & ${item.nomeConjuge}`;
   if(col==="casamentos") return item.conjuge ? `${item.nomeCasal} & ${item.conjuge}` : item.nomeCasal;
   return item.nome;
 }
 function labelEvento(id){
-  const ev = state.eventos.find(e=>e.id===id);
+  const ev = itemPorId("eventos", id);
   if(!ev) return "—";
   return `${capitalize((ev.tipo||"").replace("_"," "))} · ${formatDate(ev.data)} · ${nomeRef("clientes",ev.clienteId)}`;
 }
@@ -1102,10 +1165,12 @@ function isMesmoMes(dataStr){
   return hoje.getFullYear()===d.getFullYear() && hoje.getMonth()===d.getMonth();
 }
 function totalPago(eventoId){
-  return state.pagamentos.filter(p=>p.eventoId===eventoId).reduce((s,p)=>s+(Number(p.valor)||0),0);
+  const lista = _idx.pagamentosPorEvento.get(eventoId);
+  return lista ? lista.reduce((s,p)=>s+(Number(p.valor)||0),0) : 0;
 }
 function totalPagoProduto(produtoId){
-  return state.pagamentos.filter(p=>p.produtoId===produtoId).reduce((s,p)=>s+(Number(p.valor)||0),0);
+  const lista = _idx.pagamentosPorProduto.get(produtoId);
+  return lista ? lista.reduce((s,p)=>s+(Number(p.valor)||0),0) : 0;
 }
 
 /* ---------- Ordenação de colunas (tabelas de cadastro: clientes, aniversariantes, casamentos...) ---------- */
@@ -2774,9 +2839,11 @@ function isoFromDate(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padSt
 function renderDiaCal(data, outromes){
   const iso = isoFromDate(data);
   const hoje = new Date().toISOString().slice(0,10);
-  const evsDia = state.eventos.filter(e=>e.data===iso);
-  const bloqDia = state.bloqueios.find(b=>b.data===iso);
-  const preDia = state.prereservas.filter(p=>p.data===iso);
+  // via índice: antes, cada uma das 42 células varria eventos, bloqueios e
+  // prereservas inteiros — ~168 varreduras de coleção por mês desenhado.
+  const evsDia = _idx.eventosPorData.get(iso) || [];
+  const bloqDia = (_idx.bloqueiosPorData.get(iso) || [])[0];
+  const preDia = _idx.prereservasPorData.get(iso) || [];
   const classes = ["cal-day", outromes?"other-month":"", iso===hoje?"today":"", bloqDia?"blocked":"", evsDia.length?"has-events":"", preDia.length?"prereservado":""].filter(Boolean).join(" ");
   return `<div class="${classes}" onclick="abrirDiaCal('${iso}')">
     <div class="cal-day-num">${data.getDate()}</div>
@@ -2797,20 +2864,20 @@ function corClasseTipo(e){
 function corHexTipo(tipo){ return {aniversario:"#f97316",batizado:"#06b6d4",casamento_civil:"#a855f7",casamento_religioso:"#a855f7",ensaio:"#3b82f6"}[tipo]||"#6b7280"; }
 function nomeEventoCurto(e){
   if(e.nomeEvento) return e.nomeEvento.split(" ").slice(0,3).join(" ");
-  const c = state.clientes.find(x=>x.id===e.clienteId);
+  const c = itemPorId("clientes", e.clienteId);
   return c ? c.nome.split(" ")[0] : capitalize((e.tipo||"outro").replace("_"," "));
 }
 function calcDisponibilidade(iso){
-  const bloq = state.bloqueios.find(b=>b.data===iso);
+  const bloq = (_idx.bloqueiosPorData.get(iso) || [])[0];
   if(bloq) return {label:"Bloqueada 🚫", cor:"#6b7280"};
-  const evs = state.eventos.filter(e=>e.data===iso);
+  const evs = _idx.eventosPorData.get(iso) || [];
   if(!evs.length) return {label:"Livre ✓", cor:"#22c55e"};
   return {label:"Ocupada ●", cor:"#ef4444"};
 }
 function abrirDiaCal(iso){
-  const evsDia = state.eventos.filter(e=>e.data===iso).sort((a,b)=>(a.horario||"").localeCompare(b.horario||""));
-  const bloqDia = state.bloqueios.find(b=>b.data===iso);
-  const preDia = state.prereservas.filter(p=>p.data===iso);
+  const evsDia = [...(_idx.eventosPorData.get(iso) || [])].sort((a,b)=>(a.horario||"").localeCompare(b.horario||""));
+  const bloqDia = (_idx.bloqueiosPorData.get(iso) || [])[0];
+  const preDia = _idx.prereservasPorData.get(iso) || [];
   const disp = calcDisponibilidade(iso);
   document.getElementById("modal-content").innerHTML = `
     <h3>${formatDate(iso)}</h3>
