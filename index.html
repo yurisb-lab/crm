@@ -657,14 +657,25 @@ auth.onAuthStateChanged(user=>{
   } else {
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("app").classList.remove("active");
-    listeners.forEach(unsub=>unsub());
+    pararListeners();
   }
 });
 
 /* =========================================================
    FIRESTORE LIVE LISTENERS
    ========================================================= */
+/**
+ * Cancela todas as assinaturas do Firestore e zera a lista. Sem o esvaziamento,
+ * um logout seguido de login deixava os unsubs antigos (já usados) acumulados
+ * no array junto com os novos.
+ */
+function pararListeners(){
+  listeners.forEach(unsub=>unsub());
+  listeners.length = 0;
+}
+
 function startListeners(){
+  pararListeners(); // evita assinatura dupla se startListeners for chamado outra vez
   ["leads","clientes","criancas","casamentos","eventos","produtos","pagamentos","recibos","bloqueios","negociacoes","prereservas","feedbacks"].forEach(col=>{
     const unsub = db.collection(col).onSnapshot(
       snap=>{
@@ -1182,7 +1193,7 @@ function renderEventosPage(main){
     <div class="page-header">
       <div><div class="eyebrow">Cadastro</div><h2>${schema.label}</h2></div>
       <div class="page-actions">
-        <input type="text" id="filtro-tag-evento" placeholder="Buscar cliente, aniversariante, tag, endereço..." value="${eventosFiltroTag}"
+        <input type="text" id="filtro-tag-evento" placeholder="Buscar cliente, aniversariante, tag, endereço..." value="${attr(eventosFiltroTag)}"
           oninput="eventosFiltroTag=this.value; renderEventosList();" style="width:220px;">
         <select id="filtro-tipo-evento" onchange="eventosFiltroTipo=this.value; renderEventosList();" style="width:auto;">
           <option value="">Todos os tipos</option>
@@ -1468,11 +1479,11 @@ function renderCatalogoProdutosLista(){
     <tbody>
       ${itens.map((p,i)=>`
         <tr>
-          <td><input type="text" value="${p.nome||""}" oninput="catalogoDraft[${i}].nome=this.value" style="width:100%;" placeholder="Ex: Álbum 20x20"></td>
-          <td><input type="text" value="${p.descricao||""}" oninput="catalogoDraft[${i}].descricao=this.value" style="width:100%;" placeholder="Ex: 20 páginas, capa dura"></td>
-          <td><input type="number" value="${p.custo||""}" oninput="catalogoDraft[${i}].custo=this.value" style="width:100px;"></td>
-          <td><input type="number" value="${p.venda||""}" oninput="catalogoDraft[${i}].venda=this.value" style="width:100px;"></td>
-          <td><input type="text" value="${p.fornecedor||""}" oninput="catalogoDraft[${i}].fornecedor=this.value" style="width:100%;"></td>
+          <td><input type="text" value="${attr(p.nome||"")}" oninput="catalogoDraft[${i}].nome=this.value" style="width:100%;" placeholder="Ex: Álbum 20x20"></td>
+          <td><input type="text" value="${attr(p.descricao||"")}" oninput="catalogoDraft[${i}].descricao=this.value" style="width:100%;" placeholder="Ex: 20 páginas, capa dura"></td>
+          <td><input type="number" value="${attr(p.custo||"")}" oninput="catalogoDraft[${i}].custo=this.value" style="width:100px;"></td>
+          <td><input type="number" value="${attr(p.venda||"")}" oninput="catalogoDraft[${i}].venda=this.value" style="width:100px;"></td>
+          <td><input type="text" value="${attr(p.fornecedor||"")}" oninput="catalogoDraft[${i}].fornecedor=this.value" style="width:100%;"></td>
           <td><button class="sm danger" onclick="removerProdutoCatalogo(${i})">Excluir</button></td>
         </tr>
       `).join("")}
@@ -1932,7 +1943,7 @@ function renderGrupoIA(grupo){
     const inputType = tipoCampo==="number" ? "number" : tipoCampo==="date" ? "date" : tipoCampo==="time" ? "time" : "text";
     const valorExibicao = Array.isArray(item.valorNovo) ? item.valorNovo.join(", ") : item.valorNovo;
     return `<div class="field"><label>${label}</label>
-      <input type="${inputType}" value="${valorExibicao??""}" oninput="onItemIAValorChange('${grupo.id}','${item.id}', this.value)"></div>`;
+      <input type="${inputType}" value="${attr(valorExibicao)}" oninput="onItemIAValorChange('${grupo.id}','${item.id}', this.value)"></div>`;
   }).join("");
 
   const bloqueado = !grupo.entidadeId || (!isCliente && grupo.operacao==="atualizar" && grupo.entidadeId!=="__new__" && !grupo.eventoId);
@@ -3508,17 +3519,6 @@ function renderRelatorios(main){
   })).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
   const perdidosSemMotivoLeads = state.leads.filter(l=>l.status==="perdido" && !l.motivoPerda).length;
 
-  // ---------- Histórico de recibos ----------
-  const [buscaRecibo, setBuscaRecibo] = [window._buscaRecibo||"", v=>{window._buscaRecibo=v;}];
-  let recibosVisiveis = [...state.recibos].sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
-  if(buscaRecibo){
-    const t = buscaRecibo.toLowerCase();
-    recibosVisiveis = recibosVisiveis.filter(r=>{
-      const c = state.clientes.find(x=>x.id===r.clienteId);
-      return (r.numero||"").toLowerCase().includes(t) || (c?.nome||"").toLowerCase().includes(t);
-    });
-  }
-
   // ---------- Conteúdo da pilha Financeiro ----------
   const conteudoFinanceiro = `
     <div class="section-title" style="margin-top:0;">Resumo histórico</div>
@@ -4307,7 +4307,7 @@ function renderCollectionPage(main, col){
     <div class="page-header">
       <div><div class="eyebrow">Cadastro</div><h2>${schema.label}</h2></div>
       <div class="page-actions">
-        <input type="text" id="busca-${col}" placeholder="Buscar..." value="${collectionSearch[col]||""}"
+        <input type="text" id="busca-${col}" placeholder="Buscar..." value="${attr(collectionSearch[col]||"")}"
           oninput="collectionSearch['${col}']=this.value; renderCollectionList('${col}');" style="width:160px;">
         ${col==="clientes" ? `<button class="ghost" onclick="verificarDuplicados()">Verificar duplicados</button>` : ""}
         <button class="primary" onclick="openForm('${col}')">+ Novo ${schema.singular}</button>
@@ -4766,6 +4766,7 @@ function renderFinanceiroPage(main){
 
     ${renderHistoricoRecibos()}
   `;
+  renderListaRecibos();
 }
 
 function renderPilhaFinanceiro(ano, pagamentos){
@@ -4957,7 +4958,25 @@ function renderFaturamentoPorMes(){
 }
 
 /* ---- HISTÓRICO DE RECIBOS ---- */
+/**
+ * Só a "casca": título, campo de busca e um container vazio. O campo de busca
+ * fica FORA do que é re-renderizado — a digitação atualiza apenas a lista, então
+ * o input não é destruído e não perde o foco. Mesmo padrão de renderCollectionPage
+ * / renderEventosPage.
+ */
 function renderHistoricoRecibos(){
+  return `
+    <div class="section-title">🧾 Histórico de recibos</div>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <input type="text" id="busca-recibo" placeholder="Buscar por cliente ou número..." value="${attr(window._buscaRecibo||"")}"
+        oninput="window._buscaRecibo=this.value; renderListaRecibos();" style="flex:1;">
+    </div>
+    <div id="lista-recibos-container"></div>
+  `;
+}
+function renderListaRecibos(){
+  const container = document.getElementById("lista-recibos-container");
+  if(!container) return;
   const buscaRecibo = window._buscaRecibo||"";
   let recibosVisiveis = [...state.recibos].sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
   if(buscaRecibo){
@@ -4967,12 +4986,7 @@ function renderHistoricoRecibos(){
       return (r.numero||"").toLowerCase().includes(t)||(c?.nome||"").toLowerCase().includes(t);
     });
   }
-  return `
-    <div class="section-title">🧾 Histórico de recibos</div>
-    <div style="display:flex; gap:8px; margin-bottom:10px;">
-      <input type="text" placeholder="Buscar por cliente ou número..." value="${buscaRecibo}"
-        oninput="window._buscaRecibo=this.value; renderPage('pagamentos')" style="flex:1;">
-    </div>
+  container.innerHTML = `
     <div class="card" style="padding:0;">
       ${recibosVisiveis.length ? `<table><thead><tr><th>Nº</th><th>Cliente</th><th>Valor</th><th>Forma</th><th>Situação</th><th></th></tr></thead><tbody>
         ${recibosVisiveis.map(r=>{
@@ -4990,7 +5004,7 @@ function renderHistoricoRecibos(){
             </td>
           </tr>`;
         }).join("")}
-      </tbody></table>` : `<div class="empty-state">Nenhum recibo gerado ainda.</div>`}
+      </tbody></table>` : `<div class="empty-state">${buscaRecibo ? "Nenhum recibo encontrado para essa busca." : "Nenhum recibo gerado ainda."}</div>`}
     </div>
   `;
 }
@@ -5484,10 +5498,10 @@ function renderGrupoLoteFoto(grupo){
       </div>
       ${isNovoCliente ? `
         <div class="field"><label>Nome do novo cliente</label>
-          <input type="text" value="${grupo._quickNovoCliente?.nome||""}" oninput="onLoteGrupoNovoClienteCampo('${grupo.id}','nome',this.value)">
+          <input type="text" value="${attr(grupo._quickNovoCliente?.nome||"")}" oninput="onLoteGrupoNovoClienteCampo('${grupo.id}','nome',this.value)">
         </div>
         <div class="field"><label>Telefone (opcional)</label>
-          <input type="tel" value="${grupo._quickNovoCliente?.telefone||""}" oninput="onLoteGrupoNovoClienteCampo('${grupo.id}','telefone',this.value)">
+          <input type="tel" value="${attr(grupo._quickNovoCliente?.telefone||"")}" oninput="onLoteGrupoNovoClienteCampo('${grupo.id}','telefone',this.value)">
         </div>
       ` : ""}
       <div class="modal-actions" style="border-top:1px solid var(--border); margin-top:12px; padding-top:12px;">
@@ -6060,7 +6074,18 @@ async function excluirComentario(col, id, criadoEm){
   }
 }
 
-function escapeHtml(s){ return s ? s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : ""; }
+/**
+ * Escapa texto que vai virar conteúdo de HTML. Cobre também aspas, porque
+ * o mesmo helper acaba sendo usado dentro de atributos — sem isso, um nome
+ * com aspas (ex: Maria "Bia" Silva) fecha o atributo antes da hora.
+ */
+function escapeHtml(s){ return s ? String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;") : ""; }
+/**
+ * Versão para valores de atributo (value="...", title="..."). Diferente de
+ * escapeHtml, preserva valores "falsy" legítimos como 0 — só null/undefined
+ * viram string vazia.
+ */
+function attr(v){ return (v===null || v===undefined) ? "" : String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 function formatarDataHora(iso){
   if(!iso) return "—";
   const d = new Date(iso);
@@ -7902,11 +7927,11 @@ function renderField(f, value){
   if(f.type==="tags"){
     const str = Array.isArray(value) ? value.join(", ") : (value||"");
     return `<div class="field"><label>${f.label}</label>
-      <input id="${id}" type="text" value="${str}" oninput="formState['${f.key}']=this.value.split(',').map(s=>s.trim()).filter(Boolean)">
+      <input id="${id}" type="text" value="${attr(str)}" oninput="formState['${f.key}']=this.value.split(',').map(s=>s.trim()).filter(Boolean)">
       </div>`;
   }
   const extraDataOn = (f.key==="data" && formState._col==="eventos") ? " aplicarDataEntregaPrevista(this.value);" : "";
-  return `<div class="field"><label>${f.label}</label><input id="${id}" type="${f.type}" value="${value||""}" oninput="formState['${f.key}']=this.value;${extraDataOn}"></div>`;
+  return `<div class="field"><label>${f.label}</label><input id="${id}" type="${f.type}" value="${attr(value||"")}" oninput="formState['${f.key}']=this.value;${extraDataOn}"></div>`;
 }
 
 function autoSelecionarCriancaVinculada(clienteId){
@@ -7946,7 +7971,7 @@ function renderQuickNew(fKey, ref){
   const quick = formState[`_quickNew_${fKey}`] || {};
   return `<div class="quick-new-box">
     <div style="font-size:12px;color:var(--muted);margin:10px 0 8px;">Dados d${ref==='criancas'?'a nova criança':'o novo cliente'}:</div>
-    ${qf.map(q=>`<div class="field"><label>${q.label}</label><input type="${q.type}" value="${quick[q.key]||""}" oninput="formState['_quickNew_${fKey}']['${q.key}']=this.value"></div>`).join("")}
+    ${qf.map(q=>`<div class="field"><label>${q.label}</label><input type="${q.type}" value="${attr(quick[q.key]||"")}" oninput="formState['_quickNew_${fKey}']['${q.key}']=this.value"></div>`).join("")}
   </div>`;
 }
 

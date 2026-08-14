@@ -1,4 +1,6 @@
-const CACHE_NAME = "crm-estudio-v3";
+// v4: o cache anterior pode conter respostas de erro gravadas pelo bug do
+// handler de fetch — trocar o nome faz o activate apagar tudo e recomeçar limpo.
+const CACHE_NAME = "crm-estudio-v4";
 const APP_SHELL = [
   "./index.html",
   "./manifest.json",
@@ -44,8 +46,12 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        // só guarda resposta boa: um 404/500 cacheado vira a versão "offline"
+        // do app e passa a ser servido no lugar da página real.
+        if (response.ok && response.type === "basic") {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
         return response;
       })
       .catch(() => caches.match(event.request))
