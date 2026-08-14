@@ -602,7 +602,7 @@ db.enablePersistence({ synchronizeTabs: true }).catch(err=>{
    STATE
    ========================================================= */
 const state = {
-  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], produtos: [], pagamentos: [], recibos: [], bloqueios: [], negociacoes: [], prereservas: [], feedbacks: [],
+  leads: [], clientes: [], criancas: [], casamentos: [], eventos: [], produtos: [], pagamentos: [], recibos: [], bloqueios: [], negociacoes: [], prereservas: [], feedbacks: [], gastos: [],
   config: {},
   currentPage: "dashboard"
 };
@@ -822,7 +822,7 @@ function pararListeners(){
 
 function startListeners(){
   pararListeners(); // evita assinatura dupla se startListeners for chamado outra vez
-  ["leads","clientes","criancas","casamentos","eventos","produtos","pagamentos","recibos","bloqueios","negociacoes","prereservas","feedbacks"].forEach(col=>{
+  ["leads","clientes","criancas","casamentos","eventos","produtos","pagamentos","recibos","bloqueios","negociacoes","prereservas","feedbacks","gastos"].forEach(col=>{
     const unsub = db.collection(col).onSnapshot(
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
@@ -1120,6 +1120,21 @@ const SCHEMAS = {
       {key:"valorVenda", label:"Venda", format:v=>v?money(v):"—"},
       {key:"prazoPrevia", label:"Prazo prévia", format:v=>v?formatDate(v):"—"},
       {key:"etapa", label:"Etapa", format:v=>`<span class="badge">${ETAPA_PRODUTO_LABEL[v||"encomendado"]}</span>`}
+    ]
+  },
+  gastos: {
+    label: "Financeiro", singular:"Gasto",
+    fields: [
+      {key:"descricao", label:"Descrição", type:"text", required:true},
+      {key:"valor", label:"Valor (R$)", type:"number", required:true},
+      {key:"data", label:"Data", type:"date", required:true},
+      {key:"categoria", label:"Categoria", type:"select", options:["equipamento","material","transporte","marketing","aluguel","impostos","fornecedor","outros"]}
+    ],
+    columns: [
+      {key:"data", label:"Data", format:v=>formatDate(v)},
+      {key:"descricao", label:"Descrição"},
+      {key:"valor", label:"Valor", format:v=>money(v)},
+      {key:"categoria", label:"Categoria", format:v=>v?capitalize(v):"—"}
     ]
   }
 };
@@ -3496,6 +3511,7 @@ function renderProdutosPage(main){
     <div class="page-header">
       <div><div class="eyebrow">Vendas</div><h2>Produtos</h2></div>
       <div class="page-actions">
+        <button class="ghost" onclick="abrirVendaRapidaProduto()">+ Venda rápida (com recibo)</button>
         <button class="primary" onclick="openForm('produtos')">+ Novo Pedido</button>
       </div>
     </div>
@@ -3608,6 +3624,77 @@ async function confirmarBaixaRapidaProduto(){
   }
 }
 
+/** Recebimento avulso de produto (venda que não passa pelo fluxo completo de "Pedido de produto"):
+ *  ex. "recebi R$50 do cliente Fulano, referente a 5 fotos, no dia xx/xx". Cria o pedido já como
+ *  entregue/pago, registra o pagamento e, em seguida, abre a geração do recibo pra esse pedido. */
+function abrirVendaRapidaProduto(){
+  const hoje = new Date().toISOString().slice(0,10);
+  formState = { clienteId:"", descricao:"", valor:"", data:hoje, forma:"pix" };
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>💰 Receber por produto</h3>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">
+      Para vendas avulsas fora de um evento — ex: fotos extras, álbum adicional. Registra o valor recebido e já deixa o recibo pronto pra emitir.
+    </div>
+    <div class="field"><label>Cliente</label>
+      <select onchange="formState.clienteId=this.value" style="width:100%">
+        <option value="">Selecione...</option>
+        ${[...state.clientes].filter(c=>!c.hibernado).sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"))
+          .map(c=>`<option value="${c.id}" ${formState.clienteId===c.id?"selected":""}>${escapeHtml(c.nome)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="field"><label>Referente a (ex: 5 fotos)</label>
+      <input type="text" value="${attr(formState.descricao)}" oninput="formState.descricao=this.value" placeholder="Ex: 5 fotos avulsas">
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Valor recebido (R$)</label>
+        <input type="number" value="${formState.valor}" oninput="formState.valor=this.value">
+      </div>
+      <div class="field"><label>Data</label>
+        <input type="date" value="${formState.data}" oninput="formState.data=this.value">
+      </div>
+    </div>
+    <div class="field"><label>Forma de pagamento</label>
+      <select onchange="formState.forma=this.value" style="width:100%">
+        ${["pix","cartao","dinheiro","transferencia"].map(o=>`<option value="${o}" ${formState.forma===o?"selected":""}>${capitalize(o)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="confirmarVendaRapidaProduto()">Registrar e gerar recibo</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function confirmarVendaRapidaProduto(){
+  const clienteId = formState.clienteId;
+  const descricao = (formState.descricao||"").trim();
+  const valor = Number(formState.valor);
+  const data = formState.data;
+  const forma = formState.forma || "pix";
+  if(!clienteId){ toast("Selecione o cliente."); return; }
+  if(!descricao){ toast("Descreva o que foi vendido (ex: 5 fotos)."); return; }
+  if(!valor || valor<=0){ toast("Informe um valor válido."); return; }
+  if(!data){ toast("Informe a data."); return; }
+
+  try{
+    const agora = new Date().toISOString();
+    const produtoRef = await db.collection("produtos").add({
+      clienteId, produtoNome: descricao, valorVenda: valor,
+      dataPedido: data, etapa: "entregue", criadoEm: agora
+    });
+    await db.collection("pagamentos").add({
+      produtoId: produtoRef.id, clienteId, valor,
+      data, forma, tipo: "saldo", criadoEm: agora
+    });
+    toast("Recebimento registrado.");
+    abrirGerarReciboProduto(produtoRef.id);
+  }catch(err){
+    console.error(err);
+    toast("Erro ao registrar o recebimento.");
+  }
+}
+
 function renderViewProduto(p){
   const saldo = (Number(p.valorVenda)||0) - totalPagoProduto(p.id);
   const pago = totalPagoProduto(p.id);
@@ -3620,6 +3707,8 @@ function renderViewProduto(p){
   return `<h3>${p.produtoNome||"Produto"} · ${nomeRef("clientes",p.clienteId)}</h3>
     <div class="quick-actions">
       ${wa ? `<button onclick="window.open('${wa}','_blank')" title="WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
+      ${saldo>0 ? `<button onclick="abrirBaixaRapidaProduto('${p.id}')">💰 Registrar pagamento</button>` : ""}
+      ${pago>0 ? `<button onclick="abrirGerarReciboProduto('${p.id}')">🧾 Gerar recibo</button>` : ""}
     </div>
     ${viewRow("Cliente", `<a href="#" onclick="openView('clientes','${p.clienteId}');return false;">${nomeRef("clientes",p.clienteId)}</a>`)}
     ${viewRow("Fornecedor", p.fornecedor||"—")}
@@ -4705,10 +4794,15 @@ function statsFinanceiroMes(anoMes){
   const recebido = pagamentosMes.reduce((s,p)=>s+(Number(p.valor)||0),0);
   const contratado = eventosMes.reduce((s,e)=>s+(Number(e.valorContratado)||0),0);
   const pendente = eventosMes.reduce((s,e)=>s+Math.max((Number(e.valorContratado)||0)-totalPago(e.id),0),0);
+  const gasto = statsGastosMes(anoMes);
   return {
     anoMes, eventos: eventosMes.length, recebido, contratado, pendente,
     ticketMedio: eventosMes.length ? contratado/eventosMes.length : 0,
+    gasto, liquido: recebido - gasto,
   };
+}
+function statsGastosMes(anoMes){
+  return state.gastos.filter(g=>(g.data||"").startsWith(anoMes)).reduce((s,g)=>s+(Number(g.valor)||0),0);
 }
 function refMes(offsetMeses){
   const d = new Date();
@@ -4759,6 +4853,10 @@ function renderRelatorioMesFinanceiro(){
           <div style="height:100%; width:${Math.min(pctAtual,100)}%; background:${corAtual}; transition:.6s ease;"></div>
         </div>
       ` : ""}
+      <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border-solid); display:flex; gap:24px; flex-wrap:wrap; font-size:13px;">
+        <span style="color:var(--muted);">💸 Gastos no mês: <b style="color:#ef4444;">${money(atual.gasto)}</b></span>
+        <span style="color:var(--muted);">Saldo líquido do mês: <b style="color:${atual.liquido>=0?'#22c55e':'#ef4444'};">${money(atual.liquido)}</b></span>
+      </div>
     </div>
 
     <div class="section-title">${MESES[refAnterior.mes]} de ${refAnterior.ano} — mês anterior</div>
@@ -4971,6 +5069,7 @@ function renderFinanceiroPage(main){
     <div class="page-header">
       <div><div class="eyebrow">Financeiro</div><h2>Pagamentos</h2></div>
       <div class="page-actions">
+        <button class="ghost" onclick="abrirVendaRapidaProduto()">+ Receber por produto</button>
         <button class="primary" onclick="openForm('pagamentos')">+ Novo pagamento</button>
       </div>
     </div>
@@ -5000,9 +5099,40 @@ function renderFinanceiroPage(main){
     ${anosProdutos.length ? anosProdutos.map(ano=>renderPilhaFinanceiroProdutos(ano, porAnoProdutos[ano])).join("") :
       `<div class="card"><div class="empty-state"><div class="serif">Nenhum pagamento de produto registrado</div>Registre pedidos em Produtos e dê baixa nos pagamentos por lá.</div></div>`}
 
+    ${renderSecaoGastos()}
+
     ${renderHistoricoRecibos()}
   `;
   renderListaRecibos();
+}
+
+function renderSecaoGastos(){
+  const mesAtual = refMes(0).chave;
+  const gastoMesAtual = statsGastosMes(mesAtual);
+  const totalGastoGeral = state.gastos.reduce((s,g)=>s+(Number(g.valor)||0),0);
+
+  const porAnoGastos = {};
+  state.gastos.forEach(g=>{
+    if(!g.data) return;
+    const ano = g.data.slice(0,4);
+    if(!porAnoGastos[ano]) porAnoGastos[ano] = [];
+    porAnoGastos[ano].push(g);
+  });
+  const anosGastos = Object.keys(porAnoGastos).sort().reverse();
+
+  return `
+    <div class="section-title">💸 Gastos do negócio</div>
+    <div class="grid grid-3" style="margin-bottom:14px;">
+      <div class="card stat-card"><div class="label">Gasto no mês atual</div><div class="value" style="font-size:19px; color:#ef4444;">${money(gastoMesAtual)}</div></div>
+      <div class="card stat-card"><div class="label">Total gasto (geral)</div><div class="value" style="font-size:19px;">${money(totalGastoGeral)}</div></div>
+      <div class="card stat-card"><div class="label">Gastos registrados</div><div class="value">${state.gastos.length}</div></div>
+    </div>
+    <div class="page-actions" style="margin-bottom:14px; justify-content:flex-start;">
+      <button class="primary" onclick="openForm('gastos')">+ Novo gasto</button>
+    </div>
+    ${anosGastos.length ? anosGastos.map(ano=>renderPilhaGastos(ano, porAnoGastos[ano])).join("") :
+      `<div class="card"><div class="empty-state"><div class="serif">Nenhum gasto registrado</div>Registre tudo que sai do caixa no mês (equipamento, transporte, marketing, aluguel etc.) para acompanhar o saldo líquido.</div></div>`}
+  `;
 }
 
 function renderPilhaFinanceiro(ano, pagamentos){
@@ -5121,6 +5251,67 @@ function toggleFinanceiroProdutosAno(ano){
   renderPage("pagamentos");
 }
 
+const financeiroGastosExpandido = new Set([String(new Date().getFullYear())]);
+
+function renderPilhaGastos(ano, gastos){
+  const isOpen = financeiroGastosExpandido.has(ano);
+  const totalAno = gastos.reduce((s,g)=>s+(Number(g.valor)||0),0);
+  const ordenados = [...gastos].sort((a,b)=>(b.data||"").localeCompare(a.data||""));
+  const nomesMes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  return `
+    <div class="card" style="padding:0; margin-bottom:14px; overflow:hidden;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer;"
+           onclick="toggleFinanceiroGastosAno('${ano}')">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-family:'Fraunces',serif; font-size:20px;">${isOpen?"▾":"▸"} ${ano}</span>
+          <span style="font-size:12px; color:var(--muted);">${gastos.length} gasto${gastos.length===1?"":"s"} · ${money(totalAno)}</span>
+        </div>
+        <span style="font-size:12px; color:var(--muted-2);">${isOpen?"recolher":"expandir"}</span>
+      </div>
+      ${isOpen ? `
+        <div style="border-top:1px solid var(--border-solid); overflow-x:auto;">
+          <table>
+            <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th></th></tr></thead>
+            <tbody>
+              ${ordenados.map(g=>{
+                const [y,m,d] = (g.data||"").split("-");
+                const dataLabel = d ? `${d}/${m}` : g.data||"—";
+                return `<tr>
+                  <td>${dataLabel}</td>
+                  <td>${escapeHtml(g.descricao||"—")}</td>
+                  <td>${g.categoria?capitalize(g.categoria):"—"}</td>
+                  <td><b>${money(g.valor)}</b></td>
+                  <td class="row-actions">
+                    <button class="sm" onclick="openForm('gastos','${g.id}')">Editar</button>
+                    <button class="sm danger" onclick="deleteDoc('gastos','${g.id}')">Excluir</button>
+                  </td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+        <div style="padding:12px 18px; border-top:1px solid var(--border); display:flex; gap:20px; flex-wrap:wrap; font-size:13px; color:var(--muted);">
+          ${Object.entries(
+              gastos.reduce((acc,g)=>{
+                const m = (g.data||"").slice(5,7);
+                if(m) acc[m] = (acc[m]||0)+(Number(g.valor)||0);
+                return acc;
+              },{})
+            ).sort(([a],[b])=>a.localeCompare(b))
+            .map(([m,v])=>`<span>${nomesMes[Number(m)-1]}: <b>${money(v)}</b></span>`).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function toggleFinanceiroGastosAno(ano){
+  if(financeiroGastosExpandido.has(ano)) financeiroGastosExpandido.delete(ano);
+  else financeiroGastosExpandido.add(ano);
+  renderPage("pagamentos");
+}
+
 /* ---- FATURAMENTO POR MÊS (pilhas por ano) ---- */
 const fatExpandido = new Set([String(new Date().getFullYear())]);
 
@@ -5230,12 +5421,18 @@ function renderListaRecibos(){
       ${recibosVisiveis.length ? `<table><thead><tr><th>Nº</th><th>Cliente</th><th>Valor</th><th>Referente a</th><th>Situação</th><th></th></tr></thead><tbody>
         ${recibosVisiveis.map(r=>{
           const ev = itemPorId("eventos", r.eventoId);
+          const prod = itemPorId("produtos", r.produtoId);
           const cli = itemPorId("clientes", r.clienteId);
           // mostra a que pagamentos o recibo se refere (entrada, parcelas e as datas)
           const itens = Array.isArray(r.itens) ? r.itens : [];
           const referencia = itens.length
             ? itens.map(it=>`${it.rotulo||"Pagamento"} · ${formatDate(it.data)}`).join(" + ")
-            : capitalize(r.forma||"—");
+            : (prod ? (prod.produtoNome||"Produto") : capitalize(r.forma||"—"));
+          const verBtn = ev
+            ? `<button class="sm" onclick="exibirRecibo(state.eventos.find(e=>e.id==='${r.eventoId}'),state.recibos.find(x=>x.id==='${r.id}'))">Ver</button>`
+            : prod
+              ? `<button class="sm" onclick="exibirReciboProduto(state.produtos.find(p=>p.id==='${r.produtoId}'),state.recibos.find(x=>x.id==='${r.id}'))">Ver</button>`
+              : "";
           return `<tr>
             <td><b>${escapeHtml(r.numero||"—")}</b></td>
             <td>${escapeHtml(cli?.nome||"—")}</td>
@@ -5243,7 +5440,7 @@ function renderListaRecibos(){
             <td style="max-width:230px; font-size:12px; color:var(--muted);">${escapeHtml(referencia)}</td>
             <td>${r.quitado?"✅ Quitado":"⚠️ Pendente"}</td>
             <td class="row-actions">
-              ${ev?`<button class="sm" onclick="exibirRecibo(state.eventos.find(e=>e.id==='${r.eventoId}'),state.recibos.find(x=>x.id==='${r.id}'))">Ver</button>`:""}
+              ${verBtn}
               <button class="sm danger" onclick="if(confirm('Excluir?')) db.collection('recibos').doc('${r.id}').delete().then(()=>toast('Recibo excluído.'))">Excluir</button>
             </td>
           </tr>`;
@@ -5670,6 +5867,202 @@ function exibirRecibo(ev, recibo){
   const cliente = state.clientes.find(c=>c.id===ev.clienteId);
   const wa = cliente ? whatsappLink(cliente.telefone) : null;
   const txt = montarTextoRecibo(ev, recibo);
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>🧾 Recibo nº ${escapeHtml(recibo.numero||"")}</h3>
+    <textarea id="recibo-txt" rows="18" style="width:100%;font-size:13px;">${escapeHtml(txt)}</textarea>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Fechar</button>
+      <button class="ghost" onclick="navigator.clipboard.writeText(document.getElementById('recibo-txt').value).then(()=>toast('Recibo copiado!'))">Copiar</button>
+      ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent(document.getElementById('recibo-txt').value),'_blank')" title="Enviar WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+
+/* ---------- RECIBOS DE PRODUTO ----------
+   Mesma lógica dos recibos de evento (acima), mas ancorada num pedido de produto
+   (coleção "produtos") em vez de um evento — usada tanto pela venda rápida quanto
+   pelo botão "Gerar recibo" na ficha de um pedido de produto. */
+function pagamentosDoProduto(produtoId){
+  const lista = _idx.pagamentosPorProduto.get(produtoId) || [];
+  return [...lista].sort((a,b)=>
+    (a.data||"").localeCompare(b.data||"") ||
+    (a.criadoEm||"").localeCompare(b.criadoEm||"")
+  );
+}
+function resumoParcelamentoProduto(produtoId){
+  const p = itemPorId("produtos", produtoId);
+  const lista = pagamentosDoProduto(produtoId);
+  const pago = lista.reduce((s,x)=>s+(Number(x.valor)||0),0);
+  const total = Number(p?.valorVenda)||0;
+  const saldo = total - pago;
+  return { lista, pago, total, saldo, quitado: saldo<=0.009, parcelado: lista.length>1 };
+}
+function recibosDoProduto(produtoId){
+  return state.recibos
+    .filter(r=>r.produtoId===produtoId)
+    .sort((a,b)=>(b.criadoEm||"").localeCompare(a.criadoEm||""));
+}
+async function abrirGerarReciboProduto(produtoId){
+  const p = state.produtos.find(x=>x.id===produtoId);
+  if(!p) return;
+  const { lista, pago, saldo, quitado } = resumoParcelamentoProduto(produtoId);
+  const ultimoPag = lista[lista.length-1];
+  const numSugerido = await proximoNumeroRecibo();
+  window._numeroReciboSugerido = numSugerido;
+  const emitidos = recibosDoProduto(produtoId);
+
+  document.getElementById("modal-content").innerHTML = `
+    <h3>🧾 Gerar recibo — ${escapeHtml(p.produtoNome||"Produto")}</h3>
+    ${lista.length ? `
+      <div class="card" style="padding:10px 12px; margin-bottom:14px;">
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:6px;">
+          Pagamentos deste pedido${lista.length>1?` (${lista.length} parcelas)`:""}
+        </div>
+        ${lista.map((pg,i)=>`<div style="display:flex; justify-content:space-between; font-size:12px; padding:2px 0;">
+          <span style="color:var(--muted);">${rotuloParcela(pg,i,lista.length)} · ${formatDate(pg.data)}</span>
+          <b>${money(pg.valor)}</b>
+        </div>`).join("")}
+      </div>` : `<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Nenhum pagamento registrado neste pedido ainda.</div>`}
+    ${emitidos.length ? `
+      <div class="field"><label>Emissão</label>
+        <select id="recibo-alvo" style="width:100%" onchange="aoTrocarAlvoRecibo()">
+          <option value="">Emitir novo recibo</option>
+          ${emitidos.map(r=>`<option value="${r.id}">Atualizar recibo nº ${attr(r.numero||"—")} (${money(r.valor)})</option>`).join("")}
+        </select>
+      </div>` : ""}
+    <div class="field"><label>Número do recibo</label>
+      <input id="recibo-num" type="text" value="${attr(numSugerido)}">
+    </div>
+    <div class="field"><label>Forma de pagamento</label>
+      <select id="recibo-forma" style="width:100%">
+        ${["pix","cartao","dinheiro","transferencia"].map(o=>`<option value="${o}" ${ultimoPag?.forma===o?"selected":""}>${capitalize(o)}</option>`).join("")}
+      </select>
+    </div>
+    <div class="field"><label>Valor no recibo</label>
+      <select id="recibo-valor-tipo" style="width:100%">
+        <option value="pago">Tudo o que já foi recebido (${money(pago)})</option>
+        ${lista.length>1 ? `<option value="ultimo">Somente o último pagamento (${money(ultimoPag?.valor)} · ${formatDate(ultimoPag?.data)})</option>` : ""}
+        <option value="total">Valor total do pedido (${money(p.valorVenda)})</option>
+      </select>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+      ${lista.length>1 ? "O recibo lista cada parcela com a data em que foi paga.<br>" : ""}
+      Situação: ${quitado ? "✅ Quitado" : `⚠️ Saldo pendente de ${money(saldo)}`}
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="confirmarGerarReciboProduto('${produtoId}')">Gerar</button>
+    </div>
+  `;
+  document.getElementById("modal-backdrop").classList.add("active");
+}
+async function confirmarGerarReciboProduto(produtoId){
+  const numero = document.getElementById("recibo-num")?.value.trim();
+  const forma = document.getElementById("recibo-forma")?.value;
+  const valorTipo = document.getElementById("recibo-valor-tipo")?.value;
+  if(!numero){toast("Informe o número do recibo.");return;}
+  const alvoId = document.getElementById("recibo-alvo")?.value || "";
+  const existe = state.recibos.find(r=>r.numero===numero && r.id!==alvoId);
+  if(existe){toast(`Já existe um recibo com o número ${numero}. Altere antes de continuar.`);return;}
+  const p = state.produtos.find(x=>x.id===produtoId);
+  if(!p) return;
+  const { lista, pago, saldo, quitado } = resumoParcelamentoProduto(produtoId);
+  const totalVenda = Number(p.valorVenda)||0;
+
+  const itensTodos = lista.map((pg,i)=>({
+    pagamentoId: pg.id||"",
+    valor: Number(pg.valor)||0,
+    data: pg.data||"",
+    forma: pg.forma||"",
+    tipo: pg.tipo||"",
+    rotulo: rotuloParcela(pg, i, lista.length)
+  }));
+  let itens = itensTodos;
+  let valorRecibo = pago;
+  if(valorTipo==="ultimo" && itensTodos.length){
+    itens = itensTodos.slice(-1);
+    valorRecibo = itens[0].valor;
+  } else if(valorTipo==="total"){
+    valorRecibo = totalVenda;
+  }
+
+  const reciboExistente = alvoId ? state.recibos.find(r=>r.id===alvoId) : null;
+  const dadosRecibo = {
+    produtoId, clienteId:p.clienteId||"", numero, forma,
+    valor: valorRecibo,
+    escopo: valorTipo||"pago",
+    itens,
+    totalContratado: totalVenda,
+    totalPago: pago,
+    saldo,
+    quitado,
+    criadoEm: reciboExistente?.criadoEm || new Date().toISOString()
+  };
+  try{
+    if(reciboExistente){
+      await db.collection("recibos").doc(reciboExistente.id).update({ ...dadosRecibo, atualizadoEm:new Date().toISOString() });
+    } else {
+      await db.collection("recibos").add(dadosRecibo);
+    }
+  }catch(err){
+    console.error(err);
+    toast("Erro ao salvar o recibo.");
+    return;
+  }
+  const recibo = { ...dadosRecibo, id: reciboExistente?.id||"" };
+  exibirReciboProduto(p, recibo);
+}
+/** Monta o texto do recibo de um pedido de produto, no mesmo formato do recibo de evento. */
+function montarTextoReciboProduto(p, recibo){
+  const cliente = state.clientes.find(c=>c.id===p.clienteId);
+  const nomeCliente = cliente ? cliente.nome : "—";
+  const atual = resumoParcelamentoProduto(p.id);
+  const itens = (recibo.itens && recibo.itens.length)
+    ? recibo.itens
+    : atual.lista.map((pg,i)=>({ valor:pg.valor, data:pg.data, forma:pg.forma, tipo:pg.tipo, rotulo:rotuloParcela(pg,i,atual.lista.length) }));
+  const totalContratado = Number(recibo.totalContratado ?? p.valorVenda) || 0;
+  const temSnapshot = recibo.saldo!==undefined;
+  const totalRecebido = temSnapshot ? (Number(recibo.totalPago)||0) : atual.pago;
+  const saldo = temSnapshot ? (Number(recibo.saldo)||0) : atual.saldo;
+  const quitado = temSnapshot ? !!recibo.quitado : saldo<=0.009;
+  const parcelado = itens.length > 1;
+  const parcial = recibo.escopo==="ultimo" && atual.lista.length>1;
+
+  const linhas = [
+    "📸 Venda de Produto",
+    `Recibo nº ${recibo.numero}`,
+    "",
+    `Cliente: ${nomeCliente}`,
+    `Referente a: ${p.produtoNome||"—"}`,
+    `Data: ${formatDate(p.dataPedido)}`,
+    "",
+    totalContratado ? `Valor total: ${money(totalContratado)}` : null,
+    `Valor recebido: ${money(recibo.valor)}`
+  ];
+
+  if(itens.length){
+    linhas.push(parcelado ? "Pagamentos recebidos:" : "Pagamento recebido:");
+    itens.forEach((it,i)=> linhas.push(linhaParcelaTexto(it, i, itens.length)));
+    if(parcelado || parcial) linhas.push(`Total recebido até aqui: ${money(totalRecebido)}`);
+  } else {
+    linhas.push(`Forma de pagamento: ${capitalize(recibo.forma||"—")}`);
+  }
+
+  linhas.push(`Situação: ${quitado ? "Quitado ✅" : `Saldo pendente: ${money(saldo)} ⚠️`}`);
+  linhas.push(
+    "",
+    "Obrigado pela confiança no meu trabalho.",
+    "",
+    "Yuri Silva Fotografias"
+  );
+  return linhas.filter(l=>l!==null).join("\n");
+}
+function exibirReciboProduto(p, recibo){
+  const cliente = state.clientes.find(c=>c.id===p.clienteId);
+  const wa = cliente ? whatsappLink(cliente.telefone) : null;
+  const txt = montarTextoReciboProduto(p, recibo);
 
   document.getElementById("modal-content").innerHTML = `
     <h3>🧾 Recibo nº ${escapeHtml(recibo.numero||"")}</h3>
@@ -8074,6 +8467,7 @@ function openForm(col, id){
     formState.etapa = "encomendado";
     formState.dataPedido = new Date().toISOString().slice(0,10);
   }
+  if(!existing && col==="gastos") formState.data = new Date().toISOString().slice(0,10);
 
   // bloqueia edição se o evento estiver com cadeado
   if(col==="eventos" && existing && existing.bloqueado){
