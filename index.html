@@ -1371,11 +1371,11 @@ function renderEventosList(){
       // tags
       if((e.tags||[]).some(t=>t.toLowerCase().includes(termo))) return true;
       // nome do cliente
-      const cli = state.clientes.find(c=>c.id===e.clienteId);
+      const cli = itemPorId("clientes", e.clienteId);
       if(cli && (cli.nome||"").toLowerCase().includes(termo)) return true;
       if(cli && (cli.nomeConjuge||"").toLowerCase().includes(termo)) return true;
       // nome da criança vinculada
-      const crianca = e.criancaId ? state.criancas.find(c=>c.id===e.criancaId) : null;
+      const crianca = e.criancaId ? itemPorId("criancas", e.criancaId) : null;
       if(crianca && (crianca.nome||"").toLowerCase().includes(termo)) return true;
       // nome do evento
       if((e.nomeEvento||"").toLowerCase().includes(termo)) return true;
@@ -1852,7 +1852,7 @@ function buildCrmContext(){
   // Eventos — incluindo data de entrega e bloqueio (limitado aos últimos 5 anos)
   const eventosCtx = state.eventos.filter(e=>(e.data||"")>=dataLimiteContexto).map(e=>{
     const saldo = (Number(e.valorContratado)||0)-totalPago(e.id);
-    const crianca = e.criancaId ? state.criancas.find(c=>c.id===e.criancaId) : null;
+    const crianca = e.criancaId ? itemPorId("criancas", e.criancaId) : null;
     return [
       formatDate(e.data),
       capitalize((e.tipo||"").replace("_"," "))+(e.outroDescricao?" ("+e.outroDescricao+")":""),
@@ -1899,7 +1899,7 @@ function buildCrmContext(){
   const casamentosCtx = state.casamentos.map(c=>{
     const anos = idadeAtual(c.dataCasamento);
     const prox = diasParaAniversario(c.dataCasamento);
-    const cli = state.clientes.find(x=>x.id===c.clienteId);
+    const cli = itemPorId("clientes", c.clienteId);
     return `${c.nomeCasal}${c.conjuge?" & "+c.conjuge:""} | casados em:${formatDate(c.dataCasamento)} | ${anos} anos | próximas bodas em ${prox} dias | cliente:${cli?.nome||"?"}`;
   }).join("\n");
 
@@ -2801,7 +2801,7 @@ function renderAgendaLista(){
             ${itens.map(({tipo, item})=>{
               if(tipo==="negociacaoSemData"){
                 const n = item;
-                const cliente = state.clientes.find(c=>c.id===n.clienteId);
+                const cliente = itemPorId("clientes", n.clienteId);
                 const wa = cliente ? whatsappLink(cliente.telefone) : null;
                 const mesAtual = new Date().toISOString().slice(0,7);
                 const atrasado = n.mesPrevisto < mesAtual;
@@ -4971,7 +4971,7 @@ function renderPilhaFinanceiro(ano, pagamentos){
             <thead><tr><th>Data</th><th>Evento</th><th>Valor</th><th>Forma</th><th>Tipo</th><th></th></tr></thead>
             <tbody>
               ${ordenados.map(p=>{
-                const ev = state.eventos.find(e=>e.id===p.eventoId);
+                const ev = itemPorId("eventos", p.eventoId);
                 const cli = ev ? nomeRef("clientes",ev.clienteId) : "—";
                 const tipoEv = ev ? capitalize((ev.tipo||"").replace("_"," ")) : "—";
                 const [y,m,d] = (p.data||"").split("-");
@@ -5034,7 +5034,7 @@ function renderPilhaFinanceiroProdutos(ano, pagamentos){
             <thead><tr><th>Data</th><th>Produto</th><th>Valor</th><th>Forma</th><th>Tipo</th><th></th></tr></thead>
             <tbody>
               ${ordenados.map(p=>{
-                const prod = state.produtos.find(x=>x.id===p.produtoId);
+                const prod = itemPorId("produtos", p.produtoId);
                 const cli = prod ? nomeRef("clientes",prod.clienteId) : (p.clienteId ? nomeRef("clientes",p.clienteId) : "—");
                 const [y,m,d] = (p.data||"").split("-");
                 const dataLabel = d ? `${d}/${m}` : p.data||"—";
@@ -5162,7 +5162,7 @@ function renderListaRecibos(){
   if(buscaRecibo){
     const t = buscaRecibo.toLowerCase();
     recibosVisiveis = recibosVisiveis.filter(r=>{
-      const c = state.clientes.find(x=>x.id===r.clienteId);
+      const c = itemPorId("clientes", r.clienteId);
       return (r.numero||"").toLowerCase().includes(t)||(c?.nome||"").toLowerCase().includes(t);
     });
   }
@@ -5170,8 +5170,8 @@ function renderListaRecibos(){
     <div class="card" style="padding:0;">
       ${recibosVisiveis.length ? `<table><thead><tr><th>Nº</th><th>Cliente</th><th>Valor</th><th>Forma</th><th>Situação</th><th></th></tr></thead><tbody>
         ${recibosVisiveis.map(r=>{
-          const ev = state.eventos.find(e=>e.id===r.eventoId);
-          const cli = state.clientes.find(c=>c.id===r.clienteId);
+          const ev = itemPorId("eventos", r.eventoId);
+          const cli = itemPorId("clientes", r.clienteId);
           return `<tr>
             <td><b>${r.numero||"—"}</b></td>
             <td>${cli?.nome||"—"}</td>
