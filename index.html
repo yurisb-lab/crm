@@ -681,7 +681,7 @@ function startListeners(){
       snap=>{
         state[col] = snap.docs.map(d=>({ id:d.id, ...d.data() }));
         invalidarCrmContextCache();
-        renderPage(state.currentPage);
+        agendarRender();
       },
       err=>{
         console.error(`[firestore] erro na coleção "${col}":`, err.code, err.message);
@@ -696,7 +696,7 @@ function startListeners(){
       state.config = doc.exists ? doc.data() : {};
       // re-renderiza qualquer página que use dados de config
       const paginasConfig = ["configuracoes","dashboard","pagamentos","relatorios"];
-      if(paginasConfig.includes(state.currentPage)) renderPage(state.currentPage);
+      if(paginasConfig.includes(state.currentPage)) agendarRender();
     },
     err=>{
       console.error("[firestore] erro em \"config\":", err.code, err.message);
@@ -1299,6 +1299,33 @@ function toggleAno(ano){
   if(expandedYears.has(ano)) expandedYears.delete(ano);
   else expandedYears.add(ano);
   renderEventosList();
+}
+
+/**
+ * Re-render disparado por dados (snapshots do Firestore), agrupado por frame.
+ *
+ * Cada uma das 13 assinaturas chamava renderPage() direto, então o boot fazia
+ * uma reconstrução completa da página por snapshot — todas jogadas fora menos
+ * a última. Aqui só a primeira chamada de cada frame agenda o trabalho; as
+ * demais caem no early return.
+ *
+ * De propósito NÃO substitui renderPage(): navegação e cliques continuam
+ * síncronos, senão qualquer código que renderize e mexa no DOM logo em
+ * seguida passaria a enxergar o DOM antigo. Isto aqui é só para o caminho
+ * "dado mudou sozinho".
+ */
+let _renderAgendado = false;
+function agendarRender(){
+  if(_renderAgendado) return;
+  _renderAgendado = true;
+  const executar = ()=>{
+    _renderAgendado = false;
+    renderPage(state.currentPage);
+  };
+  // rAF alinha com a pintura, mas não dispara em aba oculta — aí vai no timer,
+  // senão a página ficaria congelada até o usuário voltar pra aba.
+  if(typeof requestAnimationFrame === "function" && !document.hidden) requestAnimationFrame(executar);
+  else setTimeout(executar, 0);
 }
 
 function renderPage(page){
