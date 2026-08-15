@@ -5863,10 +5863,288 @@ function montarTextoRecibo(ev, recibo){
   );
   return linhas.filter(l=>l!==null).join("\n");
 }
+/* ---------- Imagem do recibo (canvas com a logo como marca d'água) ---------- */
+let _logoReciboPromise = null;
+/** Carrega (uma única vez) a logo em brand/logo-yuri.svg pra usar como marca d'água. */
+function carregarLogoRecibo(){
+  if(!_logoReciboPromise){
+    _logoReciboPromise = new Promise(resolve=>{
+      const img = new Image();
+      img.onload = ()=>resolve(img);
+      img.onerror = ()=>resolve(null);
+      img.src = "brand/logo-yuri.svg";
+    });
+  }
+  return _logoReciboPromise;
+}
+/** Quebra um texto em linhas que cabem em larguraMax, usando a fonte já setada no ctx. */
+function quebrarLinhasCanvas(ctx, texto, larguraMax){
+  const palavras = String(texto).split(" ");
+  const linhas = [];
+  let atual = "";
+  palavras.forEach(palavra=>{
+    const teste = atual ? `${atual} ${palavra}` : palavra;
+    if(atual && ctx.measureText(teste).width > larguraMax){
+      linhas.push(atual);
+      atual = palavra;
+    } else {
+      atual = teste;
+    }
+  });
+  if(atual) linhas.push(atual);
+  return linhas;
+}
+function retanguloArredondado(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+/** Linha "label ... valor", label à esquerda e valor à direita, na mesma altura y. */
+function linhaValorCanvas(ctx, xEsq, xDir, y, label, valor, destaque){
+  ctx.textAlign = "left";
+  ctx.font = destaque ? "bold 14px Arial" : "14px Arial";
+  ctx.fillStyle = "#5A646C";
+  ctx.fillText(label, xEsq, y);
+  ctx.textAlign = "right";
+  ctx.font = destaque ? "bold 15px Arial" : "14px Arial";
+  ctx.fillStyle = "#1F262B";
+  ctx.fillText(valor, xDir, y);
+  ctx.textAlign = "left";
+}
+/** Desenha o recibo (modelo de montarModeloImagemRecibo/-Produto) num canvas e devolve o canvas pronto. */
+async function desenharCanvasRecibo(m){
+  const ESCALA = 2, W = 800, PAD = 56, ALT_HEADER = 116;
+  const larguraConteudo = W - PAD*2;
+  const logo = await carregarLogoRecibo();
+
+  function render(ctx, alturaCanvas){
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, W, alturaCanvas);
+
+    if(logo && logo.naturalWidth){
+      const aspecto = logo.naturalWidth / logo.naturalHeight;
+      const lw = larguraConteudo * 1.2;
+      const lh = lw / aspecto;
+      ctx.save();
+      ctx.globalAlpha = 0.05;
+      ctx.translate(W/2, ALT_HEADER + (alturaCanvas-ALT_HEADER)/2);
+      ctx.rotate(-12 * Math.PI/180);
+      ctx.drawImage(logo, -lw/2, -lh/2, lw, lh);
+      ctx.restore();
+    }
+
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, "#13BFA0");
+    grad.addColorStop(1, "#0FA88C");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, ALT_HEADER);
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textAlign = "left";
+    ctx.font = "bold 22px Arial";
+    ctx.fillText("Yuri Silva Fotografias", PAD, 54);
+    ctx.font = "13px Arial";
+    ctx.globalAlpha = 0.85;
+    ctx.fillText("Cobertura fotográfica de casamentos e eventos", PAD, 76);
+    ctx.globalAlpha = 1;
+
+    ctx.textAlign = "right";
+    ctx.font = "11px Arial";
+    ctx.globalAlpha = 0.85;
+    ctx.fillText("RECIBO", W-PAD, 40);
+    ctx.globalAlpha = 1;
+    ctx.font = "bold 22px Arial";
+    ctx.fillText(`Nº ${m.numero||"—"}`, W-PAD, 66);
+
+    let y = ALT_HEADER + 40;
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#0FA88C";
+    ctx.font = "bold 16px Arial";
+    ctx.fillText(m.titulo, PAD, y);
+    y += 32;
+
+    ctx.fillStyle = "#1F262B";
+    ctx.font = "bold 17px Arial";
+    ctx.fillText(m.cliente, PAD, y);
+    y += 28;
+
+    ctx.font = "14px Arial";
+    m.campos.forEach(([label, valor])=>{
+      ctx.fillStyle = "#5A646C";
+      const prefixo = `${label}: `;
+      ctx.fillText(prefixo, PAD, y);
+      const offset = ctx.measureText(prefixo).width;
+      ctx.fillStyle = "#1F262B";
+      const linhas = quebrarLinhasCanvas(ctx, valor, larguraConteudo - offset);
+      linhas.forEach((linha, i)=>{
+        ctx.fillText(linha, PAD + (i===0 ? offset : 16), y);
+        if(i < linhas.length-1) y += 19;
+      });
+      y += 21;
+    });
+
+    y += 14;
+    ctx.strokeStyle = "#EBEBEC";
+    ctx.beginPath();
+    ctx.moveTo(PAD, y);
+    ctx.lineTo(W-PAD, y);
+    ctx.stroke();
+    y += 28;
+
+    if(m.totalContratado){
+      linhaValorCanvas(ctx, PAD, W-PAD, y, m.labelTotal, money(m.totalContratado), false);
+      y += 24;
+    }
+    linhaValorCanvas(ctx, PAD, W-PAD, y, "Valor recebido", money(m.valorRecebido), true);
+    y += 32;
+
+    if(m.itens.length){
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#1F262B";
+      ctx.font = "bold 13px Arial";
+      ctx.fillText(m.parcelado ? "PAGAMENTOS RECEBIDOS" : "PAGAMENTO RECEBIDO", PAD, y);
+      y += 22;
+      m.itens.forEach((it, i)=>{
+        const rotulo = it.rotulo || rotuloParcela(it, i, m.itens.length);
+        linhaValorCanvas(ctx, PAD, W-PAD, y, rotulo, money(it.valor), false);
+        y += 18;
+        ctx.textAlign = "left";
+        ctx.font = "12px Arial";
+        ctx.fillStyle = "#8F99A1";
+        const forma = it.forma ? ` · ${capitalize(it.forma)}` : "";
+        ctx.fillText(`${formatDate(it.data)}${forma}`, PAD, y);
+        y += 22;
+      });
+      if(m.parcelado || m.parcial){
+        linhaValorCanvas(ctx, PAD, W-PAD, y, "Total recebido até aqui", money(m.totalRecebido), true);
+        y += 26;
+      }
+    } else {
+      linhaValorCanvas(ctx, PAD, W-PAD, y, "Forma de pagamento", capitalize(m.forma||"—"), false);
+      y += 24;
+    }
+
+    y += 16;
+    const corSituacao = m.quitado ? { bg:"#3f7a2e17", txt:"#2f5e23" } : { bg:"#E0574B17", txt:"#b8382d" };
+    ctx.fillStyle = corSituacao.bg;
+    retanguloArredondado(ctx, PAD, y, larguraConteudo, 48, 10);
+    ctx.fill();
+    ctx.fillStyle = corSituacao.txt;
+    ctx.font = "bold 15px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(m.quitado ? "Quitado ✅" : `Saldo pendente: ${money(m.saldo)} ⚠️`, W/2, y+25);
+    ctx.textBaseline = "alphabetic";
+    y += 48 + 34;
+
+    ctx.font = "italic 13px Arial";
+    ctx.fillStyle = "#5A646C";
+    m.mensagens.forEach(msg=>{
+      const linhas = quebrarLinhasCanvas(ctx, msg, larguraConteudo);
+      linhas.forEach(linha=>{
+        ctx.fillText(linha, W/2, y);
+        y += 19;
+      });
+      y += 12;
+    });
+
+    y += 6;
+    ctx.font = "bold 15px Arial";
+    ctx.fillStyle = "#1F262B";
+    ctx.fillText(m.assinatura, W/2, y);
+    y += 22;
+
+    ctx.font = "11px Arial";
+    ctx.fillStyle = "#8F99A1";
+    ctx.fillText(`Gerado em ${formatDate(new Date().toISOString().slice(0,10))}`, W/2, y);
+    ctx.textAlign = "left";
+
+    return y;
+  }
+
+  // 1ª passada, num canvas alto o bastante, só pra medir a altura final do conteúdo
+  const medidor = document.createElement("canvas");
+  medidor.width = W; medidor.height = 3000;
+  const alturaFinal = Math.round(render(medidor.getContext("2d"), 3000) + PAD);
+
+  // 2ª passada: desenha de verdade já no tamanho certo
+  const canvas = document.createElement("canvas");
+  canvas.width = W * ESCALA;
+  canvas.height = alturaFinal * ESCALA;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(ESCALA, ESCALA);
+  render(ctx, alturaFinal);
+  return canvas;
+}
+/** Gera a imagem do recibo atualmente aberto no modal e baixa como PNG. */
+async function baixarImagemRecibo(){
+  const modelo = window._reciboImagemModelo;
+  if(!modelo) return;
+  toast("Gerando imagem do recibo...");
+  try{
+    const canvas = await desenharCanvasRecibo(modelo);
+    canvas.toBlob(blob=>{
+      if(!blob){ toast("Não foi possível gerar a imagem."); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `recibo-${String(modelo.numero||"sem-numero").replace(/[^\w-]+/g,"_")}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    }, "image/png");
+  }catch(err){
+    console.error(err);
+    toast("Não foi possível gerar a imagem do recibo.");
+  }
+}
+
+/** Monta os dados estruturados do recibo de evento, usados pra desenhar a versão em imagem. */
+function montarModeloImagemRecibo(ev, recibo){
+  const cliente = state.clientes.find(c=>c.id===ev.clienteId);
+  const nomeCliente = cliente ? cliente.nome : "—";
+  const atual = resumoParcelamento(ev.id);
+  const itens = (recibo.itens && recibo.itens.length)
+    ? recibo.itens
+    : atual.lista.map((p,i)=>({ valor:p.valor, data:p.data, forma:p.forma, tipo:p.tipo, rotulo:rotuloParcela(p,i,atual.lista.length) }));
+  const totalContratado = Number(recibo.totalContratado ?? ev.valorContratado) || 0;
+  const temSnapshot = recibo.saldo!==undefined;
+  const totalRecebido = temSnapshot ? (Number(recibo.totalPago)||0) : atual.pago;
+  const saldo = temSnapshot ? (Number(recibo.saldo)||0) : atual.saldo;
+  const quitado = temSnapshot ? !!recibo.quitado : saldo<=0.009;
+  const tipoLabel = ev.tipo==="outro" && ev.outroDescricao ? ev.outroDescricao : capitalize((ev.tipo||"").replace("_"," "));
+  const parcelado = itens.length > 1;
+  const parcial = recibo.escopo==="ultimo" && atual.lista.length>1;
+  return {
+    numero: recibo.numero, cliente: nomeCliente, titulo: "Cobertura Fotográfica Confirmada",
+    campos: [
+      ["Evento", ev.nomeEvento||tipoLabel],
+      ["Data", formatDate(ev.data)],
+      ev.endereco ? ["Local", ev.endereco] : null,
+      ev.horario ? ["Horário", `${ev.horario}h`] : null
+    ].filter(Boolean),
+    labelTotal: "Valor contratado", totalContratado, valorRecebido: recibo.valor, forma: recibo.forma,
+    itens, parcelado, parcial, totalRecebido, saldo, quitado,
+    mensagens: [
+      quitado
+        ? "A cobertura fotográfica deste evento está confirmada e o pagamento foi recebido integralmente conforme combinado."
+        : "A cobertura fotográfica deste evento está confirmada e os pagamentos acima foram recebidos conforme combinado.",
+      "Obrigado pela confiança no meu trabalho. Será uma alegria registrar este momento especial e transformá-lo em lembranças que permanecerão por muitos anos."
+    ],
+    assinatura: "Yuri Silva Fotografias"
+  };
+}
 function exibirRecibo(ev, recibo){
   const cliente = state.clientes.find(c=>c.id===ev.clienteId);
   const wa = cliente ? whatsappLink(cliente.telefone) : null;
   const txt = montarTextoRecibo(ev, recibo);
+  window._reciboImagemModelo = montarModeloImagemRecibo(ev, recibo);
 
   document.getElementById("modal-content").innerHTML = `
     <h3>🧾 Recibo nº ${escapeHtml(recibo.numero||"")}</h3>
@@ -5874,6 +6152,7 @@ function exibirRecibo(ev, recibo){
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">Fechar</button>
       <button class="ghost" onclick="navigator.clipboard.writeText(document.getElementById('recibo-txt').value).then(()=>toast('Recibo copiado!'))">Copiar</button>
+      <button class="ghost" onclick="baixarImagemRecibo()">🖼️ Baixar imagem</button>
       ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent(document.getElementById('recibo-txt').value),'_blank')" title="Enviar WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
     </div>
   `;
@@ -6059,10 +6338,38 @@ function montarTextoReciboProduto(p, recibo){
   );
   return linhas.filter(l=>l!==null).join("\n");
 }
+/** Monta os dados estruturados do recibo de produto, usados pra desenhar a versão em imagem. */
+function montarModeloImagemReciboProduto(p, recibo){
+  const cliente = state.clientes.find(c=>c.id===p.clienteId);
+  const nomeCliente = cliente ? cliente.nome : "—";
+  const atual = resumoParcelamentoProduto(p.id);
+  const itens = (recibo.itens && recibo.itens.length)
+    ? recibo.itens
+    : atual.lista.map((pg,i)=>({ valor:pg.valor, data:pg.data, forma:pg.forma, tipo:pg.tipo, rotulo:rotuloParcela(pg,i,atual.lista.length) }));
+  const totalContratado = Number(recibo.totalContratado ?? p.valorVenda) || 0;
+  const temSnapshot = recibo.saldo!==undefined;
+  const totalRecebido = temSnapshot ? (Number(recibo.totalPago)||0) : atual.pago;
+  const saldo = temSnapshot ? (Number(recibo.saldo)||0) : atual.saldo;
+  const quitado = temSnapshot ? !!recibo.quitado : saldo<=0.009;
+  const parcelado = itens.length > 1;
+  const parcial = recibo.escopo==="ultimo" && atual.lista.length>1;
+  return {
+    numero: recibo.numero, cliente: nomeCliente, titulo: "Venda de Produto",
+    campos: [
+      ["Referente a", p.produtoNome||"—"],
+      ["Data", formatDate(p.dataPedido)]
+    ],
+    labelTotal: "Valor total", totalContratado, valorRecebido: recibo.valor, forma: recibo.forma,
+    itens, parcelado, parcial, totalRecebido, saldo, quitado,
+    mensagens: ["Obrigado pela confiança no meu trabalho."],
+    assinatura: "Yuri Silva Fotografias"
+  };
+}
 function exibirReciboProduto(p, recibo){
   const cliente = state.clientes.find(c=>c.id===p.clienteId);
   const wa = cliente ? whatsappLink(cliente.telefone) : null;
   const txt = montarTextoReciboProduto(p, recibo);
+  window._reciboImagemModelo = montarModeloImagemReciboProduto(p, recibo);
 
   document.getElementById("modal-content").innerHTML = `
     <h3>🧾 Recibo nº ${escapeHtml(recibo.numero||"")}</h3>
@@ -6070,6 +6377,7 @@ function exibirReciboProduto(p, recibo){
     <div class="modal-actions">
       <button class="ghost" onclick="closeModal()">Fechar</button>
       <button class="ghost" onclick="navigator.clipboard.writeText(document.getElementById('recibo-txt').value).then(()=>toast('Recibo copiado!'))">Copiar</button>
+      <button class="ghost" onclick="baixarImagemRecibo()">🖼️ Baixar imagem</button>
       ${wa ? `<button class="primary" onclick="window.open('${wa}?text='+encodeURIComponent(document.getElementById('recibo-txt').value),'_blank')" title="Enviar WhatsApp"><i class="ti ti-brand-whatsapp" style="color:#25D366;font-size:16px;"></i></button>` : ""}
     </div>
   `;
