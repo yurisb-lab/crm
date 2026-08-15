@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ---------- Site público (portfólio) ----------
+    match /site/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /categories/{id} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /works/{id} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /testimonials/{id} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    // ---------- CRM de fotógrafo (privado) ----------
+    match /clientes/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /criancas/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /feedbacks/{id} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null;
+    }
+    match /casamentos/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /eventos/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /pagamentos/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /config/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /leads/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /bloqueios/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /recibos/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /produtos/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /negociacoes/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /prereservas/{doc} {
+      allow read, write: if request.auth != null;
+    }
+    match /gastos/{doc} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

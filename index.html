@@ -8401,6 +8401,10 @@ async function processarPrint(col, file){
       prompt = `Você está ajudando um fotógrafo brasileiro a cadastrar um lead a partir de um print de conversa (WhatsApp, Instagram, etc). Extraia as informações visíveis na imagem e retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
 {"nome": "", "telefone": "", "origem": "instagram|indicacao|google|igreja|outro", "interesseTipo": "aniversario|batizado|casamento_civil|casamento_religioso|ensaio|outro", "observacoes": ""}
 Se não conseguir identificar um campo com confiança, deixe vazio. Em "observacoes", resuma o que a pessoa pediu/perguntou.`;
+    } else if(col==="gastos"){
+      prompt = `Você está ajudando um fotógrafo brasileiro a lançar um gasto do negócio a partir de uma foto de nota fiscal, recibo, comprovante de pagamento (PIX, cartão etc.) ou print de compra. A data de hoje é ${hoje}. Extraia as informações visíveis e retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
+{"descricao": "", "valor": "", "data": "AAAA-MM-DD", "categoria": "equipamento|material|transporte|marketing|aluguel|impostos|fornecedor|outros"}
+"descricao" deve resumir o que foi comprado/pago (produto, serviço ou nome do estabelecimento/fornecedor). "valor" deve ser só o número, sem "R$" e usando ponto como separador decimal. Se houver mais de um valor na imagem, use o valor total pago. Se não conseguir identificar um campo com confiança, deixe vazio. Não invente dados.`;
     } else {
       prompt = `Você está ajudando um fotógrafo brasileiro a cadastrar um evento a partir de um print de conversa. A data de hoje é ${hoje}. Extraia as informações e retorne APENAS um JSON válido, sem markdown, sem explicação, no formato:
 {"nomeCliente": "", "telefoneCliente": "", "tipo": "aniversario|batizado|casamento_civil|casamento_religioso|ensaio|outro", "data": "AAAA-MM-DD", "horario": "HH:MM", "valorContratado": ""}
@@ -8430,6 +8434,13 @@ Se a data mencionada não tiver ano, assuma o próximo ano em que essa data aind
       if(dados.observacoes) formState.observacoes = dados.observacoes;
       refreshFormFields();
       toast("Campos preenchidos a partir do print. Confira antes de salvar.");
+    } else if(col==="gastos"){
+      if(dados.descricao) formState.descricao = dados.descricao;
+      if(dados.valor) formState.valor = dados.valor;
+      if(dados.data) formState.data = dados.data;
+      if(dados.categoria) formState.categoria = dados.categoria;
+      refreshFormFields();
+      toast("Campos preenchidos a partir do comprovante. Confira antes de salvar.");
     } else {
       if(dados.tipo) formState.tipo = dados.tipo;
       if(dados.data) formState.data = dados.data;
@@ -8489,12 +8500,12 @@ function renderFormularioModal(){
   const schema = SCHEMAS[col];
   const existing = id ? state[col].find(i=>i.id===id) : null;
   const showMarkPaid = col==="eventos" && existing && (Number(existing.valorContratado)||0) > totalPago(id);
-  const podeUsarPrint = !existing && (col==="leads" || col==="eventos") && temIA();
+  const podeUsarPrint = !existing && (col==="leads" || col==="eventos" || col==="gastos") && temIA();
 
   document.getElementById("modal-content").innerHTML = `
     <h3>${existing ? "Editar" : "Novo"} ${schema.singular}</h3>
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:${podeUsarPrint?"14px":"0"};">
-      ${podeUsarPrint ? `<button class="ghost" onclick="triggerPrintUpload('${col}')">📷 Preencher com print de conversa (IA)</button>` : ""}
+      ${podeUsarPrint ? `<button class="ghost" onclick="triggerPrintUpload('${col}')">📷 ${col==="gastos" ? "Preencher com foto do comprovante (IA)" : "Preencher com print de conversa (IA)"}</button>` : ""}
       ${(col==="eventos" && !existing && temIA()) ? `<button class="ghost" onclick="triggerFotoFestaUpload()">📸 Preencher com foto da festa (IA)</button>` : ""}
     </div>
     <div id="form-fields">${camposVisiveis(schema).map(f=>renderField(f, formState[f.key])).join("")}</div>
