@@ -15,6 +15,7 @@ CRM web (PWA) para um fotógrafo de eventos sociais (Yuri Silva Fotografias, Pac
 index.html              # aplicação inteira (HTML + CSS + JS)
 manifest.json            # manifesto da PWA
 sw.js                     # service worker
+firestore.rules           # regras de segurança do Firestore (cópia versionada — publicar manualmente no Firebase Console)
 brand/logo-yuri.svg       # logo original (mesmo arquivo do painel de galerias)
 logo-mark.svg             # recorte quadrado do logo: favicon e fonte dos ícones
 icon-*.png, favicon-32.png, apple-touch-icon.png   # ícones da PWA, gerados do logo-mark.svg
