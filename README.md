@@ -26,8 +26,8 @@ Não há processo de build: `index.html` é servido estaticamente (Firebase Host
 
 ## Módulos principais (navegação lateral)
 
-- **Dashboard** — visão geral: próximos eventos, alertas (separados em *Alertas de Leads* e *Alertas de Clientes*), aniversários e negociações em aberto.
-- **Agenda** — calendário de eventos.
+- **Dashboard** — visão geral: próximos eventos, alertas (separados em *Alertas de Leads* e *Alertas de Clientes*), aniversários, negociações em aberto e datas pré-reservadas (interessados e negociações com data definida), cada uma com atalho para converter em evento.
+- **Agenda** — calendário de eventos, bloqueios e pré-reservas (uma pré-reserva pode ser convertida em evento pelo próprio calendário ou pela lista).
 - **Conversar** — chat com a IA usando o contexto do CRM.
 - **Leads** — captação e acompanhamento de pessoas interessadas, com detecção de leads parados.
 - **Negociações** — funil entre lead e evento fechado.
